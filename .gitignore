@@ -1,0 +1,55 @@
+# OS / editors 
+.DS_Store 
+Thumbs.db 
+.idea/ 
+.vscode/ 
+*.swp 
+*.swo 
+ 
+# Python / backend 
+__pycache__/ 
+*.py[cod] 
+*.pyo 
+*.pyd 
+*.so 
+*.egg-info/ 
+.eggs/ 
+.pytest_cache/ 
+.mypy_cache/ 
+.tox/ 
+.venv/ 
+venv/ 
+ENV/ 
+ 
+# Env files 
+.env 
+.env.* 
+back/.env 
+front/.env 
+ 
+# Build / dist / logs 
+build/ 
+dist/ 
+*.log 
+coverage/ 
+htmlcov/ 
+ 
+# Node / frontend 
+node_modules/ 
+front/node_modules/ 
+front/dist/ 
+front/.vite/ 
+ 
+# Package locks (optional) 
+yarn.lock 
+pnpm-lock.yaml 
+package-lock.json 
+ 
+# Project specific 
+back/uploads/ 
+back/.alembic_cache/ 
+ 
+# Caches 
+.cache/ 
+.parcel-cache/ 
+front/.cache/

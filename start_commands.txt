@@ -1,0 +1,42 @@
+# Команды для запуска EDMS системы
+
+## 1. Создание таблиц в базе данных
+cd back
+venv\Scripts\activate
+python create_tables.py
+
+## 2. Запуск Backend сервера (FastAPI)
+cd back
+venv\Scripts\activate
+python run_server.py
+# Сервер будет доступен на http://localhost:8000
+# API документация: http://localhost:8000/docs
+
+## 3. Запуск Frontend (React + Vite)
+cd front
+npm run dev
+# Frontend будет доступен на http://localhost:5173
+
+## 4. Установка зависимостей (если нужно)
+
+### Backend зависимости:
+cd back
+venv\Scripts\activate
+pip install -r requirements.txt
+
+### Frontend зависимости:
+cd front
+npm install
+
+## 5. Проверка подключения к базе данных
+# Убедитесь, что PostgreSQL запущен на localhost:5432
+# База данных: edms
+# Пользователь: postgres
+# Пароль: 123
+
+## Порядок запуска:
+1. Сначала запустите PostgreSQL
+2. Создайте таблицы: python create_tables.py
+3. Запустите backend: python run_server.py
+4. Запустите frontend: npm run dev
+5. Откройте http://localhost:5173 в браузере
