@@ -15,7 +15,8 @@ import {
   Alert,
   CircularProgress
 } from '@mui/material';
-import { projectsApi, usersApi, type ProjectMember, type User } from '../api/client';
+import { projectsApi, usersApi, rolesApi, type ProjectMember, type User, type ProjectRole } from '../api/client';
+import { PROJECT_ROLES } from '../types/roles';
 
 interface AddMemberDialogProps {
   open: boolean;
@@ -23,6 +24,7 @@ interface AddMemberDialogProps {
   projectId: number;
   projectName: string;
   onMemberAdded: () => void;
+  existingMembers?: ProjectMember[];
 }
 
 const AddMemberDialog: React.FC<AddMemberDialogProps> = ({
@@ -30,23 +32,20 @@ const AddMemberDialog: React.FC<AddMemberDialogProps> = ({
   onClose,
   projectId,
   projectName,
-  onMemberAdded
+  onMemberAdded,
+  existingMembers = []
 }) => {
   const [users, setUsers] = useState<User[]>([]);
+  const [projectRoles, setProjectRoles] = useState<ProjectRole[]>([]);
   const [selectedUserId, setSelectedUserId] = useState<number | ''>('');
-  const [selectedRole, setSelectedRole] = useState<string>('viewer');
+  const [selectedRoleId, setSelectedRoleId] = useState<number | ''>('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const roles = [
-    { value: 'admin', label: 'Администратор' },
-    { value: 'operator', label: 'Оператор' },
-    { value: 'viewer', label: 'Читатель' }
-  ];
 
   useEffect(() => {
     if (open) {
       loadUsers();
+      loadProjectRoles();
     }
   }, [open]);
 
@@ -54,11 +53,25 @@ const AddMemberDialog: React.FC<AddMemberDialogProps> = ({
     try {
       setIsLoading(true);
       const usersData = await usersApi.getAll();
-      setUsers(usersData);
+      
+      // Фильтруем пользователей, которые уже являются участниками проекта
+      const existingUserIds = existingMembers.map(member => member.user_id);
+      const availableUsers = usersData.filter(user => !existingUserIds.includes(user.id));
+      
+      setUsers(availableUsers);
     } catch (error) {
       setError('Ошибка загрузки пользователей');
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const loadProjectRoles = async () => {
+    try {
+      const rolesData = await rolesApi.getProjectRoles();
+      setProjectRoles(rolesData);
+    } catch (error) {
+      console.error('Ошибка загрузки проектных ролей:', error);
     }
   };
 
@@ -68,13 +81,29 @@ const AddMemberDialog: React.FC<AddMemberDialogProps> = ({
       return;
     }
 
+    if (!selectedRoleId) {
+      setError('Выберите роль');
+      return;
+    }
+
+    // Проверяем, не добавлен ли уже этот пользователь
+    const isUserAlreadyAdded = existingMembers.some(member => 
+      member.user_id === selectedUserId
+    );
+    
+    if (isUserAlreadyAdded) {
+      setError('Этот пользователь уже добавлен в проект');
+      return;
+    }
+
     try {
       setIsLoading(true);
       setError(null);
 
       await projectsApi.members.add(projectId, {
         user_id: selectedUserId as number,
-        role: selectedRole
+        role: 'member', // Legacy field
+        project_role_id: selectedRoleId as number
       });
 
       onMemberAdded();
@@ -88,7 +117,7 @@ const AddMemberDialog: React.FC<AddMemberDialogProps> = ({
 
   const handleClose = () => {
     setSelectedUserId('');
-    setSelectedRole('member');
+    setSelectedRoleId('');
     setError(null);
     onClose();
   };
@@ -102,31 +131,37 @@ const AddMemberDialog: React.FC<AddMemberDialogProps> = ({
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
           {error && <Alert severity="error">{error}</Alert>}
           
-          <FormControl fullWidth>
-            <InputLabel>Пользователь</InputLabel>
-            <Select
-              value={selectedUserId}
-              onChange={(e) => setSelectedUserId(e.target.value as number)}
-              label="Пользователь"
-            >
-              {users.map((user) => (
-                <MenuItem key={user.id} value={user.id}>
-                  {user.username} ({user.full_name})
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
+          {users.length === 0 ? (
+            <Alert severity="info">
+              Все пользователи уже добавлены в проект
+            </Alert>
+          ) : (
+            <FormControl fullWidth>
+              <InputLabel>Пользователь</InputLabel>
+              <Select
+                value={selectedUserId}
+                onChange={(e) => setSelectedUserId(e.target.value as number)}
+                label="Пользователь"
+              >
+                {users.map((user) => (
+                  <MenuItem key={user.id} value={user.id}>
+                    {user.username} ({user.full_name})
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          )}
 
           <FormControl fullWidth>
-            <InputLabel>Роль</InputLabel>
+            <InputLabel>Роль в проекте</InputLabel>
             <Select
-              value={selectedRole}
-              onChange={(e) => setSelectedRole(e.target.value)}
-              label="Роль"
+              value={selectedRoleId}
+              onChange={(e) => setSelectedRoleId(e.target.value as number)}
+              label="Роль в проекте"
             >
-              {roles.map((role) => (
-                <MenuItem key={role.value} value={role.value}>
-                  {role.label}
+              {projectRoles.map((role) => (
+                <MenuItem key={role.id} value={role.id}>
+                  {role.name_en || role.name} - {role.description}
                 </MenuItem>
               ))}
             </Select>
@@ -140,7 +175,7 @@ const AddMemberDialog: React.FC<AddMemberDialogProps> = ({
         <Button
           onClick={handleAddMember}
           variant="contained"
-          disabled={isLoading || !selectedUserId}
+          disabled={isLoading || !selectedUserId || !selectedRoleId || users.length === 0}
         >
           {isLoading ? <CircularProgress size={20} /> : 'Добавить'}
         </Button>

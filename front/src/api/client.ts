@@ -173,6 +173,7 @@ export interface ProjectMember {
   project_id: number;
   user_id: number;
   role: string;
+  project_role_id?: number;
   joined_at: string | null;
 }
 
@@ -212,7 +213,9 @@ export interface Company {
 export interface Document {
   id: number;
   title: string;
+  title_native?: string;  // Добавляем поле для нативного названия
   description: string;
+  remarks?: string;  // Примечания (текстовое поле)
   number?: string;
   file_name: string;
   file_size: number;
@@ -231,6 +234,12 @@ export interface Document {
   assigned_to?: number;
   created_at: string;
   updated_at: string;
+  // Новые поля для связанных данных
+  discipline_name?: string;
+  discipline_code?: string;
+  document_type_name?: string;
+  document_type_code?: string;
+  drs?: string;  // DRS из project_discipline_document_types
 }
 
 // Workflow interfaces
@@ -328,6 +337,7 @@ export interface User {
   full_name: string;
   role: string;
   is_active: boolean;
+  is_admin: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -568,7 +578,7 @@ export const projectsApi = {
     },
 
     // Добавить участника к проекту
-    add: async (projectId: number, memberData: { user_id: number; role: string }): Promise<ProjectMember> => {
+    add: async (projectId: number, memberData: { user_id: number; role: string; project_role_id?: number }): Promise<ProjectMember> => {
       const response = await apiClient.post(`/projects/${projectId}/members/`, memberData);
       return response.data;
     },
@@ -588,6 +598,24 @@ export const projectsApi = {
   // Получить типы документов для дисциплины в проекте
   getDocumentTypes: async (projectId: number, disciplineId: number): Promise<DocumentType[]> => {
     const response = await apiClient.get(`/projects/${projectId}/document-types/${disciplineId}`);
+    return response.data;
+  },
+
+  // Получить выбранные описания ревизий для проекта
+  getRevisionDescriptions: async (projectId: number): Promise<any[]> => {
+    const response = await apiClient.get(`/projects/${projectId}/revision-descriptions`);
+    return response.data;
+  },
+
+  // Получить выбранные шаги ревизий для проекта
+  getRevisionSteps: async (projectId: number): Promise<any[]> => {
+    const response = await apiClient.get(`/projects/${projectId}/revision-steps`);
+    return response.data;
+  },
+
+  // Получить выбранный пресет workflow для проекта
+  getWorkflowPreset: async (projectId: number): Promise<any> => {
+    const response = await apiClient.get(`/projects/${projectId}/workflow-preset`);
     return response.data;
   }
 };
@@ -1347,6 +1375,82 @@ export const projectParticipantsApi = {
   },
   delete: async (projectId: number, participantId: number): Promise<void> => {
     await apiClient.delete(`/projects/${projectId}/participants/${participantId}`);
+  }
+};
+
+// Roles API
+export interface UserRole {
+  id: number;
+  code: string;
+  name: string;
+  name_native?: string;
+  name_en?: string;
+  description?: string;
+  permissions?: Record<string, any>;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface ProjectRole {
+  id: number;
+  code: string;
+  name: string;
+  name_en?: string;
+  description?: string;
+  permissions?: Record<string, any>;
+  is_active: boolean;
+  created_at: string;
+}
+
+export const rolesApi = {
+  // User Roles
+  getUserRoles: async (): Promise<UserRole[]> => {
+    const response = await apiClient.get('/roles/user-roles');
+    return response.data;
+  },
+  
+  getUserRole: async (roleId: number): Promise<UserRole> => {
+    const response = await apiClient.get(`/roles/user-roles/${roleId}`);
+    return response.data;
+  },
+  
+  createUserRole: async (role: Omit<UserRole, 'id' | 'created_at'>): Promise<UserRole> => {
+    const response = await apiClient.post('/roles/user-roles', role);
+    return response.data;
+  },
+  
+  updateUserRole: async (roleId: number, role: Partial<UserRole>): Promise<UserRole> => {
+    const response = await apiClient.put(`/roles/user-roles/${roleId}`, role);
+    return response.data;
+  },
+  
+  deleteUserRole: async (roleId: number): Promise<void> => {
+    await apiClient.delete(`/roles/user-roles/${roleId}`);
+  },
+  
+  // Project Roles
+  getProjectRoles: async (): Promise<ProjectRole[]> => {
+    const response = await apiClient.get('/roles/project-roles');
+    return response.data;
+  },
+  
+  getProjectRole: async (roleId: number): Promise<ProjectRole> => {
+    const response = await apiClient.get(`/roles/project-roles/${roleId}`);
+    return response.data;
+  },
+  
+  createProjectRole: async (role: Omit<ProjectRole, 'id' | 'created_at'>): Promise<ProjectRole> => {
+    const response = await apiClient.post('/roles/project-roles', role);
+    return response.data;
+  },
+  
+  updateProjectRole: async (roleId: number, role: Partial<ProjectRole>): Promise<ProjectRole> => {
+    const response = await apiClient.put(`/roles/project-roles/${roleId}`, role);
+    return response.data;
+  },
+  
+  deleteProjectRole: async (roleId: number): Promise<void> => {
+    await apiClient.delete(`/roles/project-roles/${roleId}`);
   }
 };
 

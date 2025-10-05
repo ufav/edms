@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -28,6 +28,7 @@ import {
   Add as AddIcon,
   Delete as DeleteIcon
 } from '@mui/icons-material';
+import { rolesApi, type ProjectRole } from '../../api/client';
 
 interface UsersTabProps {
   pendingProjectMembers: any[];
@@ -51,15 +52,29 @@ const UsersTab: React.FC<UsersTabProps> = ({
   const [projectMemberDialogOpen, setProjectMemberDialogOpen] = useState(false);
   const [isEditingProjectMember, setIsEditingProjectMember] = useState(false);
   const [selectedProjectMember, setSelectedProjectMember] = useState<any>(null);
+  const [projectRoles, setProjectRoles] = useState<ProjectRole[]>([]);
   const [projectMemberFormData, setProjectMemberFormData] = useState({
     user_id: null as number | null,
-    role: 'viewer'
+    project_role_id: null as number | null
   });
+
+  useEffect(() => {
+    loadProjectRoles();
+  }, []);
+
+  const loadProjectRoles = async () => {
+    try {
+      const roles = await rolesApi.getProjectRoles();
+      setProjectRoles(roles);
+    } catch (error) {
+      console.error('Ошибка загрузки проектных ролей:', error);
+    }
+  };
 
   const handleAddProjectMember = () => {
     setProjectMemberFormData({
       user_id: null,
-      role: 'viewer'
+      project_role_id: null
     });
     setIsEditingProjectMember(false);
     setSelectedProjectMember(null);
@@ -67,10 +82,23 @@ const UsersTab: React.FC<UsersTabProps> = ({
   };
 
   const handleSaveProjectMember = () => {
-    if (!projectMemberFormData.user_id) return;
+    if (!projectMemberFormData.user_id || !projectMemberFormData.project_role_id) return;
+    
+    // Проверяем, не добавлен ли уже этот пользователь
+    const isUserAlreadyAdded = pendingProjectMembers.some(member => 
+      member.user_id === projectMemberFormData.user_id && member.id !== selectedProjectMember?.id
+    );
+    
+    if (isUserAlreadyAdded) {
+      alert('Этот пользователь уже добавлен в проект');
+      return;
+    }
+    
+    const selectedRole = projectRoles.find(role => role.id === projectMemberFormData.project_role_id);
     
     const memberData = {
       ...projectMemberFormData,
+      role: selectedRole?.code || 'viewer', // Legacy field for compatibility
       id: selectedProjectMember?.id || Date.now()
     };
     
@@ -194,9 +222,12 @@ const UsersTab: React.FC<UsersTabProps> = ({
         <DialogContent sx={{ maxHeight: '60vh', overflow: 'auto' }}>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
             <Autocomplete
-              options={users}
+              options={users.filter(user => 
+                !pendingProjectMembers.some(member => member.user_id === user.id)
+              )}
               getOptionLabel={(user) => `${user.full_name} (${user.email})`}
               value={users.find(user => user.id === projectMemberFormData.user_id) || null}
+              isOptionEqualToValue={(option, value) => option.id === value.id}
               onChange={(_, newValue) => {
                 setProjectMemberFormData(prev => ({
                   ...prev,
@@ -210,46 +241,66 @@ const UsersTab: React.FC<UsersTabProps> = ({
                   placeholder={t('createProject.placeholders.start_typing_user')}
                 />
               )}
-              renderOption={(props, user) => (
-                <Box component="li" {...props}>
-                  <Box>
-                    <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                      {user.full_name}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {user.email}
-                    </Typography>
+              renderOption={(props, user) => {
+                const { key, ...otherProps } = props;
+                return (
+                  <Box component="li" key={key} {...otherProps}>
+                    <Box>
+                      <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                        {user.full_name}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {user.email}
+                      </Typography>
+                    </Box>
                   </Box>
-                </Box>
-              )}
+                );
+              }}
               noOptionsText={t('createProject.messages.no_users_found')}
               clearOnEscape
               selectOnFocus
               handleHomeEndKeys
-              disablePortal={true}
               ListboxProps={{
                 style: {
-                  maxHeight: '200px'
+                  maxHeight: '300px',
+                  overflow: 'auto'
                 }
+              }}
+              slotProps={{
+                popper: {
+                  placement: 'bottom-start',
+                  modifiers: [
+                    {
+                      name: 'preventOverflow',
+                      enabled: false,
+                    },
+                    {
+                      name: 'flip',
+                      enabled: false,
+                    },
+                  ],
+                },
               }}
             />
 
             <FormControl fullWidth>
               <InputLabel>{t('createProject.fields.role')}</InputLabel>
               <Select
-                value={projectMemberFormData.role}
+                value={projectMemberFormData.project_role_id || ''}
                 onChange={(e) => setProjectMemberFormData(prev => ({
                   ...prev,
-                  role: e.target.value
+                  project_role_id: e.target.value as number
                 }))}
                 label={t('createProject.fields.role')}
                 MenuProps={{
                   disablePortal: true
                 }}
               >
-                <MenuItem value="admin">{t('createProject.roles.admin')}</MenuItem>
-                <MenuItem value="manager">{t('createProject.roles.manager')}</MenuItem>
-                <MenuItem value="viewer">{t('createProject.roles.viewer')}</MenuItem>
+                {projectRoles.map((role) => (
+                  <MenuItem key={role.id} value={role.id}>
+                    {role.name_en || role.name} - {role.description}
+                  </MenuItem>
+                ))}
               </Select>
             </FormControl>
           </Box>
@@ -261,7 +312,7 @@ const UsersTab: React.FC<UsersTabProps> = ({
           <Button
             onClick={handleSaveProjectMember}
             variant="contained"
-            disabled={!projectMemberFormData.user_id}
+            disabled={!projectMemberFormData.user_id || !projectMemberFormData.project_role_id}
           >
             {isEditingProjectMember ? t('common.save') : t('createProject.buttons.add')}
           </Button>

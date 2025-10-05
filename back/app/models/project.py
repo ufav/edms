@@ -28,6 +28,7 @@ class Project(Base):
     budget = Column(Numeric(15, 2))
     manager_id = Column(Integer, ForeignKey("users.id"))
     created_by = Column(Integer, ForeignKey("users.id"))
+    workflow_preset_id = Column(Integer, ForeignKey("workflow_presets.id"), nullable=True)
     is_deleted = Column(Integer, default=0, nullable=False)  # 0 - не удален, 1 - удален
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
@@ -50,13 +51,15 @@ class ProjectMember(Base):
     id = Column(Integer, primary_key=True, index=True)
     project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"))
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
-    role = Column(String(50), nullable=False)
+    role = Column(String(50), nullable=False)  # Legacy field, will be deprecated
+    project_role_id = Column(Integer, ForeignKey("project_roles.id"), nullable=True)
     permissions = Column(Text)  # JSON string
     joined_at = Column(DateTime(timezone=True), server_default=func.now())
     
     # Relationships
     project = relationship("Project", back_populates="members")
     user = relationship("User")
+    project_role = relationship("ProjectRole")
     
     def __repr__(self):
         return f"<ProjectMember(project_id={self.project_id}, user_id={self.user_id}, role='{self.role}')>"
@@ -113,56 +116,8 @@ class ProjectRevisionStep(Base):
         return f"<ProjectRevisionStep(project_id={self.project_id}, revision_step_id={self.revision_step_id})>"
 
 
-class ProjectWorkflowSequence(Base):
-    """Последовательность ревизий для workflow проекта"""
-    __tablename__ = "project_workflow_sequences"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"))
-    document_type_id = Column(Integer, ForeignKey("document_types.id", ondelete="CASCADE"), nullable=True)
-    
-    # Порядок в последовательности
-    sequence_order = Column(Integer, nullable=False)
-    
-    # Ревизия
-    revision_description_id = Column(Integer, ForeignKey("revision_descriptions.id", ondelete="CASCADE"))
-    revision_step_id = Column(Integer, ForeignKey("revision_steps.id", ondelete="CASCADE"))
-    
-    # Является ли финальной
-    is_final = Column(Boolean, default=False)
-    
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
-    def __repr__(self):
-        return f"<ProjectWorkflowSequence(project_id={self.project_id}, order={self.sequence_order}, is_final={self.is_final})>"
-
-
-class ProjectWorkflowRule(Base):
-    """Правила переходов между ревизиями в workflow проекта"""
-    __tablename__ = "project_workflow_rules"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"))
-    document_type_id = Column(Integer, ForeignKey("document_types.id", ondelete="CASCADE"), nullable=True)
-    
-    # Текущая ревизия
-    current_revision_description_id = Column(Integer, ForeignKey("revision_descriptions.id", ondelete="CASCADE"))
-    current_revision_step_id = Column(Integer, ForeignKey("revision_steps.id", ondelete="CASCADE"))
-    
-    # Условие перехода
-    review_code_id = Column(Integer, ForeignKey("review_codes.id", ondelete="CASCADE"))
-    
-    # Следующая ревизия (может быть null для +1)
-    next_revision_description_id = Column(Integer, ForeignKey("revision_descriptions.id", ondelete="CASCADE"), nullable=True)
-    next_revision_step_id = Column(Integer, ForeignKey("revision_steps.id", ondelete="CASCADE"), nullable=True)
-    
-    # Действие при невыполнении условия
-    action_on_fail = Column(String(50), default="increment_number")  # "increment_number" или "stay_same"
-    
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
-    
-    def __repr__(self):
-        return f"<ProjectWorkflowRule(project_id={self.project_id}, review_code_id={self.review_code_id})>"
+# Удалены модели ProjectWorkflowSequence и ProjectWorkflowRule
+# Теперь используются WorkflowPresetSequence и WorkflowPresetRule через workflow_preset_id
 
 
 class WorkflowPreset(Base):
@@ -216,6 +171,15 @@ class WorkflowPresetRule(Base):
     # Условие перехода
     review_code_id = Column(Integer, ForeignKey("review_codes.id", ondelete="CASCADE"))
     
+    # Оператор сравнения (equals, not_equals, in_list, not_in_list)
+    operator = Column(String(20), default="equals")
+    
+    # Список кодов для списковых операторов (JSON)
+    review_code_list = Column(Text, nullable=True)
+    
+    # Приоритет правила (для порядка обработки)
+    priority = Column(Integer, default=100)
+    
     # Следующая ревизия (может быть null для +1)
     next_revision_description_id = Column(Integer, ForeignKey("revision_descriptions.id", ondelete="CASCADE"), nullable=True)
     next_revision_step_id = Column(Integer, ForeignKey("revision_steps.id", ondelete="CASCADE"), nullable=True)
@@ -226,4 +190,4 @@ class WorkflowPresetRule(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     def __repr__(self):
-        return f"<WorkflowPresetRule(preset_id={self.preset_id}, review_code_id={self.review_code_id})>"
+        return f"<WorkflowPresetRule(preset_id={self.preset_id}, operator={self.operator}, review_code_id={self.review_code_id})>"

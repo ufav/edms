@@ -21,13 +21,15 @@ from app.models.user import User
 from app.models.document import Document, DocumentRevision
 from app.models.discipline import Discipline, DocumentType
 from app.models.references import Language
+from app.models.project import ProjectDisciplineDocumentType
 from app.services.auth import get_current_active_user
 
 router = APIRouter()
 
 class DocumentCreate(BaseModel):
     title: str
-    description: str = None
+    title_native: str = None  # Переименовано из description
+    remarks: Optional[str] = None  # Примечания (текстовое поле)
     number: Optional[str] = None
     project_id: int
     discipline_id: Optional[int] = None
@@ -47,7 +49,8 @@ class DocumentCreate(BaseModel):
 
 class DocumentUpdate(BaseModel):
     title: str = None
-    description: str = None
+    title_native: str = None  # Переименовано из description
+    remarks: Optional[str] = None  # Примечания (текстовое поле)
     number: Optional[str] = None
     status: str = None
     is_deleted: Optional[int] = None
@@ -69,7 +72,8 @@ class DocumentUpdate(BaseModel):
 class DocumentMetadata(BaseModel):
     file_name: str
     title: str
-    description: Optional[str] = None
+    title_native: Optional[str] = None  # Переименовано из description
+    remarks: Optional[str] = None  # Примечания (текстовое поле)
     discipline_code: Optional[str] = None
     document_type_code: Optional[str] = None
     document_code: Optional[str] = None
@@ -130,10 +134,33 @@ async def get_documents(
             DocumentRevision.document_id == doc.id
         ).order_by(DocumentRevision.created_at.desc()).first()
         
+        # Получаем данные дисциплины
+        discipline = None
+        if doc.discipline_id:
+            discipline = db.query(Discipline).filter(Discipline.id == doc.discipline_id).first()
+        
+        # Получаем данные типа документа
+        document_type = None
+        if doc.document_type_id:
+            document_type = db.query(DocumentType).filter(DocumentType.id == doc.document_type_id).first()
+        
+        # Получаем DRS из project_discipline_document_types
+        drs = None
+        if doc.project_id and doc.discipline_id and doc.document_type_id:
+            project_discipline_doc_type = db.query(ProjectDisciplineDocumentType).filter(
+                ProjectDisciplineDocumentType.project_id == doc.project_id,
+                ProjectDisciplineDocumentType.discipline_id == doc.discipline_id,
+                ProjectDisciplineDocumentType.document_type_id == doc.document_type_id
+            ).first()
+            if project_discipline_doc_type:
+                drs = project_discipline_doc_type.drs
+        
         result.append({
             "id": doc.id,
             "title": doc.title,
-            "description": doc.description,
+            "title_native": doc.title_native,  # Нативное название
+            "description": doc.title_native,  # Для обратной совместимости
+            "remarks": doc.remarks,  # Примечания (текстовое поле)
             "number": doc.number,
             "file_name": latest_revision.file_name if latest_revision else None,
             "file_size": latest_revision.file_size if latest_revision else None,
@@ -142,9 +169,15 @@ async def get_documents(
             "revision_description_id": latest_revision.revision_description_id if latest_revision else None,
             "revision_status_id": latest_revision.revision_status_id if latest_revision else None,
             "is_deleted": doc.is_deleted if doc.is_deleted is not None else 0,
-            "drs": doc.drs,
+            "drs": drs,  # DRS из project_discipline_document_types
             "project_id": doc.project_id,
             "language_id": doc.language_id,
+            "discipline_id": doc.discipline_id,
+            "document_type_id": doc.document_type_id,
+            "discipline_name": discipline.name if discipline else None,
+            "discipline_code": discipline.code if discipline else None,
+            "document_type_name": document_type.name if document_type else None,
+            "document_type_code": document_type.code if document_type else None,
             "created_at": doc.created_at
         })
     
@@ -154,7 +187,7 @@ async def get_documents(
 async def upload_document(
     file: UploadFile = File(...),
     title: str = None,
-    description: str = None,
+    title_native: str = None,  # Переименовано из description
     project_id: int = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
@@ -187,7 +220,8 @@ async def upload_document(
     # Создаем запись в базе данных
     db_document = Document(
         title=title or file.filename,
-        description=description,
+        title_native=title_native,  # Переименовано из description
+        remarks=None,  # Примечания (можно добавить в будущем)
         project_id=project_id
     )
     
@@ -249,7 +283,7 @@ async def get_document(
         "revision": latest_revision.number if latest_revision else "01",
         "revision_status_id": latest_revision.revision_status_id if latest_revision else None,
         "is_deleted": document.is_deleted,
-        "drs": document.drs,
+        "drs": None,  # DRS moved to project_discipline_document_types
         "project_id": document.project_id,
         "discipline_id": document.discipline_id,
         "document_type_id": document.document_type_id,
@@ -401,7 +435,8 @@ async def import_documents_by_paths(
 
             db_document = Document(
                 title=title,
-                description=description,
+                title_native=description,  # Переименовано из description
+                remarks=None,  # Примечания (можно добавить в будущем)
                 number=get_str('number'),
                 project_id=project_id,
                 discipline_id=discipline_id,
@@ -416,7 +451,7 @@ async def import_documents_by_paths(
                 scale=get_str('scale'),
                 format=get_str('format'),
                 confidentiality=get_str('confidentiality', 'internal'),
-                drs=get_str('drs')
+                drs=None  # DRS moved to project_discipline_document_types
             )
 
             db.add(db_document)
@@ -446,7 +481,7 @@ async def import_documents_by_paths(
                 "file_name": revision_row.file_name,
                 "file_size": revision_row.file_size,
                 "is_deleted": db_document.is_deleted,
-                "drs": db_document.drs,
+                "drs": None,  # DRS moved to project_discipline_document_types
                 "discipline_id": db_document.discipline_id,
                 "document_type_id": db_document.document_type_id,
                 "language_id": db_document.language_id,

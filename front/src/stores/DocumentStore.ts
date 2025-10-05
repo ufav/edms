@@ -41,7 +41,9 @@ class DocumentStore {
             return {
             id: apiDoc.id,
             title: apiDoc.title,
+            title_native: apiDoc.title_native || apiDoc.description, // Fallback на description если title_native undefined
             description: apiDoc.description,
+            remarks: apiDoc.remarks,
             number: apiDoc.number,
             file_name: apiDoc.file_name,
             file_size: apiDoc.file_size,
@@ -59,7 +61,13 @@ class DocumentStore {
             document_type_id: apiDoc.document_type_id,
             assigned_to: apiDoc.assigned_to,
             created_at: apiDoc.created_at,
-            updated_at: apiDoc.updated_at
+            updated_at: apiDoc.updated_at,
+            // Новые поля для связанных данных
+            discipline_name: apiDoc.discipline_name,
+            discipline_code: apiDoc.discipline_code,
+            document_type_name: apiDoc.document_type_name,
+            document_type_code: apiDoc.document_type_code,
+            drs: apiDoc.drs
           };
           });
           this.currentProjectId = projectId || null;

@@ -22,7 +22,8 @@ import {
 } from '@mui/material';
 import { disciplinesApi, projectsApi, referencesApi, workflowPresetsApi, projectParticipantsApi } from '../api/client';
 import referenceDataStore from '../stores/ReferenceDataStore';
-import type { Discipline, DocumentType, Company, ProjectParticipant, ProjectParticipantCreate, Contact, CompanyRole, User, ProjectMember } from '../api/client';
+import type { Discipline, DocumentType, ProjectParticipant, ProjectParticipantCreate, ProjectMember } from '../api/client';
+import { getRoleLabel, getRoleColor } from '../utils/roleLocalization';
 import DocumentTypeSelectionDialog from './DocumentTypeSelectionDialog';
 // import ProjectParticipantsDialog from './ProjectParticipantsDialog'; // Удалено - интегрировано в диалог
 import MainTab from './project/MainTab';
@@ -94,7 +95,7 @@ const CreateProjectDialog: React.FC<CreateProjectDialogProps> = observer(({
   const [foundDocumentTypes, setFoundDocumentTypes] = useState<DocumentType[]>([]);
   const [pendingImportPairs, setPendingImportPairs] = useState<Array<{discipline: Discipline, code: string}>>([]);
   // Используем данные из стора
-  const { companies, contacts, companyRoles, users, isLoading: referenceDataLoading } = referenceDataStore;
+  const { companies, contacts, companyRoles, users } = referenceDataStore;
   const [pendingProjectMembers, setPendingProjectMembers] = useState<ProjectMember[]>([]);
   const [projectMemberDialogOpen, setProjectMemberDialogOpen] = useState(false);
   const [isEditingProjectMember, setIsEditingProjectMember] = useState(false);
@@ -176,7 +177,7 @@ const CreateProjectDialog: React.FC<CreateProjectDialogProps> = observer(({
         
         // Загружаем справочные данные через стор
         await referenceDataStore.loadAllReferenceData();
-      } catch (err) {
+      } catch (err: any) {
         console.error('Error loading data:', err);
         console.error('Error details:', err.response?.data || err.message);
         setError(`Ошибка загрузки данных: ${err.response?.data?.detail || err.message || 'Неизвестная ошибка'}`);
@@ -298,7 +299,7 @@ const CreateProjectDialog: React.FC<CreateProjectDialogProps> = observer(({
             const result = await projectParticipantsApi.create(newProject.id, participantData);
             console.log('🔍 DEBUG: Participant created successfully:', result);
           }
-        } catch (err) {
+        } catch (err: any) {
           console.error('🔍 DEBUG: Error adding participants:', err);
           console.error(t('createProject.messages.participants_add_error'), err);
           // Не прерываем создание проекта из-за ошибки с участниками
@@ -311,10 +312,11 @@ const CreateProjectDialog: React.FC<CreateProjectDialogProps> = observer(({
           for (const member of pendingProjectMembers) {
             await projectsApi.members.add(newProject.id, {
               user_id: member.user_id,
-              role: member.role
+              role: member.role, // Legacy field
+              project_role_id: member.project_role_id
             });
           }
-        } catch (err) {
+        } catch (err: any) {
           console.error(t('createProject.messages.members_add_error'), err);
           // Не прерываем создание проекта из-за ошибки с участниками
         }
@@ -487,22 +489,12 @@ const CreateProjectDialog: React.FC<CreateProjectDialogProps> = observer(({
     setError(null);
   };
 
-  const getRoleLabel = (role: string): string => {
-    const roleMap: { [key: string]: string } = {
-      'admin': t('createProject.roles.admin'),
-      'operator': t('createProject.roles.operator'),
-      'viewer': t('createProject.roles.viewer')
-    };
-    return roleMap[role] || role;
+  const getRoleLabelLocalized = (role: string): string => {
+    return getRoleLabel(role, t);
   };
 
-  const getRoleColor = (role: string): "primary" | "secondary" | "error" | "info" | "success" | "warning" => {
-    const colorMap: { [key: string]: "primary" | "secondary" | "error" | "info" | "success" | "warning" } = {
-      'admin': 'error',
-      'operator': 'warning',
-      'viewer': 'info'
-    };
-    return colorMap[role] || 'info';
+  const getRoleColorLocalized = (role: string): "primary" | "secondary" | "error" | "info" | "success" | "warning" => {
+    return getRoleColor(role);
   };
 
   const handleClose = () => {
@@ -884,8 +876,8 @@ const CreateProjectDialog: React.FC<CreateProjectDialogProps> = observer(({
               users={users}
               onDeleteProjectMember={handleDeleteProjectMember}
               onSaveProjectMember={handleSaveProjectMember}
-              getRoleLabel={getRoleLabel}
-              getRoleColor={getRoleColor}
+              getRoleLabel={getRoleLabelLocalized}
+              getRoleColor={getRoleColorLocalized}
             />
           )}
 
@@ -907,7 +899,7 @@ const CreateProjectDialog: React.FC<CreateProjectDialogProps> = observer(({
               contacts={contacts}
               companyRoles={companyRoles}
               users={users}
-              getRoleLabel={getRoleLabel}
+              getRoleLabel={getRoleLabelLocalized}
             />
           )}
         </DialogContent>
@@ -1044,6 +1036,7 @@ const CreateProjectDialog: React.FC<CreateProjectDialogProps> = observer(({
               options={users}
               getOptionLabel={(user) => `${user.full_name} (${user.email})`}
               value={users.find(user => user.id === projectMemberFormData.user_id) || null}
+              isOptionEqualToValue={(option, value) => option.id === value.id}
               onChange={(_, newValue) => {
                 setProjectMemberFormData(prev => ({ 
                   ...prev, 
@@ -1076,6 +1069,27 @@ const CreateProjectDialog: React.FC<CreateProjectDialogProps> = observer(({
               clearOnEscape
               selectOnFocus
               handleHomeEndKeys
+              ListboxProps={{
+                style: {
+                  maxHeight: '300px',
+                  overflow: 'auto'
+                }
+              }}
+              slotProps={{
+                popper: {
+                  placement: 'bottom-start',
+                  modifiers: [
+                    {
+                      name: 'preventOverflow',
+                      enabled: false,
+                    },
+                    {
+                      name: 'flip',
+                      enabled: false,
+                    },
+                  ],
+                },
+              }}
             />
 
             <FormControl fullWidth>

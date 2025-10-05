@@ -4,6 +4,7 @@ from .project import Project, ProjectMember
 from .project_participant import ProjectParticipant
 from .contact import Contact
 from .company_role import CompanyRole
+from .project_role import ProjectRole
 from .document import Document, DocumentRevision, DocumentReview
 from .transmittal import Transmittal, TransmittalItem
 # Temporarily commented out to avoid circular imports
@@ -24,6 +25,7 @@ __all__ = [
     "ProjectParticipant",
     "Contact",
     "CompanyRole",
+    "ProjectRole",
     "Document", "DocumentRevision", "DocumentReview",
     "Transmittal", "TransmittalItem",
     # "WorkflowTemplate", "WorkflowStep", "DocumentWorkflow", "DocumentApproval", "DocumentHistory",

@@ -58,6 +58,11 @@ const ParticipantsTab: React.FC<ParticipantsTabProps> = ({
 }) => {
   const { t } = useTranslation();
   
+  // Фильтруем компании, исключая уже добавленные
+  const availableCompanies = companies.filter(company => 
+    !pendingParticipants.some(participant => participant.company_id === company.id)
+  );
+  
   const [participantDialogOpen, setParticipantDialogOpen] = useState(false);
   const [isEditingParticipant, setIsEditingParticipant] = useState(false);
   const [selectedParticipant, setSelectedParticipant] = useState<any>(null);
@@ -116,7 +121,7 @@ const ParticipantsTab: React.FC<ParticipantsTabProps> = ({
       company_role_id: participantFormData.company_role_id ? parseInt(participantFormData.company_role_id) : null,
       id: selectedParticipant?.id || Date.now(),
       project_id: 0,
-      company_name: companies.find(c => c.id === parseInt(participantFormData.company_id))?.name || '',
+      company_name: availableCompanies.find(c => c.id === parseInt(participantFormData.company_id))?.name || '',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
@@ -266,7 +271,7 @@ const ParticipantsTab: React.FC<ParticipantsTabProps> = ({
                   if (participantFormData.contact_id) {
                     const selectedContact = contacts.find(c => c.id === participantFormData.contact_id);
                     if (selectedContact && selectedContact.company_id !== companyId) {
-                      setParticipantFormData(prev => ({ ...prev, contact_id: null }));
+                      setParticipantFormData(prev => ({ ...prev, contact_id: '' }));
                     }
                   }
                 }}
@@ -283,7 +288,7 @@ const ParticipantsTab: React.FC<ParticipantsTabProps> = ({
                 <MenuItem value="">
                   <em>{t('createProject.placeholders.select_company')}</em>
                 </MenuItem>
-                {companies.map((company) => (
+                {availableCompanies.map((company) => (
                   <MenuItem key={company.id} value={company.id.toString()}>
                     {getCompanyName(company)}
                   </MenuItem>

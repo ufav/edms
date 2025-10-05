@@ -358,15 +358,17 @@ const WorkflowPresetsPage: React.FC = observer(() => {
                       </IconButton>
                     </Tooltip>
                     <Tooltip title={t('workflows.actions.delete')}>
-                      <IconButton 
-                        size="small" 
-                        color="error" 
-                        onClick={() => handleDeleteOpen(preset)}
-                        disabled={preset.is_global}
-                        sx={{ p: 0.5 }}
-                      >
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
+                      <span>
+                        <IconButton 
+                          size="small" 
+                          color="error" 
+                          onClick={() => handleDeleteOpen(preset)}
+                          disabled={preset.is_global}
+                          sx={{ p: 0.5 }}
+                        >
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </span>
                     </Tooltip>
                   </Box>
                 </TableCell>

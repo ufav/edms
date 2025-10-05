@@ -4,7 +4,7 @@ Projects endpoints
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from datetime import datetime
 import random
 import string
@@ -168,7 +168,8 @@ async def create_project(
         end_date=project_data.end_date,
         budget=project_data.budget,
         manager_id=project_data.manager_id or current_user.id,
-        created_by=current_user.id
+        created_by=current_user.id,
+        workflow_preset_id=project_data.workflow_preset_id
     )
     
     db.add(db_project)
@@ -220,52 +221,17 @@ async def create_project(
         )
         db.add(project_revision_step)
     
-    # Применяем workflow пресет, если выбран
+    # Проверяем, что выбранный пресет существует и доступен
     if project_data.workflow_preset_id:
-        from app.models.project import WorkflowPreset, WorkflowPresetSequence, WorkflowPresetRule
+        from app.models.project import WorkflowPreset
         
-        # Проверяем, что пресет существует и доступен
         preset = db.query(WorkflowPreset).filter(
             WorkflowPreset.id == project_data.workflow_preset_id,
             (WorkflowPreset.is_global == True) | (WorkflowPreset.created_by == current_user.id)
         ).first()
         
-        if preset:
-            # Копируем последовательности из пресета
-            preset_sequences = db.query(WorkflowPresetSequence).filter(
-                WorkflowPresetSequence.preset_id == preset.id
-            ).order_by(WorkflowPresetSequence.sequence_order).all()
-            
-            for seq in preset_sequences:
-                from app.models.project import ProjectWorkflowSequence
-                workflow_sequence = ProjectWorkflowSequence(
-                    project_id=db_project.id,
-                    document_type_id=seq.document_type_id,
-                    sequence_order=seq.sequence_order,
-                    revision_description_id=seq.revision_description_id,
-                    revision_step_id=seq.revision_step_id,
-                    is_final=seq.is_final
-                )
-                db.add(workflow_sequence)
-            
-            # Копируем правила из пресета
-            preset_rules = db.query(WorkflowPresetRule).filter(
-                WorkflowPresetRule.preset_id == preset.id
-            ).all()
-            
-            for rule in preset_rules:
-                from app.models.project import ProjectWorkflowRule
-                workflow_rule = ProjectWorkflowRule(
-                    project_id=db_project.id,
-                    document_type_id=rule.document_type_id,
-                    current_revision_description_id=rule.current_revision_description_id,
-                    current_revision_step_id=rule.current_revision_step_id,
-                    review_code_id=rule.review_code_id,
-                    next_revision_description_id=rule.next_revision_description_id,
-                    next_revision_step_id=rule.next_revision_step_id,
-                    action_on_fail=rule.action_on_fail
-                )
-                db.add(workflow_rule)
+        if not preset:
+            raise HTTPException(status_code=400, detail="Выбранный пресет workflow не найден или недоступен")
     
     db.commit()
     
@@ -407,14 +373,13 @@ def check_project_access(project: Project, current_user: User, db: Session, requ
 
 class ProjectMemberCreate(BaseModel):
     user_id: int
-    role: str = "viewer"  # По умолчанию viewer
+    role: str = "viewer"  # Legacy field, по умолчанию viewer
+    project_role_id: Optional[int] = None  # Новая проектная роль
     
     @field_validator('role')
     @classmethod
     def validate_role(cls, v):
-        allowed_roles = ['admin', 'operator', 'viewer']
-        if v not in allowed_roles:
-            raise ValueError(f'Роль должна быть одной из: {", ".join(allowed_roles)}')
+        # Убираем валидацию, так как теперь используем project_role_id
         return v
 
 @router.post("/{project_id}/members/", response_model=dict)
@@ -446,7 +411,8 @@ async def add_project_member(
     project_member = ProjectMember(
         project_id=project_id,
         user_id=member_data.user_id,
-        role=member_data.role
+        role=member_data.role,  # Legacy field
+        project_role_id=member_data.project_role_id
     )
     
     db.add(project_member)
@@ -753,273 +719,114 @@ async def get_project_revision_steps(
     return revision_steps
 
 
-# Workflow API endpoints
+# Workflow API endpoints - УДАЛЕНЫ
+# Теперь workflow управляется через пресеты (workflow_preset_id в проектах)
+# Данные берутся из WorkflowPresetSequence и WorkflowPresetRule
 
-@router.post("/{project_id}/workflow/sequence", response_model=dict)
-async def add_workflow_sequence(
+
+@router.get("/{project_id}/revision-descriptions", response_model=List[dict])
+async def get_project_revision_descriptions(
     project_id: int,
-    sequence_data: dict,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """Добавление ревизии в последовательность workflow проекта"""
-    project = db.query(Project).filter(Project.id == project_id, Project.is_deleted == 0).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Проект не найден")
-    
-    check_project_access(project, current_user, db, require_creator_or_admin=True)
-    
-    from app.models.project import ProjectWorkflowSequence
-    
-    # Создаем новую запись последовательности
-    workflow_sequence = ProjectWorkflowSequence(
-        project_id=project_id,
-        document_type_id=sequence_data.get('document_type_id'),
-        sequence_order=sequence_data['sequence_order'],
-        revision_description_id=sequence_data['revision_description_id'],
-        revision_step_id=sequence_data['revision_step_id'],
-        is_final=sequence_data.get('is_final', False)
-    )
-    
-    db.add(workflow_sequence)
-    db.commit()
-    db.refresh(workflow_sequence)
-    
-    return {
-        "id": workflow_sequence.id,
-        "project_id": workflow_sequence.project_id,
-        "sequence_order": workflow_sequence.sequence_order,
-        "revision_description_id": workflow_sequence.revision_description_id,
-        "revision_step_id": workflow_sequence.revision_step_id,
-        "is_final": workflow_sequence.is_final
-    }
-
-
-@router.get("/{project_id}/workflow/sequence", response_model=List[dict])
-async def get_workflow_sequence(
-    project_id: int,
-    document_type_id: int = None,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
-):
-    """Получение последовательности ревизий workflow проекта"""
+    """Получение выбранных описаний ревизий для проекта"""
     project = db.query(Project).filter(Project.id == project_id, Project.is_deleted == 0).first()
     if not project:
         raise HTTPException(status_code=404, detail="Проект не найден")
     
     check_project_access(project, current_user, db)
     
-    from app.models.project import ProjectWorkflowSequence
-    from app.models.references import RevisionDescription, RevisionStep
+    from app.models.project import ProjectRevisionDescription
+    from app.models.references import RevisionDescription
     
-    query = db.query(ProjectWorkflowSequence).filter(ProjectWorkflowSequence.project_id == project_id)
-    if document_type_id:
-        query = query.filter(ProjectWorkflowSequence.document_type_id == document_type_id)
+    # Получаем выбранные описания ревизий для проекта
+    project_revisions = db.query(ProjectRevisionDescription).filter(
+        ProjectRevisionDescription.project_id == project_id
+    ).all()
     
-    sequences = query.order_by(ProjectWorkflowSequence.sequence_order).all()
+    revision_descriptions = []
+    for prd in project_revisions:
+        revision_desc = db.query(RevisionDescription).filter(
+            RevisionDescription.id == prd.revision_description_id
+        ).first()
+        if revision_desc:
+            revision_descriptions.append({
+                "id": revision_desc.id,
+                "code": revision_desc.code,
+                "description": revision_desc.description,
+                "description_native": revision_desc.description_native,
+                "is_active": revision_desc.is_active
+            })
     
-    result = []
-    for seq in sequences:
-        rev_desc = db.query(RevisionDescription).filter(RevisionDescription.id == seq.revision_description_id).first()
-        rev_step = db.query(RevisionStep).filter(RevisionStep.id == seq.revision_step_id).first()
-        
-        result.append({
-            "id": seq.id,
-            "project_id": seq.project_id,
-            "document_type_id": seq.document_type_id,
-            "sequence_order": seq.sequence_order,
-            "revision_description": {
-                "id": rev_desc.id,
-                "code": rev_desc.code,
-                "description": rev_desc.description,
-                "description_native": rev_desc.description_native
-            } if rev_desc else None,
-            "revision_step": {
-                "id": rev_step.id,
-                "code": rev_step.code,
-                "description": rev_step.description,
-                "description_native": rev_step.description_native
-            } if rev_step else None,
-            "is_final": seq.is_final
-        })
-    
-    return result
+    return revision_descriptions
 
 
-@router.delete("/{project_id}/workflow/sequence/{sequence_id}")
-async def delete_workflow_sequence(
+@router.get("/{project_id}/revision-steps", response_model=List[dict])
+async def get_project_revision_steps(
     project_id: int,
-    sequence_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """Удаление ревизии из последовательности workflow проекта"""
-    project = db.query(Project).filter(Project.id == project_id, Project.is_deleted == 0).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Проект не найден")
-    
-    check_project_access(project, current_user, db, require_creator_or_admin=True)
-    
-    from app.models.project import ProjectWorkflowSequence
-    
-    sequence = db.query(ProjectWorkflowSequence).filter(
-        ProjectWorkflowSequence.id == sequence_id,
-        ProjectWorkflowSequence.project_id == project_id
-    ).first()
-    
-    if not sequence:
-        raise HTTPException(status_code=404, detail="Ревизия в последовательности не найдена")
-    
-    db.delete(sequence)
-    db.commit()
-    
-    return {"message": "Ревизия удалена из последовательности"}
-
-
-@router.post("/{project_id}/workflow/rules", response_model=dict)
-async def add_workflow_rule(
-    project_id: int,
-    rule_data: dict,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
-):
-    """Добавление правила перехода в workflow проекта"""
-    project = db.query(Project).filter(Project.id == project_id, Project.is_deleted == 0).first()
-    if not project:
-        raise HTTPException(status_code=404, detail="Проект не найден")
-    
-    check_project_access(project, current_user, db, require_creator_or_admin=True)
-    
-    from app.models.project import ProjectWorkflowRule
-    
-    # Создаем новое правило
-    workflow_rule = ProjectWorkflowRule(
-        project_id=project_id,
-        document_type_id=rule_data.get('document_type_id'),
-        current_revision_description_id=rule_data['current_revision_description_id'],
-        current_revision_step_id=rule_data['current_revision_step_id'],
-        review_code_id=rule_data['review_code_id'],
-        next_revision_description_id=rule_data.get('next_revision_description_id'),
-        next_revision_step_id=rule_data.get('next_revision_step_id'),
-        action_on_fail=rule_data.get('action_on_fail', 'increment_number')
-    )
-    
-    db.add(workflow_rule)
-    db.commit()
-    db.refresh(workflow_rule)
-    
-    return {
-        "id": workflow_rule.id,
-        "project_id": workflow_rule.project_id,
-        "current_revision_description_id": workflow_rule.current_revision_description_id,
-        "current_revision_step_id": workflow_rule.current_revision_step_id,
-        "review_code_id": workflow_rule.review_code_id,
-        "next_revision_description_id": workflow_rule.next_revision_description_id,
-        "next_revision_step_id": workflow_rule.next_revision_step_id,
-        "action_on_fail": workflow_rule.action_on_fail
-    }
-
-
-@router.get("/{project_id}/workflow/rules", response_model=List[dict])
-async def get_workflow_rules(
-    project_id: int,
-    document_type_id: int = None,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
-):
-    """Получение правил переходов workflow проекта"""
+    """Получение выбранных шагов ревизий для проекта"""
     project = db.query(Project).filter(Project.id == project_id, Project.is_deleted == 0).first()
     if not project:
         raise HTTPException(status_code=404, detail="Проект не найден")
     
     check_project_access(project, current_user, db)
     
-    from app.models.project import ProjectWorkflowRule
-    from app.models.references import RevisionDescription, RevisionStep, ReviewCode
+    from app.models.project import ProjectRevisionStep
+    from app.models.references import RevisionStep
     
-    query = db.query(ProjectWorkflowRule).filter(ProjectWorkflowRule.project_id == project_id)
-    if document_type_id:
-        query = query.filter(ProjectWorkflowRule.document_type_id == document_type_id)
+    # Получаем выбранные шаги ревизий для проекта
+    project_steps = db.query(ProjectRevisionStep).filter(
+        ProjectRevisionStep.project_id == project_id
+    ).all()
     
-    rules = query.all()
+    revision_steps = []
+    for prs in project_steps:
+        revision_step = db.query(RevisionStep).filter(
+            RevisionStep.id == prs.revision_step_id
+        ).first()
+        if revision_step:
+            revision_steps.append({
+                "id": revision_step.id,
+                "code": revision_step.code,
+                "description": revision_step.description,
+                "description_native": revision_step.description_native,
+                "description_long": revision_step.description_long,
+                "is_active": revision_step.is_active
+            })
     
-    result = []
-    for rule in rules:
-        current_desc = db.query(RevisionDescription).filter(RevisionDescription.id == rule.current_revision_description_id).first()
-        current_step = db.query(RevisionStep).filter(RevisionStep.id == rule.current_revision_step_id).first()
-        next_desc = db.query(RevisionDescription).filter(RevisionDescription.id == rule.next_revision_description_id).first() if rule.next_revision_description_id else None
-        next_step = db.query(RevisionStep).filter(RevisionStep.id == rule.next_revision_step_id).first() if rule.next_revision_step_id else None
-        review_code = db.query(ReviewCode).filter(ReviewCode.id == rule.review_code_id).first()
-        
-        result.append({
-            "id": rule.id,
-            "project_id": rule.project_id,
-            "document_type_id": rule.document_type_id,
-            "current_revision": {
-                "description": {
-                    "id": current_desc.id,
-                    "code": current_desc.code,
-                    "description": current_desc.description,
-                    "description_native": current_desc.description_native
-                } if current_desc else None,
-                "step": {
-                    "id": current_step.id,
-                    "code": current_step.code,
-                    "description": current_step.description,
-                    "description_native": current_step.description_native
-                } if current_step else None
-            },
-            "review_code": {
-                "id": review_code.id,
-                "code": review_code.code,
-                "description": review_code.description,
-                "description_native": review_code.description_native
-            } if review_code else None,
-            "next_revision": {
-                "description": {
-                    "id": next_desc.id,
-                    "code": next_desc.code,
-                    "description": next_desc.description,
-                    "description_native": next_desc.description_native
-                } if next_desc else None,
-                "step": {
-                    "id": next_step.id,
-                    "code": next_step.code,
-                    "description": next_step.description,
-                    "description_native": next_step.description_native
-                } if next_step else None
-            } if rule.next_revision_description_id else None,
-            "action_on_fail": rule.action_on_fail
-        })
-    
-    return result
+    return revision_steps
 
 
-@router.delete("/{project_id}/workflow/rules/{rule_id}")
-async def delete_workflow_rule(
+@router.get("/{project_id}/workflow-preset", response_model=dict)
+async def get_project_workflow_preset(
     project_id: int,
-    rule_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """Удаление правила перехода из workflow проекта"""
+    """Получение выбранного пресета workflow для проекта"""
     project = db.query(Project).filter(Project.id == project_id, Project.is_deleted == 0).first()
     if not project:
         raise HTTPException(status_code=404, detail="Проект не найден")
     
-    check_project_access(project, current_user, db, require_creator_or_admin=True)
+    check_project_access(project, current_user, db)
     
-    from app.models.project import ProjectWorkflowRule
+    # Получаем пресет workflow проекта
+    if project.workflow_preset_id:
+        from app.models.project import WorkflowPreset
+        workflow_preset = db.query(WorkflowPreset).filter(
+            WorkflowPreset.id == project.workflow_preset_id
+        ).first()
+        
+        if workflow_preset:
+            return {
+                "id": workflow_preset.id,
+                "name": workflow_preset.name,
+                "description": workflow_preset.description,
+                "is_global": workflow_preset.is_global
+            }
     
-    rule = db.query(ProjectWorkflowRule).filter(
-        ProjectWorkflowRule.id == rule_id,
-        ProjectWorkflowRule.project_id == project_id
-    ).first()
-    
-    if not rule:
-        raise HTTPException(status_code=404, detail="Правило не найдено")
-    
-    db.delete(rule)
-    db.commit()
-    
-    return {"message": "Правило удалено из workflow"}
+    return {"id": None, "name": None, "description": None}

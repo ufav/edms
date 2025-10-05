@@ -142,12 +142,14 @@ class Company(Base):
 
 
 class UserRole(Base):
-    """Роли пользователей"""
+    """Роли пользователей (системные роли)"""
     __tablename__ = "user_roles"
     
     id = Column(Integer, primary_key=True, index=True)
+    code = Column(String(50), unique=True, nullable=False)  # admin, operator, viewer
     name = Column(String(64), nullable=False)
     name_native = Column(String(64))
+    name_en = Column(String(64))  # English name
     description = Column(String(255))
     permissions = Column(Text)  # JSON с правами доступа
     is_active = Column(Boolean, default=True)

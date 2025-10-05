@@ -12,7 +12,8 @@ class Document(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String(300), nullable=False)
-    description = Column(Text)
+    title_native = Column(Text)  # Переименовано из description
+    remarks = Column(Text)  # Примечания (текстовое поле)
     number = Column(String(100), nullable=True)  # Номер документа
     is_deleted = Column(Integer, default=0)  # Флаг удаления: 0 - не удален, 1 - удален
     project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"))

@@ -1,5 +1,6 @@
 import { makeAutoObservable, runInAction } from 'mobx';
 import { usersApi, authApi, type User as ApiUser } from '../api/client';
+import { useTranslation } from 'react-i18next';
 
 export interface User {
   id: number;
@@ -93,10 +94,16 @@ class UserStore {
 
   // Получение роли пользователя
   getUserRoleLabel(role: string): string {
+    // Используем статический маппинг, так как в MobX store нет доступа к useTranslation
     const roleMap: { [key: string]: string } = {
+      'Administrator': 'Администратор',
+      'Operator': 'Оператор', 
+      'Viewer': 'Читатель',
+      // Старые роли для совместимости
       'admin': 'Администратор',
       'operator': 'Оператор',
-      'viewer': 'Читатель'
+      'viewer': 'Читатель',
+      'superadmin': 'Администратор'
     };
     return roleMap[role] || role;
   }
@@ -104,9 +111,14 @@ class UserStore {
   // Получение цвета роли пользователя
   getUserRoleColor(role: string): string {
     const colorMap: { [key: string]: string } = {
+      'Administrator': 'error',
+      'Operator': 'warning',
+      'Viewer': 'info',
+      // Старые роли для совместимости
       'admin': 'error',
       'operator': 'warning',
-      'viewer': 'info'
+      'viewer': 'info',
+      'superadmin': 'error'
     };
     return colorMap[role] || 'default';
   }

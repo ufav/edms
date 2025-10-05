@@ -72,12 +72,15 @@ def load_preset_data(preset_id: int, db: Session):
                     "description_native": current_step.description_native
                 } if current_step else None
             },
+            "operator": rule.operator,
             "review_code": {
                 "id": review_code.id,
                 "code": review_code.code,
                 "description": review_code.description,
                 "description_native": review_code.name_native
             } if review_code else None,
+            "review_code_list": rule.review_code_list,
+            "priority": rule.priority,
             "next_revision": {
                 "description": {
                     "id": next_desc.id,
@@ -99,12 +102,25 @@ def load_preset_data(preset_id: int, db: Session):
 
 
 # Pydantic schemas
+class WorkflowPresetRuleCreate(BaseModel):
+    document_type_id: Optional[int] = None
+    current_revision_description_id: int
+    current_revision_step_id: int
+    operator: str = "equals"  # "equals", "not_equals", "in_list", "not_in_list"
+    review_code_id: Optional[int] = None  # для equals/not_equals
+    review_code_list: Optional[str] = None  # JSON для in_list/not_in_list
+    next_revision_description_id: Optional[int] = None
+    next_revision_step_id: Optional[int] = None
+    action_on_fail: str = "increment_number"
+    priority: int = 100
+
+
 class WorkflowPresetCreate(BaseModel):
     name: str
     description: Optional[str] = None
     is_global: bool = True
     sequences: List[dict] = []
-    rules: List[dict] = []
+    rules: List[WorkflowPresetRuleCreate] = []
 
 
 class WorkflowPresetUpdate(BaseModel):
@@ -112,7 +128,7 @@ class WorkflowPresetUpdate(BaseModel):
     description: Optional[str] = None
     is_global: Optional[bool] = None
     sequences: Optional[List[dict]] = None
-    rules: Optional[List[dict]] = None
+    rules: Optional[List[WorkflowPresetRuleCreate]] = None
 
 
 class WorkflowPresetResponse(BaseModel):
@@ -228,13 +244,16 @@ async def create_workflow_preset(
     for rule_item in preset_data.rules:
         rule = WorkflowPresetRule(
             preset_id=preset.id,
-            document_type_id=rule_item.get('document_type_id'),
-            current_revision_description_id=rule_item['current_revision_description_id'],
-            current_revision_step_id=rule_item['current_revision_step_id'],
-            review_code_id=rule_item['review_code_id'],
-            next_revision_description_id=rule_item.get('next_revision_description_id'),
-            next_revision_step_id=rule_item.get('next_revision_step_id'),
-            action_on_fail=rule_item.get('action_on_fail', 'increment_number')
+            document_type_id=rule_item.document_type_id,
+            current_revision_description_id=rule_item.current_revision_description_id,
+            current_revision_step_id=rule_item.current_revision_step_id,
+            review_code_id=rule_item.review_code_id,
+            operator=rule_item.operator,
+            review_code_list=rule_item.review_code_list,
+            priority=rule_item.priority,
+            next_revision_description_id=rule_item.next_revision_description_id,
+            next_revision_step_id=rule_item.next_revision_step_id,
+            action_on_fail=rule_item.action_on_fail
         )
         db.add(rule)
     
@@ -306,13 +325,16 @@ async def update_workflow_preset(
         for rule_item in preset_data.rules:
             rule = WorkflowPresetRule(
                 preset_id=preset.id,
-                document_type_id=rule_item.get('document_type_id'),
-                current_revision_description_id=rule_item['current_revision_description_id'],
-                current_revision_step_id=rule_item['current_revision_step_id'],
-                review_code_id=rule_item['review_code_id'],
-                next_revision_description_id=rule_item.get('next_revision_description_id'),
-                next_revision_step_id=rule_item.get('next_revision_step_id'),
-                action_on_fail=rule_item.get('action_on_fail', 'increment_number')
+                document_type_id=rule_item.document_type_id,
+                current_revision_description_id=rule_item.current_revision_description_id,
+                current_revision_step_id=rule_item.current_revision_step_id,
+                review_code_id=rule_item.review_code_id,
+                operator=rule_item.operator,
+                review_code_list=rule_item.review_code_list,
+                priority=rule_item.priority,
+                next_revision_description_id=rule_item.next_revision_description_id,
+                next_revision_step_id=rule_item.next_revision_step_id,
+                action_on_fail=rule_item.action_on_fail
             )
             db.add(rule)
     

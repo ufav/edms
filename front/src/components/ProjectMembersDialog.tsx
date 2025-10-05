@@ -250,6 +250,7 @@ const ProjectMembersDialog: React.FC<ProjectMembersDialogProps> = ({
         projectId={projectId}
         projectName={projectName}
         onMemberAdded={handleMemberAdded}
+        existingMembers={members}
       />
 
       <ConfirmDialog

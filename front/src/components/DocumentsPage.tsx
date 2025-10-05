@@ -107,7 +107,7 @@ const DocumentsPage: React.FC = observer(() => {
   const [compareOpen, setCompareOpen] = useState(false);
   const [workflowOpen, setWorkflowOpen] = useState(false);
   const [selectedDocumentForWorkflow, setSelectedDocumentForWorkflow] = useState<ApiDocument | null>(null);
-  const [workflowTemplates, setWorkflowTemplates] = useState<any[]>([]);
+  const [workflowTemplates] = useState<any[]>([]);
   const [workflowStatus, setWorkflowStatus] = useState<any>(null);
   
   // Загружаем документы и дисциплины при изменении проекта
@@ -285,22 +285,6 @@ const DocumentsPage: React.FC = observer(() => {
     }
   };
 
-  const handleStartWorkflow = async (documentId: number) => {
-    try {
-      const document = documentStore.documents.find((d: ApiDocument) => d.id === documentId);
-      if (!document) return;
-
-      setSelectedDocumentForWorkflow(document);
-      
-      // Загружаем доступные шаблоны
-      const templates = await workflowApi.getTemplates(document.discipline_id, document.document_type_id);
-      setWorkflowTemplates(templates);
-      
-      setWorkflowOpen(true);
-    } catch (error) {
-      alert('Ошибка загрузки шаблонов согласования');
-    }
-  };
 
   const handleStartWorkflowWithTemplate = async (templateId: number) => {
     if (!selectedDocumentForWorkflow) return;
@@ -317,31 +301,6 @@ const DocumentsPage: React.FC = observer(() => {
     }
   };
 
-  const handleViewWorkflowStatus = async (documentId: number) => {
-    try {
-      const status = await workflowApi.getWorkflowStatus(documentId);
-      setWorkflowStatus(status);
-      setWorkflowOpen(true);
-    } catch (error) {
-      // Если workflow не найден (404) — показываем диалог запуска с выбором шаблона
-      const err: any = error as any;
-      if (err?.response?.status === 404) {
-        const document = documentStore.documents.find((d: ApiDocument) => d.id === documentId);
-        if (document) {
-          setSelectedDocumentForWorkflow(document);
-          try {
-            const templates = await workflowApi.getTemplates(document.discipline_id, document.document_type_id);
-            setWorkflowTemplates(templates);
-          } catch (e) {
-          }
-          setWorkflowStatus(null);
-          setWorkflowOpen(true);
-          return;
-        }
-      }
-      alert('Ошибка загрузки статуса согласования');
-    }
-  };
 
   // Обработчики для работы с ревизиями
 
@@ -913,10 +872,10 @@ const DocumentsPage: React.FC = observer(() => {
               documentRevisionStore.clearRevisions(selectedDocumentId);
             }
           }} 
-          maxWidth="lg" 
+          maxWidth="xl" 
           fullWidth
           PaperProps={{
-            sx: { height: '90vh', maxHeight: '90vh' }
+            sx: { height: '95vh', maxHeight: '95vh', width: '95vw', maxWidth: '95vw' }
           }}
         >
           <DialogTitle>
@@ -926,76 +885,93 @@ const DocumentsPage: React.FC = observer(() => {
             {selectedDocument && (
               <>
                 {/* Верхняя часть - информация о документе */}
-                <Box sx={{ flexShrink: 0, mb: 3 }}>
-                  <Typography variant="h6" gutterBottom>Информация о документе</Typography>
-                  <Grid container spacing={2}>
+                <Box sx={{ flexShrink: 0, mb: 3, mt: 2 }}>
+                  <Grid container spacing={3}>
+                    {/* Первая колонка: номер с датой, титл, титл натив, язык */}
                     <Grid item xs={6}>
-                      <TextField
-                        label="Название"
-                        value={selectedDocument.title}
-                        fullWidth
-                        InputProps={{ readOnly: true }}
-                        size="small"
-                      />
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        {/* Номер и дата создания на одной строке */}
+                        <Box sx={{ display: 'flex', gap: 2 }}>
+                          <TextField
+                            label="Номер"
+                            value={selectedDocument.number || `DOC-${selectedDocument.id}`}
+                            fullWidth
+                            InputProps={{ readOnly: true }}
+                            size="small"
+                          />
+                          <TextField
+                            label="Дата создания"
+                            value={formatDate(selectedDocument.created_at)}
+                            fullWidth
+                            InputProps={{ readOnly: true }}
+                            size="small"
+                          />
+                        </Box>
+                        <TextField
+                          label="Название"
+                          value={selectedDocument.title}
+                          fullWidth
+                          InputProps={{ readOnly: true }}
+                          size="small"
+                        />
+                        <TextField
+                          label="Название (нативное)"
+                          value={selectedDocument.title_native || selectedDocument.description || ''}
+                          fullWidth
+                          InputProps={{ readOnly: true }}
+                          size="small"
+                        />
+                        <TextField
+                          label="Язык"
+                          value={(() => {
+                            const language = languageStore.languages.find(l => l.id === selectedDocument.language_id);
+                            return language ? language.code : 'ru';
+                          })()}
+                          fullWidth
+                          InputProps={{ readOnly: true }}
+                          size="small"
+                        />
+                      </Box>
                     </Grid>
-                    <Grid item xs={3}>
-                      <TextField
-                        label="Номер"
-                        value={selectedDocument.number || `DOC-${selectedDocument.id}`}
-                        fullWidth
-                        InputProps={{ readOnly: true }}
-                        size="small"
-                      />
-                    </Grid>
-                    <Grid item xs={3}>
-                      <TextField
-                        label="Язык"
-                        value={(() => {
-                          const language = languageStore.languages.find(l => l.id === selectedDocument.language_id);
-                          return language ? language.code : 'ru';
-                        })()}
-                        fullWidth
-                        InputProps={{ readOnly: true }}
-                        size="small"
-                      />
-                    </Grid>
-                    <Grid item xs={12}>
-                      <TextField
-                        label="Описание"
-                        value={selectedDocument.description}
-                        fullWidth
-                        multiline
-                        rows={2}
-                        InputProps={{ readOnly: true }}
-                        size="small"
-                      />
-                    </Grid>
-                    <Grid item xs={4}>
-                      <TextField
-                        label="Размер файла"
-                        value={formatFileSize(selectedDocument.file_size)}
-                        fullWidth
-                        InputProps={{ readOnly: true }}
-                        size="small"
-                      />
-                    </Grid>
-                    <Grid item xs={4}>
-                      <TextField
-                        label="Статус"
-                        value={documentStore.getDocumentStatusLabel(selectedDocument, referencesStore, i18n.language)}
-                        fullWidth
-                        InputProps={{ readOnly: true }}
-                        size="small"
-                      />
-                    </Grid>
-                    <Grid item xs={4}>
-                      <TextField
-                        label="Дата создания"
-                        value={formatDate(selectedDocument.created_at)}
-                        fullWidth
-                        InputProps={{ readOnly: true }}
-                        size="small"
-                      />
+                    
+                    {/* Вторая колонка: дисциплина, тип документа, DRS, примечания */}
+                    <Grid item xs={6}>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        <TextField
+                          label="Дисциплина"
+                          value={selectedDocument.discipline_name && selectedDocument.discipline_code 
+                            ? `${selectedDocument.discipline_code} - ${selectedDocument.discipline_name}`
+                            : 'Не указана'}
+                          fullWidth
+                          InputProps={{ readOnly: true }}
+                          size="small"
+                        />
+                        <TextField
+                          label="Тип документа"
+                          value={selectedDocument.document_type_name && selectedDocument.document_type_code 
+                            ? `${selectedDocument.document_type_code} - ${selectedDocument.document_type_name}`
+                            : 'Не указан'}
+                          fullWidth
+                          InputProps={{ readOnly: true }}
+                          size="small"
+                        />
+                        <TextField
+                          label="DRS"
+                          value={selectedDocument.drs || 'Не указан'}
+                          fullWidth
+                          InputProps={{ readOnly: true }}
+                          size="small"
+                        />
+                        <TextField
+                          label="Примечания"
+                          value={selectedDocument.remarks || ''}
+                          fullWidth
+                          multiline
+                          rows={3}
+                          InputProps={{ readOnly: true }}
+                          size="small"
+                        />
+                      </Box>
                     </Grid>
                   </Grid>
                 </Box>

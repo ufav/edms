@@ -33,6 +33,7 @@ import {
 import { observer } from 'mobx-react-lite';
 import { userStore } from '../stores/UserStore';
 import { useTranslation } from 'react-i18next';
+import { getRoleLabel, getRoleColor } from '../utils/roleLocalization';
 
 const UsersPage: React.FC = observer(() => {
   const { t } = useTranslation();
@@ -180,8 +181,8 @@ const UsersPage: React.FC = observer(() => {
                   </TableCell>
                   <TableCell>
                     <Chip
-                      label={userStore.getUserRoleLabel(user.role)}
-                      color={userStore.getUserRoleColor(user.role) as any}
+                      label={getRoleLabel(user.role, t)}
+                      color={getRoleColor(user.role) as any}
                       size="small"
                     />
                   </TableCell>

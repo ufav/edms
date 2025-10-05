@@ -1,11 +1,12 @@
 import { makeAutoObservable, runInAction } from 'mobx';
-import { referencesApi, type RevisionDescription, type RevisionStatus, type RevisionStep, type ReviewCode } from '../api/client';
+import { referencesApi, documentTypesApi, type RevisionDescription, type RevisionStatus, type RevisionStep, type ReviewCode, type DocumentType } from '../api/client';
 
 class ReferencesStore {
   revisionDescriptions: RevisionDescription[] = [];
   revisionStatuses: RevisionStatus[] = [];
   revisionSteps: RevisionStep[] = [];
   reviewCodes: ReviewCode[] = [];
+  documentTypes: DocumentType[] = [];
   
   isLoading = false;
   error: string | null = null;
@@ -15,6 +16,7 @@ class ReferencesStore {
   isStatusesLoaded = false;
   isStepsLoaded = false;
   isReviewCodesLoaded = false;
+  isDocumentTypesLoaded = false;
 
   constructor() {
     makeAutoObservable(this);
@@ -124,13 +126,40 @@ class ReferencesStore {
     }
   }
 
+  // Загрузка типов документов
+  async loadDocumentTypes() {
+    if (this.isDocumentTypesLoaded) return;
+
+    runInAction(() => {
+      this.isLoading = true;
+      this.error = null;
+    });
+
+    try {
+      const documentTypes = await documentTypesApi.getAll();
+      runInAction(() => {
+        this.documentTypes = documentTypes;
+        this.isDocumentTypesLoaded = true;
+      });
+    } catch (error) {
+      runInAction(() => {
+        this.error = 'Ошибка загрузки типов документов';
+      });
+    } finally {
+      runInAction(() => {
+        this.isLoading = false;
+      });
+    }
+  }
+
   // Загрузка всех справочников
   async loadAll() {
     await Promise.all([
       this.loadRevisionDescriptions(),
       this.loadRevisionStatuses(),
       this.loadRevisionSteps(),
-      this.loadReviewCodes()
+      this.loadReviewCodes(),
+      this.loadDocumentTypes()
     ]);
   }
 
@@ -152,6 +181,11 @@ class ReferencesStore {
   // Получение кода ревью по ID
   getReviewCode(id?: number): ReviewCode | undefined {
     return this.reviewCodes.find(code => code.id === id);
+  }
+
+  // Получение типа документа по ID
+  getDocumentType(id?: number): DocumentType | undefined {
+    return this.documentTypes.find(type => type.id === id);
   }
 
   // Получение полного номера ревизии (код + номер)
@@ -181,13 +215,8 @@ class ReferencesStore {
     const step = this.getRevisionStep(stepId);
     if (!step) return language === 'en' ? 'Not defined' : 'Не определен';
     
-    // Если английский язык и есть английское описание - используем его
-    if (language === 'en' && step.description) {
-      return step.description;
-    }
-    
-    // Иначе используем русское описание или fallback на английское
-    return step.description_native || step.description || (language === 'en' ? 'Not defined' : 'Не определен');
+    // Возвращаем код шага вместо описания
+    return step.code || (language === 'en' ? 'Not defined' : 'Не определен');
   }
 
   // Получение локализованного названия кода ревью
@@ -210,10 +239,12 @@ class ReferencesStore {
     this.revisionStatuses = [];
     this.revisionSteps = [];
     this.reviewCodes = [];
+    this.documentTypes = [];
     this.isDescriptionsLoaded = false;
     this.isStatusesLoaded = false;
     this.isStepsLoaded = false;
     this.isReviewCodesLoaded = false;
+    this.isDocumentTypesLoaded = false;
     this.error = null;
   }
 }
