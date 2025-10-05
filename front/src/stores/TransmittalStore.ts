@@ -20,6 +20,7 @@ class TransmittalStore {
   transmittals: Transmittal[] = [];
   isLoading = false;
   error: string | null = null;
+  loadedProjectId: number | null = null; // Отслеживаем для какого проекта загружены данные
 
   constructor() {
     makeAutoObservable(this);
@@ -27,7 +28,11 @@ class TransmittalStore {
 
   // Загрузка трансмитталов из API
   async loadTransmittals(projectId?: number) {
-    console.log('Loading transmittals from API...', projectId ? `for project ${projectId}` : 'all');
+    // Если данные уже загружены для этого проекта, не загружаем повторно
+    if (projectId && this.loadedProjectId === projectId && this.transmittals.length > 0) {
+      return;
+    }
+
     runInAction(() => {
       this.isLoading = true;
       this.error = null;
@@ -50,10 +55,9 @@ class TransmittalStore {
           created_at: apiTransmittal.created_at,
           updated_at: apiTransmittal.updated_at
         }));
-        console.log('Transmittals loaded from API:', this.transmittals.length);
+        this.loadedProjectId = projectId || null;
       });
     } catch (error) {
-      console.error('Error loading transmittals:', error);
       runInAction(() => {
         this.error = 'Ошибка загрузки трансмитталов';
         this.transmittals = [];

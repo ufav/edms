@@ -15,13 +15,17 @@ class Notification(Base):
     title = Column(String(200), nullable=False)
     message = Column(Text, nullable=False)
     type = Column(String(50), default="info")
+    priority = Column(String(20), default="medium")  # low, medium, high, urgent
     is_read = Column(Boolean, default=False)
+    read_at = Column(DateTime(timezone=True), nullable=True)
+    document_id = Column(Integer, ForeignKey("documents.id"), nullable=True)
     related_entity_type = Column(String(50))
     related_entity_id = Column(Integer)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     # Relationships
     user = relationship("User")
+    document = relationship("Document")
     
     def __repr__(self):
         return f"<Notification(id={self.id}, title='{self.title}', is_read={self.is_read})>"

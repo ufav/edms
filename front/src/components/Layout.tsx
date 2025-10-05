@@ -14,6 +14,7 @@ import {
   ListItemIcon,
   ListItemText,
   Divider,
+  Badge,
   useTheme,
   useMediaQuery,
 } from '@mui/material';
@@ -27,8 +28,12 @@ import {
   People as UserIcon,
   Dashboard as DashboardIcon,
   Logout as LogoutIcon,
+  Settings as SettingsIcon,
+  AccountTree as WorkflowIcon,
 } from '@mui/icons-material';
 import ProjectSelector from './ProjectSelector';
+import ProfileDialog from './ProfileDialog';
+import { useTranslation } from 'react-i18next';
 import { observer } from 'mobx-react-lite';
 import { projectStore } from '../stores/ProjectStore';
 import type { Project } from '../stores/ProjectStore';
@@ -52,8 +57,10 @@ const Layout: React.FC<LayoutProps> = observer(({
 }) => {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const { t, i18n } = useTranslation();
 
   const handleMenu = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -68,19 +75,23 @@ const Layout: React.FC<LayoutProps> = observer(({
   };
 
   const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: <DashboardIcon /> },
-    { id: 'projects', label: 'Проекты', icon: <ProjectIcon /> },
-    { id: 'documents', label: 'Документы', icon: <DocumentIcon /> },
-    { id: 'transmittals', label: 'Трансмитталы', icon: <TransmittalIcon /> },
-    { id: 'reviews', label: 'Ревью', icon: <ReviewIcon /> },
-    { id: 'users', label: 'Пользователи', icon: <UserIcon /> },
+    { id: 'dashboard', label: t('menu.dashboard'), icon: <DashboardIcon /> },
+    { id: 'projects', label: t('menu.projects'), icon: <ProjectIcon /> },
+    { id: 'documents', label: t('menu.documents'), icon: <DocumentIcon /> },
+    { id: 'transmittals', label: t('menu.transmittals'), icon: <TransmittalIcon /> },
+    { id: 'reviews', label: t('menu.reviews'), icon: <ReviewIcon /> },
+    { id: 'workflows', label: t('menu.workflows'), icon: <WorkflowIcon /> },
+    ...(user?.role === 'superadmin' ? [{ id: 'users', label: t('menu.users'), icon: <UserIcon /> }] : []),
+    ...((user?.role === 'admin' || user?.role === 'superadmin' || user?.is_admin) ? [
+      { id: 'admin', label: 'Админка', icon: <SettingsIcon />, external: true }
+    ] : []),
   ];
 
   const drawer = (
     <Box>
       <Toolbar>
         <Typography variant="h6" noWrap component="div">
-          EDMS
+          Docste
         </Typography>
       </Toolbar>
       <Divider />
@@ -90,7 +101,11 @@ const Layout: React.FC<LayoutProps> = observer(({
             button
             key={item.id}
             onClick={() => {
-              onPageChange(item.id);
+              if (item.external) {
+                window.location.href = '/admin';
+              } else {
+                onPageChange(item.id);
+              }
               setMobileOpen(false);
             }}
             selected={currentPage === item.id}
@@ -127,7 +142,7 @@ const Layout: React.FC<LayoutProps> = observer(({
           )}
           
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-            EDMS
+            {t('app.title')}
           </Typography>
 
           {/* Project Selector */}
@@ -142,7 +157,13 @@ const Layout: React.FC<LayoutProps> = observer(({
                   <Button
                     key={item.id}
                     color="inherit"
-                    onClick={() => onPageChange(item.id)}
+                    onClick={() => {
+                      if (item.external) {
+                        window.location.href = '/admin';
+                      } else {
+                        onPageChange(item.id);
+                      }
+                    }}
                     sx={{
                       backgroundColor: currentPage === item.id ? 'rgba(255,255,255,0.1)' : 'transparent',
                       '&:hover': {
@@ -158,7 +179,7 @@ const Layout: React.FC<LayoutProps> = observer(({
           )}
 
           {/* User Menu */}
-          <Box sx={{ ml: 2 }}>
+          <Box sx={{ ml: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
             <IconButton
               size="large"
               aria-label="account of current user"
@@ -199,7 +220,24 @@ const Layout: React.FC<LayoutProps> = observer(({
                   </Typography>
                 </Box>
               </MenuItem>
+              <MenuItem onClick={() => { handleClose(); setProfileOpen(true); }}>
+                <ListItemIcon>
+                  <AccountCircle fontSize="small" />
+                </ListItemIcon>
+                <ListItemText>{t('menu.profile')}</ListItemText>
+              </MenuItem>
               <Divider />
+              <MenuItem onClick={() => {
+                handleClose();
+                const next = i18n.language === 'ru' ? 'en' : 'ru';
+                i18n.changeLanguage(next);
+                try { localStorage.setItem('lang', next); } catch {}
+              }}>
+                <ListItemIcon>
+                  <DashboardIcon fontSize="small" />
+                </ListItemIcon>
+                <ListItemText>{t('menu.language')}: {i18n.language === 'ru' ? t('lang.en') : t('lang.ru')}</ListItemText>
+              </MenuItem>
               <MenuItem onClick={() => {
                 handleClose();
                 onLogout();
@@ -207,7 +245,7 @@ const Layout: React.FC<LayoutProps> = observer(({
                 <ListItemIcon>
                   <LogoutIcon fontSize="small" />
                 </ListItemIcon>
-                <ListItemText>Выйти из системы</ListItemText>
+                <ListItemText>{t('menu.logout')}</ListItemText>
               </MenuItem>
             </Menu>
           </Box>
@@ -244,6 +282,9 @@ const Layout: React.FC<LayoutProps> = observer(({
       >
         {children}
       </Box>
+
+      {/* Profile Dialog */}
+      <ProfileDialog open={profileOpen} onClose={() => setProfileOpen(false)} username={user?.username || undefined} />
     </Box>
   );
 });

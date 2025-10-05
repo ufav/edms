@@ -15,7 +15,9 @@ import {
   ListItemText,
   Typography,
   CircularProgress,
-  Alert
+  Alert,
+  useTheme,
+  useMediaQuery,
 } from '@mui/material';
 import { observer } from 'mobx-react-lite';
 import { projectStore } from '../stores/ProjectStore';
@@ -27,6 +29,8 @@ interface ProjectSelectorProps {
 
 const ProjectSelector: React.FC<ProjectSelectorProps> = observer(({ onProjectSelect }) => {
   const [open, setOpen] = useState(false);
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
   const handleProjectClick = (project: Project) => {
     projectStore.selectProject(project);
@@ -35,8 +39,6 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = observer(({ onProjectSel
   };
 
   const handleOpenDialog = () => {
-    console.log('Opening project dialog, projects:', projectStore.projects);
-    console.log('Loading state:', projectStore.isLoading);
     setOpen(true);
   };
 
@@ -50,11 +52,10 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = observer(({ onProjectSel
       <Button
         variant="outlined"
         onClick={() => {
-          console.log('Project selector button clicked');
           handleOpenDialog();
         }}
         sx={{
-          minWidth: 200,
+          minWidth: isMobile ? 150 : 200,
           justifyContent: 'flex-start',
           textTransform: 'none',
           backgroundColor: '#ffffff',
@@ -62,6 +63,7 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = observer(({ onProjectSel
           color: '#1976d2',
           fontWeight: 'bold',
           boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+          fontSize: isMobile ? '0.75rem' : '0.875rem',
           '&:hover': {
             borderColor: '#1565c0',
             backgroundColor: '#f5f5f5',
@@ -93,10 +95,11 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = observer(({ onProjectSel
       <Dialog
         open={open}
         onClose={handleCloseDialog}
-        maxWidth="md"
+        maxWidth={isMobile ? "sm" : "md"}
         fullWidth
+        fullScreen={isMobile}
         PaperProps={{
-          sx: { borderRadius: 2 }
+          sx: { borderRadius: isMobile ? 0 : 2 }
         }}
       >
         <DialogTitle>

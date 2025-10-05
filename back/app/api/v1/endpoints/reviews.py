@@ -9,7 +9,7 @@ from pydantic import BaseModel
 
 from app.core.database import get_db
 from app.models.user import User
-from app.models.document import DocumentReview
+from app.models.document import Document, DocumentReview
 from app.services.auth import get_current_active_user
 
 router = APIRouter()
@@ -38,7 +38,7 @@ async def get_reviews(
     
     if project_id:
         # Фильтруем по проекту через документы
-        query = query.join(DocumentReview.document).filter(DocumentReview.document.has(project_id=project_id))
+        query = query.join(Document, DocumentReview.document_id == Document.id).filter(Document.project_id == project_id)
     
     reviews = query.offset(skip).limit(limit).all()
     
@@ -46,7 +46,7 @@ async def get_reviews(
         {
             "id": review.id,
             "document_id": review.document_id,
-            "document_title": review.document.title if review.document else "Неизвестный документ",
+            "document_title": "Документ",  # TODO: Получить название документа
             "reviewer_id": review.reviewer_id,
             "reviewer_name": f"User {review.reviewer_id}",  # TODO: Получить имя из таблицы пользователей
             "status": review.status,
@@ -71,7 +71,7 @@ async def get_review(
     return {
         "id": review.id,
         "document_id": review.document_id,
-        "document_title": review.document.title if review.document else "Неизвестный документ",
+        "document_title": "Документ",  # TODO: Получить название документа
         "reviewer_id": review.reviewer_id,
         "reviewer_name": f"User {review.reviewer_id}",
         "status": review.status,
@@ -143,7 +143,7 @@ async def update_review(
     return {
         "id": review.id,
         "document_id": review.document_id,
-        "document_title": review.document.title if review.document else "Неизвестный документ",
+        "document_title": "Документ",  # TODO: Получить название документа
         "reviewer_id": review.reviewer_id,
         "reviewer_name": f"User {review.reviewer_id}",
         "status": review.status,

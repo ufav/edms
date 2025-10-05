@@ -27,6 +27,7 @@ async def get_users(
             "username": user.username,
             "email": user.email,
             "full_name": user.full_name,
+            "role": user.role,
             "is_active": user.is_active,
             "is_admin": user.is_admin,
             "created_at": user.created_at
@@ -50,6 +51,7 @@ async def get_user(
         "username": user.username,
         "email": user.email,
         "full_name": user.full_name,
+        "role": user.role,
         "is_active": user.is_active,
         "is_admin": user.is_admin,
         "created_at": user.created_at

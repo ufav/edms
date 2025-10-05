@@ -64,7 +64,6 @@ const ProjectMembersDialog: React.FC<ProjectMembersDialogProps> = ({
       const membersData = await projectsApi.members.getAll(projectId);
       setMembers(membersData);
     } catch (error: any) {
-      console.error('Error loading members:', error);
       setError(error.response?.data?.detail || 'Ошибка загрузки участников');
     } finally {
       setIsLoading(false);
@@ -76,7 +75,6 @@ const ProjectMembersDialog: React.FC<ProjectMembersDialogProps> = ({
       const usersData = await usersApi.getAll();
       setUsers(usersData);
     } catch (error) {
-      console.error('Error loading users:', error);
     }
   };
 
@@ -91,7 +89,6 @@ const ProjectMembersDialog: React.FC<ProjectMembersDialogProps> = ({
       await projectsApi.members.remove(projectId, pendingRemoveUserId);
       await loadMembers();
     } catch (error: any) {
-      console.error('Error removing member:', error);
       setError(error.response?.data?.detail || 'Ошибка удаления участника');
     } finally {
       setConfirmOpen(false);

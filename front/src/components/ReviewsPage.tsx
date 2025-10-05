@@ -35,8 +35,10 @@ import { observer } from 'mobx-react-lite';
 import { projectStore } from '../stores/ProjectStore';
 import { reviewStore } from '../stores/ReviewStore';
 import ProjectRequired from './ProjectRequired';
+import { useTranslation } from 'react-i18next';
 
 const ReviewsPage: React.FC = observer(() => {
+  const { t } = useTranslation();
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterProject, setFilterProject] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -62,27 +64,22 @@ const ReviewsPage: React.FC = observer(() => {
 
   const handleCreate = () => {
     // TODO: Реализовать создание ревью
-    console.log('Create review');
   };
 
   const handleView = (reviewId: number) => {
     // TODO: Реализовать просмотр ревью
-    console.log('View review:', reviewId);
   };
 
   const handleEdit = (reviewId: number) => {
     // TODO: Реализовать редактирование ревью
-    console.log('Edit review:', reviewId);
   };
 
   const handleComplete = (reviewId: number) => {
     // TODO: Реализовать завершение ревью
-    console.log('Complete review:', reviewId);
   };
 
   const handleDelete = (reviewId: number) => {
     // TODO: Реализовать удаление ревью
-    console.log('Delete review:', reviewId);
   };
 
   return (
@@ -90,7 +87,7 @@ const ReviewsPage: React.FC = observer(() => {
       <Box sx={{ width: '100%', p: 3 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
           <Typography variant="h4" component="h1">
-            Ревью {projectStore.selectedProject && `- ${projectStore.selectedProject.name}`}
+            {t('menu.reviews')} {projectStore.selectedProject && `- ${projectStore.selectedProject.name}`}
           </Typography>
           <Button
             variant="contained"
@@ -98,59 +95,63 @@ const ReviewsPage: React.FC = observer(() => {
             onClick={handleCreate}
             sx={{ backgroundColor: '#1976d2' }}
           >
-            Создать ревью
+            {t('reviews.create')}
           </Button>
         </Box>
 
         {/* Фильтры и поиск */}
-        <Paper sx={{ p: 2, mb: 3 }}>
-          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
-            <TextField
-              placeholder="Поиск ревью..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchIcon />
-                  </InputAdornment>
-                ),
-              }}
-              sx={{ minWidth: 300 }}
-            />
-            
-            <FormControl sx={{ minWidth: 150 }}>
-              <InputLabel>Статус</InputLabel>
-              <Select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-                label="Статус"
-              >
-                <MenuItem value="all">Все</MenuItem>
-                <MenuItem value="pending">Ожидает</MenuItem>
-                <MenuItem value="in_progress">В процессе</MenuItem>
-                <MenuItem value="completed">Завершено</MenuItem>
-                <MenuItem value="rejected">Отклонено</MenuItem>
-              </Select>
-            </FormControl>
+        <Box sx={{ 
+          display: 'flex', 
+          gap: 2, 
+          alignItems: 'center', 
+          flexWrap: 'wrap',
+          mb: 3
+        }}>
+          <TextField
+            placeholder={t('reviews.search_placeholder')}
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon />
+                </InputAdornment>
+              ),
+            }}
+            sx={{ minWidth: 300 }}
+          />
+          
+          <FormControl sx={{ minWidth: 150 }}>
+            <InputLabel>{t('common.status')}</InputLabel>
+            <Select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              label={t('common.status')}
+            >
+              <MenuItem value="all">{t('filter.all')}</MenuItem>
+              <MenuItem value="pending">{t('reviewStatus.pending')}</MenuItem>
+              <MenuItem value="in_progress">{t('reviewStatus.in_progress')}</MenuItem>
+              <MenuItem value="completed">{t('reviewStatus.completed')}</MenuItem>
+              <MenuItem value="rejected">{t('reviewStatus.rejected')}</MenuItem>
+            </Select>
+          </FormControl>
 
-            <FormControl sx={{ minWidth: 150 }}>
-              <InputLabel>Проект</InputLabel>
-              <Select
-                value={filterProject}
-                onChange={(e) => setFilterProject(e.target.value)}
-                label="Проект"
-              >
-                <MenuItem value="all">Все</MenuItem>
-                {projectStore.projects.map((project) => (
-                  <MenuItem key={project.id} value={project.id.toString()}>
-                    {project.name}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          </Box>
-        </Paper>
+          <FormControl sx={{ minWidth: 150 }}>
+            <InputLabel>Проект</InputLabel>
+            <Select
+              value={filterProject}
+              onChange={(e) => setFilterProject(e.target.value)}
+              label="Проект"
+            >
+              <MenuItem value="all">Все</MenuItem>
+              {projectStore.projects.map((project) => (
+                <MenuItem key={project.id} value={project.id.toString()}>
+                  {project.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </Box>
 
         {/* Таблица ревью */}
         <TableContainer component={Paper} sx={{ boxShadow: 2, border: '1px solid #e0e0e0' }}>
@@ -166,12 +167,12 @@ const ReviewsPage: React.FC = observer(() => {
             <Table sx={{ tableLayout: 'fixed', width: '100%', minWidth: '100%' }}>
               <TableHead>
                 <TableRow sx={{ backgroundColor: '#f5f5f5' }}>
-                  <TableCell sx={{ width: '22%', fontWeight: 'bold' }}>Документ</TableCell>
-                  <TableCell sx={{ width: '13%', fontWeight: 'bold' }}>Рецензент</TableCell>
-                  <TableCell sx={{ width: '10%', fontWeight: 'bold' }}>Статус</TableCell>
-                  <TableCell sx={{ width: '8%', fontWeight: 'bold' }}>Оценка</TableCell>
-                  <TableCell sx={{ width: '10%', fontWeight: 'bold' }}>Дата</TableCell>
-                  <TableCell sx={{ width: '18%', fontWeight: 'bold' }}>Действия</TableCell>
+                  <TableCell sx={{ width: '22%', fontWeight: 'bold' }}>{t('reviews.columns.document')}</TableCell>
+                  <TableCell sx={{ width: '13%', fontWeight: 'bold' }}>{t('reviews.columns.reviewer')}</TableCell>
+                  <TableCell sx={{ width: '10%', fontWeight: 'bold' }}>{t('reviews.columns.status')}</TableCell>
+                  <TableCell sx={{ width: '8%', fontWeight: 'bold' }}>{t('reviews.columns.rating')}</TableCell>
+                  <TableCell sx={{ width: '10%', fontWeight: 'bold' }}>{t('reviews.columns.date')}</TableCell>
+                  <TableCell sx={{ width: '18%', fontWeight: 'bold' }}>{t('common.actions')}</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -206,24 +207,24 @@ const ReviewsPage: React.FC = observer(() => {
                     </TableCell>
                     <TableCell>
                       <Box sx={{ display: 'flex', gap: 1 }}>
-                        <Tooltip title="Просмотр">
+                        <Tooltip title={t('common.view')}>
                           <IconButton size="small" onClick={() => handleView(review.id)}>
                             <ViewIcon />
                           </IconButton>
                         </Tooltip>
-                        <Tooltip title="Редактировать">
+                        <Tooltip title={t('project.edit')}>
                           <IconButton size="small" onClick={() => handleEdit(review.id)}>
                             <EditIcon />
                           </IconButton>
                         </Tooltip>
                         {review.status === 'pending' && (
-                          <Tooltip title="Завершить">
+                          <Tooltip title={t('reviews.complete')}>
                             <IconButton size="small" onClick={() => handleComplete(review.id)} color="success">
                               <CheckCircleIcon />
                             </IconButton>
                           </Tooltip>
                         )}
-                        <Tooltip title="Удалить">
+                        <Tooltip title={t('common.delete')}>
                           <IconButton size="small" onClick={() => handleDelete(review.id)} color="error">
                             <DeleteIcon />
                           </IconButton>

@@ -146,20 +146,18 @@ class DashboardStore {
     });
     
     try {
-      // Загружаем все данные параллельно
+      // Загружаем все данные параллельно (кроме документов - они загружаются в DocumentsPage)
+      // Store'ы сами проверяют, нужно ли загружать данные повторно
       await Promise.all([
         projectStore.loadProjects(),
-        documentStore.loadDocuments(projectId),
         transmittalStore.loadTransmittals(projectId),
         reviewStore.loadReviews(projectId),
         userStore.loadUsers()
       ]);
       
       runInAction(() => {
-        console.log('✅ Dashboard data loaded successfully');
       });
     } catch (error) {
-      console.error('❌ Error loading dashboard data:', error);
       runInAction(() => {
         this.error = 'Ошибка загрузки данных дашборда';
       });

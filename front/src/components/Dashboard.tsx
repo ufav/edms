@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Box, Typography, Grid, Card, CardContent, Button, Paper, CircularProgress, Alert } from '@mui/material';
+import { Box, Typography, Grid, Card, CardContent, Button, Paper, CircularProgress, Alert, useTheme, useMediaQuery } from '@mui/material';
 import { 
   Add as AddIcon, 
   Description as DocumentIcon, 
@@ -11,8 +11,12 @@ import {
 import { observer } from 'mobx-react-lite';
 import { dashboardStore } from '../stores/DashboardStore';
 import { projectStore } from '../stores/ProjectStore';
+import { useTranslation } from 'react-i18next';
 
 const Dashboard: React.FC = observer(() => {
+  const { t } = useTranslation();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   // Загружаем данные дашборда только после выбора проекта и аутентификации
   useEffect(() => {
     if (projectStore.selectedProject) {
@@ -25,22 +29,18 @@ const Dashboard: React.FC = observer(() => {
 
   const handleCreateProject = () => {
     // TODO: Реализовать создание проекта
-    console.log('Create project');
   };
 
   const handleUploadDocument = () => {
     // TODO: Реализовать загрузку документа
-    console.log('Upload document');
   };
 
   const handleCreateTransmittal = () => {
     // TODO: Реализовать создание трансмиттала
-    console.log('Create transmittal');
   };
 
   const handleAddUser = () => {
     // TODO: Реализовать добавление пользователя
-    console.log('Add user');
   };
 
   const getActivityIcon = (iconType: string) => {
@@ -78,19 +78,19 @@ const Dashboard: React.FC = observer(() => {
 
   return (
     <Box sx={{ width: '100%', p: 3 }}>
-      <Typography variant="h4" component="h1" gutterBottom sx={{ mb: 3 }}>
-        Dashboard {projectStore.selectedProject && `- ${projectStore.selectedProject.name}`}
+      <Typography variant={isMobile ? "h5" : "h4"} component="h1" gutterBottom sx={{ mb: 3 }}>
+        {t('menu.dashboard')} {projectStore.selectedProject && `- ${projectStore.selectedProject.name}`}
       </Typography>
       
       {/* Statistics Cards */}
-      <Grid container spacing={3} sx={{ mb: 4 }}>
+      <Grid container spacing={isMobile ? 2 : 3} sx={{ mb: 4 }}>
         <Grid item xs={12} sm={6} md={3}>
           <Card sx={{ boxShadow: '0 2px 8px rgba(0,0,0,0.1)', border: '1px solid #e0e0e0' }}>
             <CardContent>
               <Box display="flex" alignItems="center" justifyContent="space-between">
                 <Box>
                   <Typography color="text.secondary" gutterBottom>
-                    Всего проектов
+                    {t('dashboard.total_projects')}
                   </Typography>
                   <Typography variant="h4" component="div" sx={{ fontWeight: 'bold' }}>
                     {stats.totalProjects}
@@ -108,7 +108,7 @@ const Dashboard: React.FC = observer(() => {
               <Box display="flex" alignItems="center" justifyContent="space-between">
                 <Box>
                   <Typography color="text.secondary" gutterBottom>
-                    Документов
+                    {t('dashboard.total_documents')}
                   </Typography>
                   <Typography variant="h4" component="div" sx={{ fontWeight: 'bold' }}>
                     {stats.totalDocuments}
@@ -126,7 +126,7 @@ const Dashboard: React.FC = observer(() => {
               <Box display="flex" alignItems="center" justifyContent="space-between">
                 <Box>
                   <Typography color="text.secondary" gutterBottom>
-                    Трансмитталов
+                    {t('dashboard.total_transmittals')}
                   </Typography>
                   <Typography variant="h4" component="div" sx={{ fontWeight: 'bold' }}>
                     {stats.totalTransmittals}
@@ -144,7 +144,7 @@ const Dashboard: React.FC = observer(() => {
               <Box display="flex" alignItems="center" justifyContent="space-between">
                 <Box>
                   <Typography color="text.secondary" gutterBottom>
-                    На ревью
+                    {t('dashboard.pending_reviews')}
                   </Typography>
                   <Typography variant="h4" component="div" sx={{ fontWeight: 'bold' }}>
                     {stats.pendingReviews}
@@ -158,13 +158,13 @@ const Dashboard: React.FC = observer(() => {
       </Grid>
 
       {/* Quick Actions */}
-      <Grid container spacing={3}>
+      <Grid container spacing={isMobile ? 2 : 3}>
         <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 3, boxShadow: '0 2px 8px rgba(0,0,0,0.1)', border: '1px solid #e0e0e0' }}>
+          <Paper sx={{ p: isMobile ? 2 : 3, boxShadow: '0 2px 8px rgba(0,0,0,0.1)', border: '1px solid #e0e0e0' }}>
             <Typography variant="h6" gutterBottom>
-              Быстрые действия
+              {t('dashboard.quick_actions')}
             </Typography>
-            <Grid container spacing={2}>
+            <Grid container spacing={isMobile ? 1 : 2}>
               <Grid item xs={12} sm={6}>
                 <Button
                   variant="contained"
@@ -173,7 +173,7 @@ const Dashboard: React.FC = observer(() => {
                   onClick={handleCreateProject}
                   sx={{ mb: 1 }}
                 >
-                  Новый проект
+                  {t('dashboard.new_project')}
                 </Button>
               </Grid>
               <Grid item xs={12} sm={6}>
@@ -184,7 +184,7 @@ const Dashboard: React.FC = observer(() => {
                   onClick={handleUploadDocument}
                   sx={{ mb: 1 }}
                 >
-                  Загрузить документ
+                  {t('documents.upload')}
                 </Button>
               </Grid>
               <Grid item xs={12} sm={6}>
@@ -195,7 +195,7 @@ const Dashboard: React.FC = observer(() => {
                   onClick={handleCreateTransmittal}
                   sx={{ mb: 1 }}
                 >
-                  Новый трансмиттал
+                  {t('dashboard.new_transmittal')}
                 </Button>
               </Grid>
               <Grid item xs={12} sm={6}>
@@ -206,7 +206,7 @@ const Dashboard: React.FC = observer(() => {
                   onClick={handleAddUser}
                   sx={{ mb: 1 }}
                 >
-                  Добавить пользователя
+                  {t('dashboard.add_user')}
                 </Button>
               </Grid>
             </Grid>
@@ -214,11 +214,11 @@ const Dashboard: React.FC = observer(() => {
         </Grid>
 
         <Grid item xs={12} md={6}>
-          <Paper sx={{ p: 3, boxShadow: '0 2px 8px rgba(0,0,0,0.1)', border: '1px solid #e0e0e0' }}>
+          <Paper sx={{ p: isMobile ? 2 : 3, boxShadow: '0 2px 8px rgba(0,0,0,0.1)', border: '1px solid #e0e0e0' }}>
             <Typography variant="h6" gutterBottom>
               Последние активности
             </Typography>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: isMobile ? 1 : 2 }}>
               {recentActivities.length > 0 ? (
                 recentActivities.map((activity) => (
                   <Box key={activity.id} sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>

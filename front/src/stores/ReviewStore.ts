@@ -17,6 +17,7 @@ class ReviewStore {
   reviews: Review[] = [];
   isLoading = false;
   error: string | null = null;
+  loadedProjectId: number | null = null; // Отслеживаем для какого проекта загружены данные
 
   constructor() {
     makeAutoObservable(this);
@@ -24,7 +25,11 @@ class ReviewStore {
 
   // Загрузка ревью из API
   async loadReviews(projectId?: number) {
-    console.log('Loading reviews from API...', projectId ? `for project ${projectId}` : 'all');
+    // Если данные уже загружены для этого проекта, не загружаем повторно
+    if (projectId && this.loadedProjectId === projectId && this.reviews.length > 0) {
+      return;
+    }
+
     runInAction(() => {
       this.isLoading = true;
       this.error = null;
@@ -44,10 +49,9 @@ class ReviewStore {
           rating: apiReview.rating,
           created_at: apiReview.created_at
         }));
-        console.log('Reviews loaded from API:', this.reviews.length);
+        this.loadedProjectId = projectId || null;
       });
     } catch (error) {
-      console.error('Error loading reviews:', error);
       runInAction(() => {
         this.error = 'Ошибка загрузки ревью';
         this.reviews = [];

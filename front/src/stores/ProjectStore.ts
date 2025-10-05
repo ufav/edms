@@ -20,6 +20,7 @@ class ProjectStore {
   selectedProject: Project | null = null;
   isLoading = false;
   error: string | null = null;
+  isLoaded = false; // Флаг для отслеживания загрузки
 
   constructor() {
     makeAutoObservable(this);
@@ -27,17 +28,19 @@ class ProjectStore {
   }
 
   // Загрузка проектов из API
-  async loadProjects() {
-    console.log('🔄 Loading projects from API...');
+  async loadProjects(force = false) {
+    // Если проекты уже загружены, не загружаем повторно (если не принудительная загрузка)
+    if (this.isLoaded && !force) {
+      return;
+    }
+
     runInAction(() => {
       this.isLoading = true;
       this.error = null;
     });
     
     try {
-      console.log('📡 Making API call to projectsApi.getAll()...');
       const apiProjects = await projectsApi.getAll();
-      console.log('📦 Raw API response:', apiProjects);
       
       runInAction(() => {
         this.projects = apiProjects.map(apiProject => ({
@@ -53,14 +56,12 @@ class ProjectStore {
           created_at: apiProject.created_at || '',
           updated_at: apiProject.updated_at || ''
         }));
-        console.log('✅ Projects loaded from API:', this.projects.length, 'projects');
-        console.log('📋 Projects data:', this.projects);
+        this.isLoaded = true;
       });
     } catch (error) {
-      console.error('❌ Error loading projects:', error);
       runInAction(() => {
         this.error = 'Ошибка загрузки проектов';
-        this.projects = []; // Не загружаем моковые данные
+        this.projects = [];
       });
     } finally {
       runInAction(() => {
@@ -69,12 +70,20 @@ class ProjectStore {
     }
   }
 
-
   // Выбор проекта
   selectProject(project: Project) {
-    console.log('Selecting project:', project);
     this.selectedProject = project;
-    console.log('Selected project set:', this.selectedProject);
+  }
+
+  // Удаление проекта из стора (для soft delete)
+  removeProject(projectId: number) {
+    runInAction(() => {
+      this.projects = this.projects.filter(project => project.id !== projectId);
+      // Если удаляемый проект был выбран, сбрасываем выбор
+      if (this.selectedProject && this.selectedProject.id === projectId) {
+        this.selectedProject = null;
+      }
+    });
   }
 
   // Получение проекта по ID
@@ -107,6 +116,14 @@ class ProjectStore {
       'cancelled': 'error'
     };
     return colorMap[status] || 'default';
+  }
+
+  // Очистка проектов при выходе
+  clearProjects() {
+    this.projects = [];
+    this.selectedProject = null;
+    this.error = null;
+    this.isLoaded = false;
   }
 }
 

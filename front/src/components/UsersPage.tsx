@@ -32,8 +32,10 @@ import {
 } from '@mui/icons-material';
 import { observer } from 'mobx-react-lite';
 import { userStore } from '../stores/UserStore';
+import { useTranslation } from 'react-i18next';
 
 const UsersPage: React.FC = observer(() => {
+  const { t } = useTranslation();
   const [filterRole, setFilterRole] = useState<string>('all');
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -59,24 +61,21 @@ const UsersPage: React.FC = observer(() => {
 
   const handleCreate = () => {
     // TODO: Реализовать создание пользователя
-    console.log('Create user');
   };
 
   const handleEdit = (userId: number) => {
     // TODO: Реализовать редактирование пользователя
-    console.log('Edit user:', userId);
   };
 
   const handleDelete = (userId: number) => {
     // TODO: Реализовать удаление пользователя
-    console.log('Delete user:', userId);
   };
 
   return (
     <Box sx={{ width: '100%', p: 3 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Typography variant="h4" component="h1">
-          Пользователи
+          {t('menu.users')}
         </Typography>
         <Button
           variant="contained"
@@ -84,55 +83,59 @@ const UsersPage: React.FC = observer(() => {
           onClick={handleCreate}
           sx={{ backgroundColor: '#1976d2' }}
         >
-          Добавить пользователя
+          {t('users.add_user')}
         </Button>
       </Box>
 
       {/* Фильтры и поиск */}
-      <Paper sx={{ p: 2, mb: 3 }}>
-        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
-          <TextField
-            placeholder="Поиск пользователей..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon />
-                </InputAdornment>
-              ),
-            }}
-            sx={{ minWidth: 300 }}
-          />
-          
-          <FormControl sx={{ minWidth: 150 }}>
-            <InputLabel>Роль</InputLabel>
-            <Select
-              value={filterRole}
-              onChange={(e) => setFilterRole(e.target.value)}
-              label="Роль"
-            >
-              <MenuItem value="all">Все</MenuItem>
-              <MenuItem value="admin">Администратор</MenuItem>
-              <MenuItem value="operator">Оператор</MenuItem>
-              <MenuItem value="viewer">Читатель</MenuItem>
-            </Select>
-          </FormControl>
+      <Box sx={{ 
+        display: 'flex', 
+        gap: 2, 
+        alignItems: 'center', 
+        flexWrap: 'wrap',
+        mb: 3
+      }}>
+        <TextField
+          placeholder={t('users.search_placeholder')}
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon />
+              </InputAdornment>
+            ),
+          }}
+          sx={{ minWidth: 300 }}
+        />
+        
+        <FormControl sx={{ minWidth: 150 }}>
+          <InputLabel>{t('users.role')}</InputLabel>
+          <Select
+            value={filterRole}
+            onChange={(e) => setFilterRole(e.target.value)}
+            label={t('users.role')}
+          >
+            <MenuItem value="all">{t('filter.all')}</MenuItem>
+            <MenuItem value="admin">{t('roles.admin')}</MenuItem>
+            <MenuItem value="operator">{t('roles.operator')}</MenuItem>
+            <MenuItem value="viewer">{t('roles.viewer')}</MenuItem>
+          </Select>
+        </FormControl>
 
-          <FormControl sx={{ minWidth: 150 }}>
-            <InputLabel>Статус</InputLabel>
-            <Select
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-              label="Статус"
-            >
-              <MenuItem value="all">Все</MenuItem>
-              <MenuItem value="active">Активные</MenuItem>
-              <MenuItem value="inactive">Неактивные</MenuItem>
-            </Select>
-          </FormControl>
-        </Box>
-      </Paper>
+        <FormControl sx={{ minWidth: 150 }}>
+          <InputLabel>{t('common.status')}</InputLabel>
+          <Select
+            value={filterStatus}
+            onChange={(e) => setFilterStatus(e.target.value)}
+            label={t('common.status')}
+          >
+            <MenuItem value="all">{t('filter.all')}</MenuItem>
+            <MenuItem value="active">{t('users.active')}</MenuItem>
+            <MenuItem value="inactive">{t('users.inactive')}</MenuItem>
+          </Select>
+        </FormControl>
+      </Box>
 
       {/* Таблица пользователей */}
       <TableContainer component={Paper} sx={{ boxShadow: 2, border: '1px solid #e0e0e0' }}>
@@ -148,13 +151,13 @@ const UsersPage: React.FC = observer(() => {
           <Table sx={{ tableLayout: 'fixed', width: '100%', minWidth: '100%' }}>
             <TableHead>
               <TableRow sx={{ backgroundColor: '#f5f5f5' }}>
-                <TableCell sx={{ width: '15%', fontWeight: 'bold' }}>Имя пользователя</TableCell>
-                <TableCell sx={{ width: '20%', fontWeight: 'bold' }}>Полное имя</TableCell>
-                <TableCell sx={{ width: '20%', fontWeight: 'bold' }}>Email</TableCell>
-                <TableCell sx={{ width: '12%', fontWeight: 'bold' }}>Роль</TableCell>
-                <TableCell sx={{ width: '10%', fontWeight: 'bold' }}>Статус</TableCell>
-                <TableCell sx={{ width: '10%', fontWeight: 'bold' }}>Дата создания</TableCell>
-                <TableCell sx={{ width: '13%', fontWeight: 'bold' }}>Действия</TableCell>
+                <TableCell sx={{ width: '15%', fontWeight: 'bold' }}>{t('users.columns.username')}</TableCell>
+                <TableCell sx={{ width: '20%', fontWeight: 'bold' }}>{t('users.columns.full_name')}</TableCell>
+                <TableCell sx={{ width: '20%', fontWeight: 'bold' }}>{t('users.columns.email')}</TableCell>
+                <TableCell sx={{ width: '12%', fontWeight: 'bold' }}>{t('users.columns.role')}</TableCell>
+                <TableCell sx={{ width: '10%', fontWeight: 'bold' }}>{t('users.columns.status')}</TableCell>
+                <TableCell sx={{ width: '10%', fontWeight: 'bold' }}>{t('users.columns.created_at')}</TableCell>
+                <TableCell sx={{ width: '13%', fontWeight: 'bold' }}>{t('common.actions')}</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
@@ -184,7 +187,7 @@ const UsersPage: React.FC = observer(() => {
                   </TableCell>
                   <TableCell>
                     <Chip
-                      label={user.is_active ? 'Активный' : 'Неактивный'}
+                      label={user.is_active ? t('users.active') : t('users.inactive')}
                       color={user.is_active ? 'success' : 'default'}
                       size="small"
                     />
@@ -196,12 +199,12 @@ const UsersPage: React.FC = observer(() => {
                   </TableCell>
                   <TableCell>
                     <Box sx={{ display: 'flex', gap: 1 }}>
-                      <Tooltip title="Редактировать">
+                      <Tooltip title={t('project.edit')}>
                         <IconButton size="small" onClick={() => handleEdit(user.id)}>
                           <EditIcon />
                         </IconButton>
                       </Tooltip>
-                      <Tooltip title="Удалить">
+                      <Tooltip title={t('common.delete')}>
                         <IconButton size="small" onClick={() => handleDelete(user.id)} color="error">
                           <DeleteIcon />
                         </IconButton>

@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { authApi } from '../api/client';
+import { useEffect } from 'react';
+import { userStore } from '../stores/UserStore';
 
 interface User {
   id: number;
@@ -8,24 +8,13 @@ interface User {
 }
 
 export const useCurrentUser = () => {
-  const [user, setUser] = useState<User | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-
+  // Загружаем пользователя один раз при монтировании хука
   useEffect(() => {
-    const loadCurrentUser = async () => {
-      try {
-        const currentUser = await authApi.getCurrentUser();
-        setUser({ id: currentUser.id, username: currentUser.username, role: currentUser.role });
-      } catch (error) {
-        console.error('Error loading current user:', error);
-        setUser(null);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadCurrentUser();
+    userStore.loadCurrentUser();
   }, []);
+
+  const user = userStore.currentUser;
+  const isLoading = !userStore.isCurrentUserLoaded;
 
   const isSuperAdmin = user?.role === 'superadmin';
   const isAdmin = user?.role === 'admin';

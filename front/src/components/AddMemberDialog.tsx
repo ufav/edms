@@ -56,7 +56,6 @@ const AddMemberDialog: React.FC<AddMemberDialogProps> = ({
       const usersData = await usersApi.getAll();
       setUsers(usersData);
     } catch (error) {
-      console.error('Error loading users:', error);
       setError('Ошибка загрузки пользователей');
     } finally {
       setIsLoading(false);
@@ -81,7 +80,6 @@ const AddMemberDialog: React.FC<AddMemberDialogProps> = ({
       onMemberAdded();
       handleClose();
     } catch (error: any) {
-      console.error('Error adding member:', error);
       setError(error.response?.data?.detail || 'Ошибка добавления участника');
     } finally {
       setIsLoading(false);

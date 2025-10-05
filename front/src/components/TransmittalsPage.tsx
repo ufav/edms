@@ -35,8 +35,10 @@ import { observer } from 'mobx-react-lite';
 import { projectStore } from '../stores/ProjectStore';
 import { transmittalStore } from '../stores/TransmittalStore';
 import ProjectRequired from './ProjectRequired';
+import { useTranslation } from 'react-i18next';
 
 const TransmittalsPage: React.FC = observer(() => {
+  const { t } = useTranslation();
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterProject, setFilterProject] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -62,27 +64,22 @@ const TransmittalsPage: React.FC = observer(() => {
 
   const handleCreate = () => {
     // TODO: Реализовать создание трансмиттала
-    console.log('Create transmittal');
   };
 
   const handleView = (transmittalId: number) => {
     // TODO: Реализовать просмотр трансмиттала
-    console.log('View transmittal:', transmittalId);
   };
 
   const handleSend = (transmittalId: number) => {
     // TODO: Реализовать отправку трансмиттала
-    console.log('Send transmittal:', transmittalId);
   };
 
   const handleReceive = (transmittalId: number) => {
     // TODO: Реализовать подтверждение получения
-    console.log('Receive transmittal:', transmittalId);
   };
 
   const handleDelete = (transmittalId: number) => {
     // TODO: Реализовать удаление трансмиттала
-    console.log('Delete transmittal:', transmittalId);
   };
 
   return (
@@ -90,7 +87,7 @@ const TransmittalsPage: React.FC = observer(() => {
       <Box sx={{ width: '100%', p: 3 }}>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
           <Typography variant="h4" component="h1">
-            Трансмитталы {projectStore.selectedProject && `- ${projectStore.selectedProject.name}`}
+            {t('menu.transmittals')} {projectStore.selectedProject && `- ${projectStore.selectedProject.name}`}
           </Typography>
           <Button
             variant="contained"
@@ -98,60 +95,64 @@ const TransmittalsPage: React.FC = observer(() => {
             onClick={handleCreate}
             sx={{ backgroundColor: '#1976d2' }}
           >
-            Создать трансмиттал
+            {t('transmittals.create')}
           </Button>
         </Box>
 
         {/* Фильтры и поиск */}
-        <Paper sx={{ p: 2, mb: 3 }}>
-          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
-            <TextField
-              placeholder="Поиск трансмитталов..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchIcon />
-                  </InputAdornment>
-                ),
-              }}
-              sx={{ minWidth: 300 }}
-            />
-            
-            <FormControl sx={{ minWidth: 150 }}>
-              <InputLabel>Статус</InputLabel>
-              <Select
-                value={filterStatus}
-                onChange={(e) => setFilterStatus(e.target.value)}
-                label="Статус"
-              >
-                <MenuItem value="all">Все</MenuItem>
-                <MenuItem value="draft">Черновик</MenuItem>
-                <MenuItem value="sent">Отправлен</MenuItem>
-                <MenuItem value="received">Получен</MenuItem>
-                <MenuItem value="acknowledged">Подтвержден</MenuItem>
-                <MenuItem value="rejected">Отклонен</MenuItem>
-              </Select>
-            </FormControl>
+        <Box sx={{ 
+          display: 'flex', 
+          gap: 2, 
+          alignItems: 'center', 
+          flexWrap: 'wrap',
+          mb: 3
+        }}>
+          <TextField
+            placeholder={t('transmittals.search_placeholder')}
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon />
+                </InputAdornment>
+              ),
+            }}
+            sx={{ minWidth: 300 }}
+          />
+          
+          <FormControl sx={{ minWidth: 150 }}>
+            <InputLabel>{t('common.status')}</InputLabel>
+            <Select
+              value={filterStatus}
+              onChange={(e) => setFilterStatus(e.target.value)}
+              label={t('common.status')}
+            >
+              <MenuItem value="all">{t('filter.all')}</MenuItem>
+              <MenuItem value="draft">{t('transStatus.draft')}</MenuItem>
+              <MenuItem value="sent">{t('transStatus.sent')}</MenuItem>
+              <MenuItem value="received">{t('transStatus.received')}</MenuItem>
+              <MenuItem value="acknowledged">{t('transStatus.acknowledged')}</MenuItem>
+              <MenuItem value="rejected">{t('transStatus.rejected')}</MenuItem>
+            </Select>
+          </FormControl>
 
-            <FormControl sx={{ minWidth: 150 }}>
-              <InputLabel>Проект</InputLabel>
-              <Select
-                value={filterProject}
-                onChange={(e) => setFilterProject(e.target.value)}
-                label="Проект"
-              >
-                <MenuItem value="all">Все</MenuItem>
-                {projectStore.projects.map((project) => (
-                  <MenuItem key={project.id} value={project.id.toString()}>
-                    {project.name}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          </Box>
-        </Paper>
+          <FormControl sx={{ minWidth: 150 }}>
+            <InputLabel>{t('transmittals.project')}</InputLabel>
+            <Select
+              value={filterProject}
+              onChange={(e) => setFilterProject(e.target.value)}
+              label={t('transmittals.project')}
+            >
+              <MenuItem value="all">{t('filter.all')}</MenuItem>
+              {projectStore.projects.map((project) => (
+                <MenuItem key={project.id} value={project.id.toString()}>
+                  {project.name}
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        </Box>
 
         {/* Таблица трансмитталов */}
         <TableContainer component={Paper} sx={{ boxShadow: 2, border: '1px solid #e0e0e0' }}>
@@ -167,14 +168,14 @@ const TransmittalsPage: React.FC = observer(() => {
             <Table sx={{ tableLayout: 'fixed', width: '100%', minWidth: '100%' }}>
               <TableHead>
                 <TableRow sx={{ backgroundColor: '#f5f5f5' }}>
-                  <TableCell sx={{ width: '9%', fontWeight: 'bold' }}>Номер</TableCell>
-                  <TableCell sx={{ width: '14%', fontWeight: 'bold' }}>Название</TableCell>
-                  <TableCell sx={{ width: '12%', fontWeight: 'bold' }}>Отправитель</TableCell>
-                  <TableCell sx={{ width: '12%', fontWeight: 'bold' }}>Получатель</TableCell>
-                  <TableCell sx={{ width: '10%', fontWeight: 'bold' }}>Статус</TableCell>
-                  <TableCell sx={{ width: '10%', fontWeight: 'bold' }}>Отправка</TableCell>
-                  <TableCell sx={{ width: '10%', fontWeight: 'bold' }}>Получение</TableCell>
-                  <TableCell sx={{ width: '21%', fontWeight: 'bold' }}>Действия</TableCell>
+                  <TableCell sx={{ width: '9%', fontWeight: 'bold' }}>{t('transmittals.columns.number')}</TableCell>
+                  <TableCell sx={{ width: '14%', fontWeight: 'bold' }}>{t('transmittals.columns.title')}</TableCell>
+                  <TableCell sx={{ width: '12%', fontWeight: 'bold' }}>{t('transmittals.columns.sender')}</TableCell>
+                  <TableCell sx={{ width: '12%', fontWeight: 'bold' }}>{t('transmittals.columns.recipient')}</TableCell>
+                  <TableCell sx={{ width: '10%', fontWeight: 'bold' }}>{t('transmittals.columns.status')}</TableCell>
+                  <TableCell sx={{ width: '10%', fontWeight: 'bold' }}>{t('transmittals.columns.sent')}</TableCell>
+                  <TableCell sx={{ width: '10%', fontWeight: 'bold' }}>{t('transmittals.columns.received')}</TableCell>
+                  <TableCell sx={{ width: '21%', fontWeight: 'bold' }}>{t('common.actions')}</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -219,26 +220,26 @@ const TransmittalsPage: React.FC = observer(() => {
                     </TableCell>
                     <TableCell>
                       <Box sx={{ display: 'flex', gap: 1 }}>
-                        <Tooltip title="Просмотр">
+                        <Tooltip title={t('common.view')}>
                           <IconButton size="small" onClick={() => handleView(transmittal.id)}>
                             <ViewIcon />
                           </IconButton>
                         </Tooltip>
                         {transmittal.status === 'draft' && (
-                          <Tooltip title="Отправить">
+                          <Tooltip title={t('transmittals.send')}>
                             <IconButton size="small" onClick={() => handleSend(transmittal.id)} color="primary">
                               <SendIcon />
                             </IconButton>
                           </Tooltip>
                         )}
                         {transmittal.status === 'sent' && (
-                          <Tooltip title="Подтвердить получение">
+                          <Tooltip title={t('transmittals.acknowledge')}>
                             <IconButton size="small" onClick={() => handleReceive(transmittal.id)} color="success">
                               <CheckCircleIcon />
                             </IconButton>
                           </Tooltip>
                         )}
-                        <Tooltip title="Удалить">
+                        <Tooltip title={t('common.delete')}>
                           <IconButton size="small" onClick={() => handleDelete(transmittal.id)} color="error">
                             <DeleteIcon />
                           </IconButton>

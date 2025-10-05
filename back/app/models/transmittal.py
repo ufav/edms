@@ -23,10 +23,10 @@ class Transmittal(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     
-    # Relationships
-    project = relationship("Project", back_populates="transmittals")
-    sender = relationship("User", foreign_keys=[sender_id])
-    recipient = relationship("User", foreign_keys=[recipient_id])
+    # Relationships (temporarily commented out)
+    # project = relationship("Project", back_populates="transmittals")
+    # sender = relationship("User", foreign_keys=[sender_id])
+    # recipient = relationship("User", foreign_keys=[recipient_id])
     items = relationship("TransmittalItem", back_populates="transmittal")
     
     def __repr__(self):
@@ -43,9 +43,9 @@ class TransmittalItem(Base):
     action_required = Column(String(100))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
-    # Relationships
+    # Relationships (temporarily commented out)
     transmittal = relationship("Transmittal", back_populates="items")
-    document = relationship("Document", back_populates="transmittal_items")
+    # document = relationship("Document", back_populates="transmittal_items")
     
     def __repr__(self):
         return f"<TransmittalItem(id={self.id}, transmittal_id={self.transmittal_id}, document_id={self.document_id})>"

@@ -1,90 +1,123 @@
 """
-Workflow models for EDMS
+Workflow models for document lifecycle and approval processes
 """
 
-from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey
-from sqlalchemy.sql import func
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, Text, ForeignKey, Enum
 from sqlalchemy.orm import relationship
+from sqlalchemy.sql import func
 from app.core.database import Base
+import enum
 
-class Workflow(Base):
-    __tablename__ = "workflows"
+
+class DocumentStatus(str, enum.Enum):
+    """Статусы документа в жизненном цикле"""
+    DRAFT = "draft"  # Черновик
+    IN_REVIEW = "in_review"  # На согласовании
+    APPROVED = "approved"  # Утвержден
+    REJECTED = "rejected"  # Отклонен
+    ARCHIVED = "archived"  # Архив
+    SUPERSEDED = "superseded"  # Заменен
+
+
+class ApprovalStatus(str, enum.Enum):
+    """Статусы согласования"""
+    PENDING = "pending"  # Ожидает согласования
+    APPROVED = "approved"  # Согласован
+    REJECTED = "rejected"  # Отклонен
+    DELEGATED = "delegated"  # Делегирован
+
+
+class WorkflowTemplate(Base):
+    """Шаблон маршрута согласования"""
+    __tablename__ = "workflow_templates"
     
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(200), nullable=False)
+    name = Column(String(255), nullable=False)
     description = Column(Text)
-    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"))
+    discipline_id = Column(Integer, ForeignKey("disciplines.id"), nullable=True)
+    document_type_id = Column(Integer, ForeignKey("document_types.id"), nullable=True)
     is_active = Column(Boolean, default=True)
-    created_by = Column(Integer, ForeignKey("users.id"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
     
-    # Relationships
-    project = relationship("Project")  # Убрали back_populates из-за циклического импорта
-    creator = relationship("User", foreign_keys=[created_by])
-    steps = relationship("WorkflowStep", back_populates="workflow")
-    instances = relationship("WorkflowInstance", back_populates="workflow")
-    
-    def __repr__(self):
-        return f"<Workflow(id={self.id}, name='{self.name}')>"
+    # Связи
+    steps = relationship("WorkflowStep", back_populates="template", cascade="all, delete-orphan")
+    workflows = relationship("DocumentWorkflow", back_populates="template")
+
 
 class WorkflowStep(Base):
+    """Шаг в маршруте согласования"""
     __tablename__ = "workflow_steps"
     
     id = Column(Integer, primary_key=True, index=True)
-    workflow_id = Column(Integer, ForeignKey("workflows.id", ondelete="CASCADE"))
-    step_name = Column(String(200), nullable=False)
-    step_order = Column(Integer, nullable=False)
-    assigned_to = Column(Integer, ForeignKey("users.id"))
-    step_type = Column(String(50), nullable=False)
-    is_required = Column(Boolean, default=True)
+    template_id = Column(Integer, ForeignKey("workflow_templates.id"), nullable=False)
+    step_order = Column(Integer, nullable=False)  # Порядок шага
+    step_name = Column(String(255), nullable=False)  # Название шага
+    approver_role = Column(String(100), nullable=True)  # Роль согласующего
+    approver_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # Конкретный пользователь
+    is_required = Column(Boolean, default=True)  # Обязательное согласование
+    escalation_hours = Column(Integer, default=72)  # Часы до эскалации
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
-    # Relationships
-    workflow = relationship("Workflow", back_populates="steps")
-    assignee = relationship("User", foreign_keys=[assigned_to])
-    logs = relationship("WorkflowStepLog", back_populates="step")
-    
-    def __repr__(self):
-        return f"<WorkflowStep(id={self.id}, name='{self.step_name}', order={self.step_order})>"
+    # Связи
+    template = relationship("WorkflowTemplate", back_populates="steps")
+    approver = relationship("User", foreign_keys=[approver_user_id])
+    approvals = relationship("DocumentApproval", back_populates="step")
 
-class WorkflowInstance(Base):
-    __tablename__ = "workflow_instances"
+
+class DocumentWorkflow(Base):
+    """Активный workflow для документа"""
+    __tablename__ = "document_workflows"
     
     id = Column(Integer, primary_key=True, index=True)
-    workflow_id = Column(Integer, ForeignKey("workflows.id", ondelete="CASCADE"))
-    document_id = Column(Integer, ForeignKey("documents.id", ondelete="CASCADE"))
-    current_step = Column(Integer, ForeignKey("workflow_steps.id"))
-    status = Column(String(20), default="active")
-    started_by = Column(Integer, ForeignKey("users.id"))
+    document_id = Column(Integer, ForeignKey("documents.id"), nullable=False)
+    template_id = Column(Integer, ForeignKey("workflow_templates.id"), nullable=False)
+    status = Column(Enum(DocumentStatus), default=DocumentStatus.DRAFT)
+    current_step_id = Column(Integer, ForeignKey("workflow_steps.id"), nullable=True)
     started_at = Column(DateTime(timezone=True), server_default=func.now())
-    completed_at = Column(DateTime(timezone=True))
+    completed_at = Column(DateTime(timezone=True), nullable=True)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     
-    # Relationships
-    workflow = relationship("Workflow", back_populates="instances")
-    document = relationship("Document", back_populates="workflow_instances")
-    current_step_obj = relationship("WorkflowStep", foreign_keys=[current_step])
-    starter = relationship("User", foreign_keys=[started_by])
-    logs = relationship("WorkflowStepLog", back_populates="workflow_instance")
-    
-    def __repr__(self):
-        return f"<WorkflowInstance(id={self.id}, workflow_id={self.workflow_id}, status='{self.status}')>"
+    # Связи
+    document = relationship("Document", back_populates="workflow")
+    template = relationship("WorkflowTemplate", back_populates="workflows")
+    current_step = relationship("WorkflowStep")
+    creator = relationship("User", foreign_keys=[created_by])
+    approvals = relationship("DocumentApproval", back_populates="workflow")
 
-class WorkflowStepLog(Base):
-    __tablename__ = "workflow_step_logs"
+
+class DocumentApproval(Base):
+    """Согласование документа"""
+    __tablename__ = "document_workflow_approvals"
     
     id = Column(Integer, primary_key=True, index=True)
-    workflow_instance_id = Column(Integer, ForeignKey("workflow_instances.id", ondelete="CASCADE"))
-    step_id = Column(Integer, ForeignKey("workflow_steps.id"))
-    action = Column(String(50), nullable=False)
-    comments = Column(Text)
-    performed_by = Column(Integer, ForeignKey("users.id"))
-    performed_at = Column(DateTime(timezone=True), server_default=func.now())
+    workflow_id = Column(Integer, ForeignKey("document_workflows.id"), nullable=False)
+    step_id = Column(Integer, ForeignKey("workflow_steps.id"), nullable=False)
+    approver_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    status = Column(Enum(ApprovalStatus), default=ApprovalStatus.PENDING)
+    comments = Column(Text, nullable=True)
+    approved_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
     
-    # Relationships
-    workflow_instance = relationship("WorkflowInstance", back_populates="logs")
-    step = relationship("WorkflowStep", back_populates="logs")
-    performer = relationship("User", foreign_keys=[performed_by])
+    # Связи
+    workflow = relationship("DocumentWorkflow", back_populates="approvals")
+    step = relationship("WorkflowStep", back_populates="approvals")
+    approver = relationship("User")
+
+
+class DocumentHistory(Base):
+    """История изменений документа"""
+    __tablename__ = "document_history"
     
-    def __repr__(self):
-        return f"<WorkflowStepLog(id={self.id}, action='{self.action}', performed_at='{self.performed_at}')>"
+    id = Column(Integer, primary_key=True, index=True)
+    document_id = Column(Integer, ForeignKey("documents.id"), nullable=False)
+    action = Column(String(100), nullable=False)  # created, updated, status_changed, etc.
+    old_value = Column(Text, nullable=True)
+    new_value = Column(Text, nullable=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    timestamp = Column(DateTime(timezone=True), server_default=func.now())
+    comment = Column(Text, nullable=True)
+    
+    # Связи
+    document = relationship("Document")
+    user = relationship("User")

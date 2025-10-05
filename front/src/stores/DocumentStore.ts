@@ -1,26 +1,13 @@
 import { makeAutoObservable, runInAction } from 'mobx';
 import { documentsApi, type Document as ApiDocument } from '../api/client';
 
-export interface Document {
-  id: number;
-  title: string;
-  description: string;
-  file_name: string;
-  file_size: number;
-  file_type: string;
-  version: string;
-  status: string;
-  project_id: number;
-  uploaded_by: number;
-  file_path: string;
-  created_at: string;
-  updated_at: string;
-}
+export type Document = ApiDocument;
 
 class DocumentStore {
   documents: Document[] = [];
   isLoading = false;
   error: string | null = null;
+  currentProjectId: number | null = null;
 
   constructor() {
     makeAutoObservable(this);
@@ -28,7 +15,19 @@ class DocumentStore {
 
   // Загрузка документов из API
   async loadDocuments(projectId?: number) {
-    console.log('Loading documents from API...', projectId ? `for project ${projectId}` : 'all');
+    // Если это тот же проект и документы уже загружены - не загружаем повторно
+    if (projectId && this.currentProjectId === projectId && this.documents.length > 0) {
+      return;
+    }
+    
+    // Если это новый проект, очищаем старые документы
+    if (projectId && this.currentProjectId !== projectId) {
+      runInAction(() => {
+        this.documents = [];
+        this.currentProjectId = projectId;
+      });
+    }
+    
     runInAction(() => {
       this.isLoading = true;
       this.error = null;
@@ -36,26 +35,36 @@ class DocumentStore {
     
     try {
       const apiDocuments = await documentsApi.getAll(projectId);
-      runInAction(() => {
-        this.documents = apiDocuments.map(apiDoc => ({
-          id: apiDoc.id,
-          title: apiDoc.title,
-          description: apiDoc.description,
-          file_name: apiDoc.file_name,
-          file_size: apiDoc.file_size,
-          file_type: apiDoc.file_type,
-          version: apiDoc.version,
-          status: apiDoc.status,
-          project_id: apiDoc.project_id,
-          uploaded_by: apiDoc.uploaded_by,
-          file_path: apiDoc.file_path,
-          created_at: apiDoc.created_at,
-          updated_at: apiDoc.updated_at
-        }));
-        console.log('Documents loaded from API:', this.documents.length);
-      });
+      
+        runInAction(() => {
+          this.documents = apiDocuments.map(apiDoc => {
+            return {
+            id: apiDoc.id,
+            title: apiDoc.title,
+            description: apiDoc.description,
+            number: apiDoc.number,
+            file_name: apiDoc.file_name,
+            file_size: apiDoc.file_size,
+            file_type: apiDoc.file_type,
+            revision: apiDoc.revision,
+            revision_description_id: apiDoc.revision_description_id,
+            revision_status_id: apiDoc.revision_status_id,
+            is_deleted: apiDoc.is_deleted ?? 0,
+            drs: apiDoc.drs,
+            project_id: apiDoc.project_id,
+            language_id: apiDoc.language_id,
+            uploaded_by: apiDoc.uploaded_by,
+            file_path: apiDoc.file_path,
+            discipline_id: apiDoc.discipline_id,
+            document_type_id: apiDoc.document_type_id,
+            assigned_to: apiDoc.assigned_to,
+            created_at: apiDoc.created_at,
+            updated_at: apiDoc.updated_at
+          };
+          });
+          this.currentProjectId = projectId || null;
+        });
     } catch (error) {
-      console.error('Error loading documents:', error);
       runInAction(() => {
         this.error = 'Ошибка загрузки документов';
         this.documents = [];
@@ -77,28 +86,35 @@ class DocumentStore {
     return this.documents.filter(doc => doc.project_id === projectId);
   }
 
-  // Получение статуса документа
-  getDocumentStatusLabel(status: string): string {
-    const statusMap: { [key: string]: string } = {
-      'draft': 'Черновик',
-      'review': 'На ревью',
-      'approved': 'Утвержден',
-      'rejected': 'Отклонен',
-      'archived': 'Архив'
-    };
-    return statusMap[status] || status;
+  // Получение статуса документа из справочника с учетом локализации
+  getDocumentStatusLabel(document: Document, referencesStore: any, language: string = 'ru'): string {
+    const status = referencesStore.getRevisionStatus(document.revision_status_id);
+    if (!status) return language === 'en' ? 'Not defined' : 'Не определен';
+    
+    // Если английский язык и есть английское название - используем его
+    if (language === 'en' && status.name) {
+      return status.name;
+    }
+    
+    // Иначе используем русское название или fallback на английское
+    return status.name_native || status.name || (language === 'en' ? 'Not defined' : 'Не определен');
   }
 
   // Получение цвета статуса документа
-  getDocumentStatusColor(status: string): string {
+  getDocumentStatusColor(document: Document, referencesStore: any): string {
+    const status = referencesStore.getRevisionStatus(document.revision_status_id);
+    const statusName = status?.name || '';
+    
+    // Маппинг статусов на цвета
     const colorMap: { [key: string]: string } = {
-      'draft': 'default',
-      'review': 'warning',
-      'approved': 'success',
-      'rejected': 'error',
-      'archived': 'info'
+      'Active': 'success',
+      'Cancelled': 'error',
+      'Hold': 'warning',
+      'Rejected': 'error',
+      'Superseded': 'info',
+      'Archieved': 'default'
     };
-    return colorMap[status] || 'default';
+    return colorMap[statusName] || 'default';
   }
 
   // Форматирование размера файла
@@ -108,6 +124,21 @@ class DocumentStore {
     const sizes = ['Bytes', 'KB', 'MB', 'GB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  }
+
+  // Принудительное обновление документов
+  async refreshDocuments(projectId?: number) {
+    // Сбрасываем кэш и загружаем заново
+    this.documents = [];
+    this.currentProjectId = null;
+    await this.loadDocuments(projectId);
+  }
+
+  // Получение полного номера ревизии (код + номер) для документа
+  getFullRevisionNumber(document: Document, referencesStore: any): string {
+    const description = referencesStore.getRevisionDescription(document.revision_description_id);
+    const code = description?.code || 'A';
+    return `${code}${document.revision || '01'}`;
   }
 }
 

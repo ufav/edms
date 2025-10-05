@@ -25,8 +25,15 @@ from app.models.user import User
 from app.models.project import Project
 from app.models.document import Document
 from app.models.transmittal import Transmittal
-from app.models.workflow import Workflow
+from app.models.workflow import WorkflowTemplate, WorkflowStep, DocumentWorkflow, DocumentApproval, DocumentHistory
 from app.models.notification import Notification
+from app.models.references import (
+    RevisionStatus, RevisionDescription, RevisionStep, Originator, ReviewCode,
+    Language, Department, Company, UserRole
+)
+# from app.models.document_v2 import UniqueDocument, DocumentRevision, UploadedFile, TransmittalRevision
+from app.models.discipline import Discipline, DocumentType
+from app.models.user_settings import UserSettings
 
 target_metadata = Base.metadata
 

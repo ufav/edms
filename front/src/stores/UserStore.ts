@@ -1,5 +1,5 @@
 import { makeAutoObservable, runInAction } from 'mobx';
-import { usersApi, type User as ApiUser } from '../api/client';
+import { usersApi, authApi, type User as ApiUser } from '../api/client';
 
 export interface User {
   id: number;
@@ -15,16 +15,44 @@ export interface User {
 
 class UserStore {
   users: User[] = [];
+  currentUser: any = null;
   isLoading = false;
   error: string | null = null;
+  isCurrentUserLoaded = false;
+  isUsersLoaded = false;
 
   constructor() {
     makeAutoObservable(this);
   }
 
+  // Загрузка текущего пользователя
+  async loadCurrentUser() {
+    // Если пользователь уже загружен - не загружаем повторно
+    if (this.isCurrentUserLoaded) {
+      return;
+    }
+
+    try {
+      const userInfo = await authApi.getCurrentUser();
+      runInAction(() => {
+        this.currentUser = userInfo;
+        this.isCurrentUserLoaded = true;
+      });
+    } catch (error) {
+      runInAction(() => {
+        this.currentUser = null;
+        this.isCurrentUserLoaded = true;
+      });
+    }
+  }
+
   // Загрузка пользователей из API
   async loadUsers() {
-    console.log('Loading users from API...');
+    // Если пользователи уже загружены - не загружаем повторно
+    if (this.isUsersLoaded) {
+      return;
+    }
+
     runInAction(() => {
       this.isLoading = true;
       this.error = null;
@@ -44,10 +72,9 @@ class UserStore {
           created_at: apiUser.created_at,
           updated_at: apiUser.updated_at
         }));
-        console.log('Users loaded from API:', this.users.length);
+        this.isUsersLoaded = true;
       });
     } catch (error) {
-      console.error('Error loading users:', error);
       runInAction(() => {
         this.error = 'Ошибка загрузки пользователей';
         this.users = [];
@@ -96,6 +123,13 @@ class UserStore {
     } catch (error) {
       return dateString;
     }
+  }
+
+  // Очистка кэша пользователей
+  clearUsers() {
+    this.users = [];
+    this.isUsersLoaded = false;
+    this.error = null;
   }
 }
 

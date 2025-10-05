@@ -3,7 +3,7 @@ API v1 router configuration
 """
 
 from fastapi import APIRouter
-from app.api.v1.endpoints import auth, users, projects, documents, transmittals, reviews
+from app.api.v1.endpoints import auth, users, projects, documents, transmittals, reviews, disciplines, user_settings, references, workflow_presets, project_participants, contacts, company_roles
 
 api_router = APIRouter()
 
@@ -14,3 +14,10 @@ api_router.include_router(projects.router, prefix="/projects", tags=["projects"]
 api_router.include_router(documents.router, prefix="/documents", tags=["documents"])
 api_router.include_router(transmittals.router, prefix="/transmittals", tags=["transmittals"])
 api_router.include_router(reviews.router, prefix="/reviews", tags=["reviews"])
+api_router.include_router(disciplines.router, prefix="/disciplines", tags=["disciplines"])
+api_router.include_router(user_settings.router, prefix="/user", tags=["user-settings"])
+api_router.include_router(references.router, prefix="/references", tags=["references"])
+api_router.include_router(workflow_presets.router, prefix="/workflow-presets", tags=["workflow-presets"])
+api_router.include_router(project_participants.router, prefix="", tags=["project-participants"])
+api_router.include_router(contacts.router, prefix="", tags=["contacts"])
+api_router.include_router(company_roles.router, prefix="", tags=["company-roles"])

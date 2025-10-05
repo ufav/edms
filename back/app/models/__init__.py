@@ -1,16 +1,35 @@
 # Models package
 from .user import User
 from .project import Project, ProjectMember
-from .document import Document, DocumentVersion, DocumentReview, DocumentApproval
+from .project_participant import ProjectParticipant
+from .contact import Contact
+from .company_role import CompanyRole
+from .document import Document, DocumentRevision, DocumentReview
 from .transmittal import Transmittal, TransmittalItem
-from .workflow import Workflow, WorkflowStep, WorkflowInstance, WorkflowStepLog
-from .notification import Notification
+# Temporarily commented out to avoid circular imports
+# from .workflow import (
+#     WorkflowTemplate, WorkflowStep, DocumentWorkflow, DocumentApproval, DocumentHistory,
+#     DocumentStatus, ApprovalStatus
+# )
+# from .notification import Notification
+from .references import (
+    RevisionStatus, RevisionDescription, RevisionStep, Originator, ReviewCode,
+    Language, Department, Company, UserRole
+)
+# from .document_v2 import UniqueDocument, DocumentRevision, UploadedFile, TransmittalRevision
 
 __all__ = [
     "User",
     "Project", "ProjectMember", 
-    "Document", "DocumentVersion", "DocumentReview", "DocumentApproval",
+    "ProjectParticipant",
+    "Contact",
+    "CompanyRole",
+    "Document", "DocumentRevision", "DocumentReview",
     "Transmittal", "TransmittalItem",
-    "Workflow", "WorkflowStep", "WorkflowInstance", "WorkflowStepLog",
-    "Notification"
+    # "WorkflowTemplate", "WorkflowStep", "DocumentWorkflow", "DocumentApproval", "DocumentHistory",
+    # "DocumentStatus", "ApprovalStatus",
+    # "Notification",
+    "RevisionStatus", "RevisionDescription", "RevisionStep", "Originator", "ReviewCode",
+    "Language", "Department", "Company", "UserRole",
+    # "UniqueDocument", "DocumentRevision", "UploadedFile", "TransmittalRevision"
 ]
