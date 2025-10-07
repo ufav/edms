@@ -39,16 +39,8 @@ class ReferenceDataStore {
         usersApi.getAll()
       ]);
 
-      // Загружаем контакты для всех компаний
-      const allContactsData = [];
-      for (const company of companiesData) {
-        try {
-          const companyContacts = await contactsApi.getByCompany(company.id);
-          allContactsData.push(...companyContacts);
-        } catch (error) {
-          console.error(`Error loading contacts for company ${company.id}:`, error);
-        }
-      }
+      // Загружаем все контакты одним запросом
+      const allContactsData = await contactsApi.getAll();
 
       runInAction(() => {
         this.companies = companiesData;

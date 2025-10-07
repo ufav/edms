@@ -86,18 +86,18 @@ const SummaryTab: React.FC<SummaryTabProps> = ({
         <Grid item xs={12} md={6}>
           <Card variant="outlined">
             <CardContent>
-              <Typography variant="subtitle1" gutterBottom>Workflow пресет</Typography>
+              <Typography variant="subtitle1" gutterBottom>{t('createProject.summary.workflow_preset')}</Typography>
               {selectedWorkflowPreset ? (
                 (() => {
                   const preset = getSelectedWorkflowPreset(selectedWorkflowPreset);
                   return (
                     <Typography variant="body2">
-                      {preset?.name} {preset?.is_global ? '(Глобальный)' : '(Пользовательский)'}
+                      {preset?.name} {preset?.is_global ? `(${t('createProject.summary.global')})` : `(${t('createProject.summary.user')})`}
                     </Typography>
                   );
                 })()
               ) : (
-                <Typography variant="body2" color="text.secondary">Не выбран</Typography>
+                <Typography variant="body2" color="text.secondary">{t('createProject.summary.not_selected')}</Typography>
               )}
             </CardContent>
           </Card>
@@ -121,7 +121,7 @@ const SummaryTab: React.FC<SummaryTabProps> = ({
                   })}
                 </Box>
               ) : (
-                <Typography variant="body2" color="text.secondary">Не выбраны</Typography>
+                <Typography variant="body2" color="text.secondary">{t('createProject.summary.not_chosen')}</Typography>
               )}
             </CardContent>
           </Card>
@@ -146,9 +146,9 @@ const SummaryTab: React.FC<SummaryTabProps> = ({
         <Grid item xs={12} md={6}>
           <Card variant="outlined">
             <CardContent>
-              <Typography variant="subtitle1" gutterBottom>Участники проекта</Typography>
+              <Typography variant="subtitle1" gutterBottom>{t('createProject.summary.project_participants')}</Typography>
               {pendingParticipants.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">Не добавлены</Typography>
+                <Typography variant="body2" color="text.secondary">{t('createProject.summary.not_added')}</Typography>
               ) : (
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                   {pendingParticipants.map((participant, index) => {
@@ -176,9 +176,9 @@ const SummaryTab: React.FC<SummaryTabProps> = ({
         <Grid item xs={12} md={6}>
           <Card variant="outlined">
             <CardContent>
-              <Typography variant="subtitle1" gutterBottom>Доступ к проекту</Typography>
+              <Typography variant="subtitle1" gutterBottom>{t('createProject.summary.project_access')}</Typography>
               {pendingProjectMembers.length === 0 ? (
-                <Typography variant="body2" color="text.secondary">Не добавлены</Typography>
+                <Typography variant="body2" color="text.secondary">{t('createProject.summary.not_added')}</Typography>
               ) : (
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
                   {pendingProjectMembers.map((member, index) => {
@@ -186,10 +186,10 @@ const SummaryTab: React.FC<SummaryTabProps> = ({
                     return (
                       <Box key={index} sx={{ p: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
                         <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                          {user?.full_name || 'Неизвестный пользователь'}
+                          {user?.full_name || t('createProject.summary.unknown_user')}
                         </Typography>
                         <Typography variant="body2" color="text.secondary">
-                          {user?.email || 'Нет email'} • {getRoleLabel(member.role)}
+                          {user?.email || t('createProject.summary.no_email')} • {getRoleLabel(member.role)}
                         </Typography>
                       </Box>
                     );

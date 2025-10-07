@@ -34,15 +34,13 @@ import {
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
-  Visibility as ViewIcon,
   People as PeopleIcon,
 } from '@mui/icons-material';
 import { observer } from 'mobx-react-lite';
 import { projectStore } from '../stores/ProjectStore';
 import { projectsApi } from '../api/client';
 import ProjectMembersDialog from './ProjectMembersDialog';
-import EditProjectDialog from './EditProjectDialog';
-import CreateProjectDialog from './CreateProjectDialog';
+import ProjectDialog from './ProjectDialog';
 import ConfirmDialog from './ConfirmDialog';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import { useTranslation } from 'react-i18next';
@@ -57,9 +55,9 @@ const ProjectsPage: React.FC = observer(() => {
   const [membersDialogOpen, setMembersDialogOpen] = useState<boolean>(false);
   const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
   const [selectedProjectName, setSelectedProjectName] = useState<string>('');
-  const [editDialogOpen, setEditDialogOpen] = useState<boolean>(false);
+  const [projectDialogOpen, setProjectDialogOpen] = useState<boolean>(false);
+  const [projectDialogMode, setProjectDialogMode] = useState<'create' | 'edit' | 'view'>('create');
   const [editProjectId, setEditProjectId] = useState<number | null>(null);
-  const [createDialogOpen, setCreateDialogOpen] = useState<boolean>(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState<boolean>(false);
   const [projectToDelete, setProjectToDelete] = useState<number | null>(null);
   const [deleteLoading, setDeleteLoading] = useState<boolean>(false);
@@ -91,7 +89,9 @@ const ProjectsPage: React.FC = observer(() => {
     });
 
   const handleCreate = () => {
-    setCreateDialogOpen(true);
+    setProjectDialogMode('create');
+    setEditProjectId(null);
+    setProjectDialogOpen(true);
   };
 
   const handleCreateSuccess = (newProject: any) => {
@@ -101,17 +101,28 @@ const ProjectsPage: React.FC = observer(() => {
     // Показываем уведомление об успешном создании
     setSuccessNotification({
       open: true,
-      message: `Создан проект "${newProject.name}"`
+      message: t('projects.created_notification', { name: newProject.name })
     });
   };
 
-  const handleView = (_projectId: number) => {
-    // TODO: Реализовать просмотр проекта
-  };
 
   const handleEdit = (projectId: number) => {
+    setProjectDialogMode('edit');
     setEditProjectId(projectId);
-    setEditDialogOpen(true);
+    setProjectDialogOpen(true);
+  };
+
+  const handleProjectDialogClose = () => {
+    setProjectDialogOpen(false);
+    setEditProjectId(null);
+  };
+
+  const handleProjectSaved = () => {
+    projectStore.loadProjects(true);
+    setSuccessNotification({
+      open: true,
+      message: t('projects.updated_notification')
+    });
   };
 
   const handleDelete = (projectId: number) => {
@@ -289,11 +300,6 @@ const ProjectsPage: React.FC = observer(() => {
                       </Box>
                     </CardContent>
                     <CardActions sx={{ justifyContent: 'flex-end', gap: 1 }}>
-                      <Tooltip title={t('common.view')}>
-                        <IconButton size="small" onClick={() => handleView(project.id)}>
-                          <ViewIcon />
-                        </IconButton>
-                      </Tooltip>
                       <Tooltip title={t('common.edit')}>
                         <IconButton size="small" onClick={() => handleEdit(project.id)}>
                           <EditIcon />
@@ -520,24 +526,19 @@ const ProjectsPage: React.FC = observer(() => {
                     whiteSpace: 'nowrap'
                   }}>
                     <Box sx={{ display: 'flex', gap: 1 }}>
-                      <Tooltip title="Просмотр">
-                        <IconButton size="small" onClick={() => handleView(project.id)}>
-                          <ViewIcon />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Редактировать">
+                      <Tooltip title={t('common.edit')}>
                         <IconButton size="small" onClick={() => handleEdit(project.id)}>
                           <EditIcon />
                         </IconButton>
                       </Tooltip>
                       {canManageProject(project) && (
-                        <Tooltip title="Управление участниками">
+                        <Tooltip title={t('projects.manage_members')}>
                           <IconButton size="small" onClick={() => handleManageMembers(project.id, project.name)}>
                             <PeopleIcon />
                           </IconButton>
                         </Tooltip>
                       )}
-                      <Tooltip title="Удалить">
+                      <Tooltip title={t('common.delete')}>
                         <IconButton size="small" onClick={() => handleDelete(project.id)} color="error">
                           <DeleteIcon />
                         </IconButton>
@@ -555,10 +556,7 @@ const ProjectsPage: React.FC = observer(() => {
       {!isMobile && !projectStore.isLoading && filteredProjects.length === 0 && (
         <Box sx={{ textAlign: 'center', py: 4 }}>
           <Typography variant="h6" color="text.secondary">
-            Проекты не найдены
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Попробуйте изменить фильтры или создать новые проекты
+            {t('projects.no_projects')}
           </Typography>
         </Box>
       )}
@@ -573,33 +571,23 @@ const ProjectsPage: React.FC = observer(() => {
         />
       )}
 
-      {/* Диалог редактирования проекта */}
-      {editProjectId && (
-        <EditProjectDialog
-          open={editDialogOpen}
-          projectId={editProjectId}
-          onClose={() => setEditDialogOpen(false)}
-          onSaved={() => {
-            setEditDialogOpen(false);
-            projectStore.loadProjects(true);
-          }}
-        />
-      )}
-
-      {/* Диалог создания проекта */}
-      <CreateProjectDialog
-        open={createDialogOpen}
-        onClose={() => setCreateDialogOpen(false)}
+      {/* Унифицированный диалог проекта */}
+      <ProjectDialog
+        open={projectDialogOpen}
+        mode={projectDialogMode}
+        projectId={editProjectId || undefined}
+        onClose={handleProjectDialogClose}
         onSuccess={handleCreateSuccess}
+        onSaved={handleProjectSaved}
       />
 
       {/* Диалог подтверждения удаления */}
       <ConfirmDialog
         open={deleteConfirmOpen}
-        title="Удалить проект?"
-        content="Вы уверены, что хотите удалить этот проект? Это действие нельзя отменить."
-        confirmText="Удалить"
-        cancelText="Отмена"
+        title={t('projects.delete_confirm_title')}
+        content={t('projects.delete_confirm_content')}
+        confirmText={t('common.delete')}
+        cancelText={t('common.cancel')}
         onConfirm={handleConfirmDelete}
         onClose={handleCancelDelete}
         loading={deleteLoading}

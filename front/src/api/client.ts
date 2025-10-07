@@ -601,6 +601,12 @@ export const projectsApi = {
     return response.data;
   },
 
+  // Получить все типы документов для проекта (сгруппированные по дисциплинам)
+  getAllDocumentTypes: async (projectId: number): Promise<{ [disciplineId: number]: DocumentType[] }> => {
+    const response = await apiClient.get(`/projects/${projectId}/document-types`);
+    return response.data;
+  },
+
   // Получить выбранные описания ревизий для проекта
   getRevisionDescriptions: async (projectId: number): Promise<any[]> => {
     const response = await apiClient.get(`/projects/${projectId}/revision-descriptions`);
@@ -1342,6 +1348,10 @@ export const companyRolesApi = {
 
 // Contacts API
 export const contactsApi = {
+  getAll: async (): Promise<Contact[]> => {
+    const response = await apiClient.get('/contacts');
+    return response.data;
+  },
   getByCompany: async (companyId: number): Promise<Contact[]> => {
     const response = await apiClient.get(`/companies/${companyId}/contacts`);
     return response.data;

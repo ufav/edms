@@ -115,14 +115,21 @@ class WorkflowStore {
   // Создание пресета
   async createPreset(presetData: any) {
     try {
+      
       const newPreset = await workflowPresetsApi.create(presetData);
       
       runInAction(() => {
-        this.presets.push(newPreset);
+        // Проверяем, что пресет с таким ID еще не существует
+        const existingPreset = this.presets.find(p => p.id === newPreset.id);
+        if (!existingPreset) {
+          this.presets.push(newPreset);
+        } else {
+        }
       });
       
       return newPreset;
     } catch (error: any) {
+      console.error('🔍 DEBUG: Error in WorkflowStore.createPreset:', error);
       runInAction(() => {
         this.error = error.message || 'Ошибка создания пресета';
       });

@@ -43,6 +43,9 @@ class ProjectUpdate(BaseModel):
     manager_id: int = None
     selected_disciplines: List[int] | None = None
     discipline_document_types: dict | None = None
+    selected_revision_descriptions: List[int] | None = None
+    selected_revision_steps: List[int] | None = None
+    workflow_preset_id: int | None = None
 
 @router.get("/check-code/{project_code}")
 async def check_project_code(
@@ -159,6 +162,8 @@ async def create_project(
             if not db.query(Project).filter(Project.project_code == code, Project.is_deleted == 0).first():
                 return code
 
+    print(f"🔍 DEBUG: Creating project with workflow_preset_id: {project_data.workflow_preset_id}")
+    
     db_project = Project(
         name=project_data.name,
         description=project_data.description,
@@ -194,6 +199,7 @@ async def create_project(
             else:
                 document_type_id = item
                 drs = None
+            
                 
             project_discipline_document_type = ProjectDisciplineDocumentType(
                 project_id=db_project.id,
@@ -316,6 +322,7 @@ async def update_project(
                 else:
                     document_type_id = item
                     drs = None
+                
                     
                 db.add(ProjectDisciplineDocumentType(
                     project_id=project_id,
@@ -323,6 +330,34 @@ async def update_project(
                     document_type_id=int(document_type_id),
                     drs=drs
                 ))
+
+    # Обновляем revision descriptions, если пришли
+    if project_data.selected_revision_descriptions is not None:
+        # Удаляем старые
+        from app.models.project import ProjectRevisionDescription
+        db.query(ProjectRevisionDescription).filter(ProjectRevisionDescription.project_id == project_id).delete()
+        # Добавляем новые
+        for revision_description_id in project_data.selected_revision_descriptions:
+            db.add(ProjectRevisionDescription(
+                project_id=project_id,
+                revision_description_id=revision_description_id
+            ))
+
+    # Обновляем revision steps, если пришли
+    if project_data.selected_revision_steps is not None:
+        # Удаляем старые
+        from app.models.project import ProjectRevisionStep
+        db.query(ProjectRevisionStep).filter(ProjectRevisionStep.project_id == project_id).delete()
+        # Добавляем новые
+        for revision_step_id in project_data.selected_revision_steps:
+            db.add(ProjectRevisionStep(
+                project_id=project_id,
+                revision_step_id=revision_step_id
+            ))
+
+    # Обновляем workflow preset, если пришел
+    if project_data.workflow_preset_id is not None:
+        project.workflow_preset_id = project_data.workflow_preset_id
 
     db.commit()
     db.refresh(project)
@@ -646,6 +681,45 @@ async def get_project_document_types(
             })
     
     return document_types
+
+
+@router.get("/{project_id}/document-types", response_model=dict)
+async def get_all_project_document_types(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Получение всех типов документов для проекта, сгруппированных по дисциплинам"""
+    project = db.query(Project).filter(Project.id == project_id, Project.is_deleted == 0).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Проект не найден")
+    
+    check_project_access(project, current_user, db)
+    
+    # Получаем все связи дисциплина-тип документа для проекта
+    project_discipline_document_types = db.query(ProjectDisciplineDocumentType).filter(
+        ProjectDisciplineDocumentType.project_id == project_id
+    ).all()
+    
+    # Группируем по дисциплинам
+    result = {}
+    for pddt in project_discipline_document_types:
+        doc_type = db.query(DocumentType).filter(DocumentType.id == pddt.document_type_id).first()
+        if doc_type:
+            discipline_id = pddt.discipline_id
+            if discipline_id not in result:
+                result[discipline_id] = []
+            
+            
+            result[discipline_id].append({
+                "id": doc_type.id,
+                "code": doc_type.code,
+                "name": doc_type.name,
+                "description": doc_type.description,
+                "drs": pddt.drs
+            })
+    
+    return result
 
 
 @router.get("/{project_id}/revision-descriptions", response_model=List[dict])

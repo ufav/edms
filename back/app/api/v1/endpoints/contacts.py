@@ -48,6 +48,33 @@ class ContactResponse(BaseModel):
     class Config:
         from_attributes = True
 
+@router.get("/contacts", response_model=List[ContactResponse])
+async def get_all_contacts(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Получение всех контактов"""
+    contacts = db.query(Contact).all()
+    
+    result = []
+    for contact in contacts:
+        company = db.query(Company).filter(Company.id == contact.company_id).first()
+        result.append(ContactResponse(
+            id=contact.id,
+            company_id=contact.company_id,
+            company_name=company.name if company else "Неизвестная компания",
+            full_name=contact.full_name,
+            position=contact.position,
+            email=contact.email,
+            phone=contact.phone,
+            is_primary=contact.is_primary,
+            notes=contact.notes,
+            created_at=contact.created_at.isoformat(),
+            updated_at=contact.updated_at.isoformat()
+        ))
+    
+    return result
+
 @router.get("/companies/{company_id}/contacts", response_model=List[ContactResponse])
 async def get_company_contacts(
     company_id: int,

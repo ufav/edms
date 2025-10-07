@@ -22,12 +22,14 @@ import {
 import { observer } from 'mobx-react-lite';
 import { projectStore } from '../stores/ProjectStore';
 import type { Project } from '../stores/ProjectStore';
+import { useTranslation } from 'react-i18next';
 
 interface ProjectSelectorProps {
   onProjectSelect: (project: Project) => void;
 }
 
 const ProjectSelector: React.FC<ProjectSelectorProps> = observer(({ onProjectSelect }) => {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -85,7 +87,7 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = observer(({ onProjectSel
         ) : (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
             <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-              📁 Выберите проект
+              {t('projects.select_project')}
             </Typography>
           </Box>
         )}

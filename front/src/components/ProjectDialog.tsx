@@ -20,13 +20,15 @@ import {
   Tab,
   Autocomplete
 } from '@mui/material';
-import { disciplinesApi, projectsApi, referencesApi, workflowPresetsApi, projectParticipantsApi } from '../api/client';
+import { disciplinesApi, projectsApi, projectParticipantsApi } from '../api/client';
 import referenceDataStore from '../stores/ReferenceDataStore';
+import { projectDialogStore } from '../stores/ProjectDialogStore';
 import type { Discipline, DocumentType, ProjectParticipant, ProjectParticipantCreate, ProjectMember } from '../api/client';
 import { getRoleLabel, getRoleColor } from '../utils/roleLocalization';
 import DocumentTypeSelectionDialog from './DocumentTypeSelectionDialog';
 import MainTab from './project/MainTab';
 import DisciplinesTypesTab from './project/DisciplinesTypesTab';
+import { handleExcelImport } from './project/ExcelImportHandler';
 import RevisionsTab from './project/RevisionsTab';
 import WorkflowTab from './project/WorkflowTab';
 import ParticipantsTab from './project/ParticipantsTab';
@@ -34,22 +36,27 @@ import UsersTab from './project/UsersTab';
 import SummaryTab from './project/SummaryTab';
 import { useProjectForm } from '../hooks/useProjectForm';
 import { useTranslation } from 'react-i18next';
-import * as XLSX from 'xlsx';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { ru } from 'date-fns/locale';
 
-interface EditProjectDialogProps {
+export type ProjectDialogMode = 'create' | 'edit';
+
+interface ProjectDialogProps {
   open: boolean;
-  projectId: number;
+  mode: ProjectDialogMode;
+  projectId?: number; // Для режима edit
   onClose: () => void;
-  onSaved: () => void;
+  onSuccess?: (project: any) => void; // Для режима create
+  onSaved?: () => void; // Для режима edit
 }
 
-const EditProjectDialog: React.FC<EditProjectDialogProps> = observer(({
+const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
   open,
+  mode,
   projectId,
   onClose,
+  onSuccess,
   onSaved,
 }) => {
   const { t, i18n } = useTranslation();
@@ -73,15 +80,10 @@ const EditProjectDialog: React.FC<EditProjectDialogProps> = observer(({
     setImportWarnings([]);
   };
 
-  const [disciplines, setDisciplines] = useState<Discipline[]>([]);
-  const [documentTypes, setDocumentTypes] = useState<DocumentType[]>([]);
   const [selectedDisciplines, setSelectedDisciplines] = useState<number[]>([]);
   const [disciplineDocumentTypes, setDisciplineDocumentTypes] = useState<{ [key: number]: { documentTypeId: number, drs?: string }[] }>({});
-  const [revisionDescriptions, setRevisionDescriptions] = useState<any[]>([]);
-  const [revisionSteps, setRevisionSteps] = useState<any[]>([]);
   const [selectedRevisionDescriptions, setSelectedRevisionDescriptions] = useState<number[]>([]);
   const [selectedRevisionSteps, setSelectedRevisionSteps] = useState<number[]>([]);
-  const [workflowPresets, setWorkflowPresets] = useState<any[]>([]);
   const [selectedWorkflowPreset, setSelectedWorkflowPreset] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -92,7 +94,6 @@ const EditProjectDialog: React.FC<EditProjectDialogProps> = observer(({
   const [documentTypeSelectionOpen, setDocumentTypeSelectionOpen] = useState(false);
   const [currentDiscipline, setCurrentDiscipline] = useState<Discipline | null>(null);
   const [currentDocumentTypeCode, setCurrentDocumentTypeCode] = useState<string>('');
-  const [foundDocumentTypes, setFoundDocumentTypes] = useState<DocumentType[]>([]);
   const [pendingImportPairs, setPendingImportPairs] = useState<Array<{discipline: Discipline, code: string}>>([]);
   // Используем данные из стора
   const { companies, contacts, companyRoles, users } = referenceDataStore;
@@ -115,12 +116,72 @@ const EditProjectDialog: React.FC<EditProjectDialogProps> = observer(({
     notes: ''
   });
 
-  // Загружаем данные проекта при открытии диалога
+
+  // Загружаем данные при открытии диалога
   useEffect(() => {
-    if (open && projectId) {
-      loadProjectData();
+    if (open) {
+      if (mode === 'create') {
+        // Сброс состояния для создания
+        setFormData({
+          name: '',
+          project_code: '',
+          description: '',
+          status: 'planning',
+          start_date: null,
+          end_date: null,
+          budget: '',
+        });
+        setSelectedDisciplines([]);
+        setDisciplineDocumentTypes({});
+        setSelectedRevisionDescriptions([]);
+        setSelectedRevisionSteps([]);
+        setError(null);
+        clearWarnings();
+        setPendingParticipants([]);
+        setPendingProjectMembers([]);
+        setProjectMemberDialogOpen(false);
+        setIsEditingProjectMember(false);
+        setSelectedProjectMember(null);
+        setProjectMemberFormData({
+          user_id: null,
+          role: 'viewer'
+        });
+        setParticipantDialogOpen(false);
+        setIsEditingParticipant(false);
+        setSelectedParticipant(null);
+        setParticipantFormData({
+          company_id: null as any,
+          contact_id: null as any,
+          company_role_id: null as any,
+          is_primary: false,
+          notes: ''
+        });
+        setTabIndex(0);
+        loadData();
+      } else if (mode === 'edit' && projectId) {
+        // Загрузка данных для редактирования
+        loadProjectData();
+      }
     }
-  }, [open, projectId]);
+  }, [open, mode, projectId]);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      
+      // Загружаем данные через кэшированный стор
+      await Promise.all([
+        projectDialogStore.loadAllData(),
+        referenceDataStore.loadAllReferenceData()
+      ]);
+    } catch (err: any) {
+      console.error('Error loading data:', err);
+      console.error('Error details:', err.response?.data || err.message);
+      setError(`Ошибка загрузки данных: ${err.response?.data?.detail || err.message || 'Неизвестная ошибка'}`);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const loadProjectData = async () => {
     try {
@@ -128,7 +189,7 @@ const EditProjectDialog: React.FC<EditProjectDialogProps> = observer(({
       setError(null);
       
       // Загружаем данные проекта
-      const project = await projectsApi.getById(projectId);
+      const project = await projectsApi.getById(projectId!);
       
       // Заполняем основную форму
       setFormData({
@@ -141,82 +202,41 @@ const EditProjectDialog: React.FC<EditProjectDialogProps> = observer(({
         budget: project.budget?.toString() || '',
       });
 
-      // Загружаем справочные данные
-      const [disciplinesData, documentTypesData, revisionDescriptionsData, revisionStepsData, workflowPresetsData] = await Promise.all([
-        disciplinesApi.getAll(),
-        disciplinesApi.getDocumentTypes(),
-        referencesApi.getRevisionDescriptions(),
-        referencesApi.getRevisionSteps(),
-        workflowPresetsApi.getAll()
+      // Загружаем справочные данные через кэшированный стор (только если не загружены)
+      await Promise.all([
+        projectDialogStore.loadAllData(),
+        referenceDataStore.loadAllReferenceData()
       ]);
-      setDisciplines(disciplinesData);
-      setDocumentTypes(documentTypesData);
-      setRevisionDescriptions(revisionDescriptionsData);
-      setRevisionSteps(revisionStepsData);
-      setWorkflowPresets(workflowPresetsData);
-      
-      // Загружаем справочные данные через стор
-      await referenceDataStore.loadAllReferenceData();
 
-      // Загружаем дисциплины проекта
-      const projectDisciplines = await projectsApi.getDisciplines(projectId);
-      const disciplineIds = projectDisciplines.map(d => d.id);
+      // Загружаем данные проекта через кэшированный стор
+      const projectData = await projectDialogStore.loadProjectData(projectId!);
+
+      // Устанавливаем данные из кэша
+      const disciplineIds = projectData.disciplines.map(d => d.id);
       setSelectedDisciplines(disciplineIds);
 
-      // Загружаем ревизии проекта
-      try {
-        const projectRevisions = await projectsApi.getRevisionDescriptions(projectId);
-        const revisionIds = projectRevisions.map(r => r.id);
-        setSelectedRevisionDescriptions(revisionIds);
-      } catch (err) {
-        console.log('No revision descriptions found for project');
+      const revisionIds = projectData.revisionDescriptions.map(r => r.id);
+      setSelectedRevisionDescriptions(revisionIds);
+
+      const stepIds = projectData.revisionSteps.map(s => s.id);
+      setSelectedRevisionSteps(stepIds);
+
+      if (projectData.workflowPreset && projectData.workflowPreset.id) {
+        setSelectedWorkflowPreset(projectData.workflowPreset.id);
       }
 
-      // Загружаем шаги ревизий проекта
-      try {
-        const projectRevisionSteps = await projectsApi.getRevisionSteps(projectId);
-        const stepIds = projectRevisionSteps.map(s => s.id);
-        setSelectedRevisionSteps(stepIds);
-      } catch (err) {
-        console.log('No revision steps found for project');
-      }
-
-      // Загружаем пресет workflow проекта
-      try {
-        const projectWorkflow = await projectsApi.getWorkflowPreset(projectId);
-        if (projectWorkflow && projectWorkflow.id) {
-          setSelectedWorkflowPreset(projectWorkflow.id);
-        }
-      } catch (err) {
-        console.log('No workflow preset found for project');
-      }
-
-      // Загружаем типы документов для каждой дисциплины
+      // Обрабатываем типы документов
       const disciplineDocTypes: { [key: number]: { documentTypeId: number, drs?: string }[] } = {};
-      for (const disciplineId of disciplineIds) {
-        const docTypes = await projectsApi.getDocumentTypes(projectId, disciplineId);
-        disciplineDocTypes[disciplineId] = docTypes.map(dt => ({
+      for (const [disciplineId, docTypes] of Object.entries(projectData.documentTypes)) {
+        disciplineDocTypes[parseInt(disciplineId)] = docTypes.map(dt => ({
           documentTypeId: dt.id,
-          drs: dt.drs
+          drs: (dt as any).drs // Временное решение, пока не обновлен тип
         }));
       }
       setDisciplineDocumentTypes(disciplineDocTypes);
 
-      // Загружаем участников проекта
-      try {
-        const participants = await projectParticipantsApi.getAll(projectId);
-        setPendingParticipants(participants);
-      } catch (err) {
-        console.log('No participants found for project');
-      }
-
-      // Загружаем участников проекта (пользователей)
-      try {
-        const members = await projectsApi.members.getAll(projectId);
-        setPendingProjectMembers(members);
-      } catch (err) {
-        console.log('No members found for project');
-      }
+      setPendingParticipants(projectData.participants);
+      setPendingProjectMembers(projectData.members);
 
     } catch (err: any) {
       console.error('Error loading project data:', err);
@@ -283,6 +303,36 @@ const EditProjectDialog: React.FC<EditProjectDialogProps> = observer(({
   };
 
   const handleSubmit = async () => {
+    // Валидируем код проекта перед отправкой (только для режима create)
+    if (mode === 'create' && formData.project_code && formData.project_code.trim().length >= 3) {
+      try {
+        setCodeValidation({ ...codeValidation, isChecking: true });
+        const result = await projectsApi.checkCode(formData.project_code.trim());
+        setCodeValidation({
+          isChecking: false,
+          exists: result.exists,
+          message: result.exists ? result.message : '',
+          owner: result.owner,
+          project_name: result.project_name,
+          is_deleted: result.is_deleted || false
+        });
+        
+        // Если код уже существует, прерываем создание
+        if (result.exists) {
+          setError('Код проекта уже используется');
+          return;
+        }
+      } catch (error) {
+        console.error('Error checking project code:', error);
+        setCodeValidation({
+          isChecking: false,
+          exists: false,
+          message: '',
+          is_deleted: false
+        });
+      }
+    }
+
     try {
       setLoading(true);
       setError(null);
@@ -315,13 +365,58 @@ const EditProjectDialog: React.FC<EditProjectDialogProps> = observer(({
         workflow_preset_id: selectedWorkflowPreset,
       };
 
-      // Обновляем проект
-      await projectsApi.update(projectId, projectData as any);
+
+
+      if (mode === 'create') {
+        // Создание проекта
+        const newProject = await projectsApi.create(projectData as any);
+        
+        // Добавляем участников проекта (компании), если они есть
+        if (pendingParticipants.length > 0) {
+          try {
+            for (const participant of pendingParticipants) {
+              const participantData: ProjectParticipantCreate = {
+                company_id: participant.company_id,
+                contact_id: participant.contact_id || undefined,
+                company_role_id: participant.company_role_id || undefined,
+                is_primary: participant.is_primary,
+                notes: participant.notes || undefined
+              };
+              await projectParticipantsApi.create(newProject.id, participantData);
+            }
+          } catch (err: any) {
+            console.error(t('createProject.messages.participants_add_error'), err);
+            // Не прерываем создание проекта из-за ошибки с участниками
+          }
+        }
+
+        // Добавляем участников проекта (пользователи), если они есть
+        if (pendingProjectMembers.length > 0) {
+          try {
+            for (const member of pendingProjectMembers) {
+              await projectsApi.members.add(newProject.id, {
+                user_id: member.user_id,
+                role: member.role, // Legacy field
+                project_role_id: member.project_role_id
+              });
+            }
+          } catch (err: any) {
+            console.error(t('createProject.messages.members_add_error'), err);
+            // Не прерываем создание проекта из-за ошибки с участниками
+          }
+        }
+        
+        onSuccess?.(newProject);
+      } else {
+        // Редактирование проекта
+        await projectsApi.update(projectId!, projectData as any);
+        onSaved?.();
+      }
       
-      onSaved();
       handleClose();
     } catch (err: any) {
-      console.error('Ошибка обновления проекта:', err);
+      console.error(`Ошибка ${mode === 'create' ? 'создания' : 'обновления'} проекта:`, err);
+      console.error('Детали ошибки:', err.response?.data);
       setError(err.response?.data?.detail || t('createProject.messages.project_create_error'));
     } finally {
       setLoading(false);
@@ -344,11 +439,13 @@ const EditProjectDialog: React.FC<EditProjectDialogProps> = observer(({
 
   const handleSaveParticipant = (participantData?: any) => {
     if (participantData) {
+      // Данные переданы из ParticipantsTab
+      
       const selectedCompany = companies.find(c => c.id === participantData.company_id);
 
       const newParticipant: ProjectParticipant = {
         id: participantData.id || Date.now(),
-        project_id: projectId,
+        project_id: mode === 'edit' ? projectId! : 0,
         company_id: participantData.company_id,
         company_name: selectedCompany?.name || t('createProject.messages.unknown_company'),
         contact_id: participantData.contact_id,
@@ -370,11 +467,13 @@ const EditProjectDialog: React.FC<EditProjectDialogProps> = observer(({
         setPendingParticipants([...pendingParticipants, newParticipant]);
       }
     } else {
+      // Старая логика для совместимости
+
       const selectedCompany = companies.find(c => c.id === participantFormData.company_id);
 
       const newParticipant: ProjectParticipant = {
         id: Date.now(),
-        project_id: projectId,
+        project_id: mode === 'edit' ? projectId! : 0,
         company_id: participantFormData.company_id,
         company_name: selectedCompany?.name || t('createProject.messages.unknown_company'),
         contact_id: participantFormData.contact_id,
@@ -418,9 +517,10 @@ const EditProjectDialog: React.FC<EditProjectDialogProps> = observer(({
 
   const handleSaveProjectMember = (memberData?: any) => {
     if (memberData) {
+      // Данные переданы из UsersTab
       const newMember: ProjectMember = {
         id: memberData.id,
-        project_id: projectId,
+        project_id: mode === 'edit' ? projectId! : 0, // Будет установлен после создания проекта
         user_id: memberData.user_id,
         role: memberData.role,
         joined_at: new Date().toISOString()
@@ -438,13 +538,14 @@ const EditProjectDialog: React.FC<EditProjectDialogProps> = observer(({
         setPendingProjectMembers(updatedMembers);
       }
     } else {
+      // Старая логика для совместимости
       if (!projectMemberFormData.user_id) {
         return;
       }
 
       const newMember: ProjectMember = {
-        id: Date.now(),
-        project_id: projectId,
+        id: Date.now(), // Временный ID
+        project_id: mode === 'edit' ? projectId! : 0, // Будет установлен после создания проекта
         user_id: projectMemberFormData.user_id,
         role: projectMemberFormData.role,
         joined_at: new Date().toISOString()
@@ -480,6 +581,7 @@ const EditProjectDialog: React.FC<EditProjectDialogProps> = observer(({
     return getRoleColor(role);
   };
 
+
   const handleClose = () => {
     setFormData({
       name: '',
@@ -503,7 +605,6 @@ const EditProjectDialog: React.FC<EditProjectDialogProps> = observer(({
     setDocumentTypeSelectionOpen(false);
     setCurrentDiscipline(null);
     setCurrentDocumentTypeCode('');
-    setFoundDocumentTypes([]);
     setPendingImportPairs([]);
     
     // Очищаем валидацию кода проекта
@@ -512,6 +613,11 @@ const EditProjectDialog: React.FC<EditProjectDialogProps> = observer(({
       exists: false,
       message: ''
     });
+    
+    // Очищаем кэш проекта при закрытии диалога
+    if (projectId) {
+      projectDialogStore.clearProjectCache(projectId);
+    }
     
     onClose();
   };
@@ -527,12 +633,10 @@ const EditProjectDialog: React.FC<EditProjectDialogProps> = observer(({
     setCurrentDocumentTypeCode(pair.code);
 
     try {
-      const foundTypes = await disciplinesApi.searchDocumentTypesByCode(pair.discipline.id, pair.code);
-      setFoundDocumentTypes(foundTypes);
+      await disciplinesApi.searchDocumentTypesByCode(pair.discipline.id, pair.code);
       setDocumentTypeSelectionOpen(true);
     } catch (error) {
       console.error('Error searching document types:', error);
-      setFoundDocumentTypes([]);
       setDocumentTypeSelectionOpen(true);
     }
   };
@@ -567,125 +671,73 @@ const EditProjectDialog: React.FC<EditProjectDialogProps> = observer(({
 
   const handleImportExcel = async (file: File) => {
     clearWarnings();
-    try {
-      const data = await file.arrayBuffer();
-      const workbook = XLSX.read(data, { type: 'array' });
-      const sheetName = workbook.SheetNames[0];
-      const sheet = workbook.Sheets[sheetName];
-      const rows: any[] = XLSX.utils.sheet_to_json(sheet, { defval: '' });
+    
+    const result = await handleExcelImport(file, {
+      disciplines: projectDialogStore.disciplines,
+      documentTypes: projectDialogStore.documentTypes
+    }, t);
 
-      // Наборы для отслеживания
-      const processedRows = new Set<string>();
-      const missingDisciplines: string[] = [];
-      const missingDocumentTypes: string[] = [];
-      const mismatchedNames: string[] = [];
-      let processedCount = 0;
-      let matchedCount = 0;
+    if (!result.success) {
+      setError(result.error || t('createProject.messages.import_error'));
+      return;
+    }
 
-      // Карта для быстрого поиска дисциплин по коду
-      const codeToDiscipline: Record<string, Discipline> = {};
-      disciplines.forEach(d => { codeToDiscipline[(d.code || '').trim().toUpperCase()] = d; });
-
-      // Карта для быстрого поиска типов документов по коду + название
-      const codeNameToDocumentType: Record<string, DocumentType> = {};
-      documentTypes.forEach(dt => { 
-        const cleanName = (dt.name_en || dt.name || '').trim().replace(/\s+/g, ' ').toLowerCase();
-        const key = `${(dt.code || '').trim().toUpperCase()}__${cleanName}`;
-        codeNameToDocumentType[key] = dt;
+    // Добавляем дисциплины
+    if (result.disciplinesToAdd.length > 0) {
+      setSelectedDisciplines(prev => {
+        const newDisciplines = [...prev];
+        result.disciplinesToAdd.forEach(disciplineId => {
+          if (!newDisciplines.includes(disciplineId)) {
+            newDisciplines.push(disciplineId);
+          }
+        });
+        return newDisciplines;
       });
+    }
 
-      for (const row of rows) {
-        const dCodeRaw = row['discipline_code'];
-        const tCodeRaw = row['document_type_code'];
-        const tNameRaw = row['document_type_name'];
-        const drsRaw = row['drs'];
-        
-        if (dCodeRaw === undefined && tCodeRaw === undefined && tNameRaw === undefined) {
-          continue;
-        }
-        
-        const dCode = String(dCodeRaw || '').trim().toUpperCase();
-        const tCode = String(tCodeRaw || '').trim().toUpperCase();
-        const tName = String(tNameRaw || '').trim();
-        const drs = String(drsRaw || '').trim();
-        
-        if (!dCode || !tCode || !tName) {
-          continue;
-        }
-
-        const rowKey = `${dCode}__${tCode}__${tName.toLowerCase()}`;
-        if (processedRows.has(rowKey)) {
-          continue;
-        }
-        processedRows.add(rowKey);
-        processedCount++;
-
-        const discipline = codeToDiscipline[dCode];
-        if (!discipline) {
-          if (!missingDisciplines.includes(dCode)) {
-            missingDisciplines.push(dCode);
-          }
-          continue;
-        }
-
-        const cleanExcelName = tName.trim().replace(/\s+/g, ' ').toLowerCase();
-        const searchKey = `${tCode}__${cleanExcelName}`;
-        const documentType = codeNameToDocumentType[searchKey];
-        
-        if (!documentType) {
-          const typesWithSameCode = documentTypes.filter(dt => 
-            (dt.code || '').trim().toUpperCase() === tCode
-          );
-          
-          if (typesWithSameCode.length === 0) {
-            if (!missingDocumentTypes.includes(tCode)) {
-              missingDocumentTypes.push(tCode);
-            }
-          } else {
-            const mismatchInfo = `${tCode} (${tName}) - в БД: ${typesWithSameCode.map(dt => dt.name_en || dt.name).join(', ')}`;
-            if (!mismatchedNames.includes(mismatchInfo)) {
-              mismatchedNames.push(mismatchInfo);
-            }
-          }
-          continue;
-        }
-
-        matchedCount++;
-        setSelectedDisciplines(prev => {
-          if (!prev.includes(discipline.id)) {
-            return [...prev, discipline.id];
-          }
-          return prev;
-        });
-        
-        setDisciplineDocumentTypes(prev => {
-          const arr = prev[discipline.id] || [];
-          const existingItem = arr.find(item => item.documentTypeId === documentType.id);
+    // Добавляем связи дисциплина-тип документа
+    if (result.documentTypesToAdd.length > 0) {
+      setDisciplineDocumentTypes(prev => {
+        const newDisciplineDocumentTypes = { ...prev };
+        result.documentTypesToAdd.forEach(item => {
+          const arr = newDisciplineDocumentTypes[item.disciplineId] || [];
+          const existingItem = arr.find(dt => dt.documentTypeId === item.documentTypeId);
           if (!existingItem) {
-            return { ...prev, [discipline.id]: [...arr, { documentTypeId: documentType.id, drs: drs || undefined }] };
+            newDisciplineDocumentTypes[item.disciplineId] = [
+              ...arr, 
+              { documentTypeId: item.documentTypeId, drs: item.drs }
+            ];
+          } else {
+            // Обновляем существующий элемент, сохраняя его drs если новый drs пустой
+            const updatedItem = {
+              documentTypeId: item.documentTypeId,
+              drs: item.drs || existingItem.drs // Используем новый drs или сохраняем существующий
+            };
+            const index = arr.findIndex(dt => dt.documentTypeId === item.documentTypeId);
+            arr[index] = updatedItem;
+            newDisciplineDocumentTypes[item.disciplineId] = arr;
           }
-          return prev;
         });
-      }
+        return newDisciplineDocumentTypes;
+      });
+    }
 
-      const warnings: string[] = [];
-      if (missingDisciplines.length > 0) {
-        warnings.push(`Не найдены дисциплины: ${missingDisciplines.join(', ')}`);
-      }
-      if (missingDocumentTypes.length > 0) {
-        warnings.push(`Не найдены типы документов: ${missingDocumentTypes.join(', ')}`);
-      }
-      if (mismatchedNames.length > 0) {
-        warnings.push(`Несовпадение названий: ${mismatchedNames.join('; ')}`);
-      }
-      
-      setImportWarnings(warnings);
-      
-    } catch (e: any) {
-      setError(t('createProject.messages.import_error'));
+    if (result.warnings.length > 0) {
+      setImportWarnings(result.warnings);
     }
   };
 
+  const dialogTitle = mode === 'create' 
+    ? t('project.create_new') 
+    : t('project.edit');
+  
+  const submitButtonText = mode === 'create' 
+    ? (loading ? t('createProject.creating') : t('project.create'))
+    : (loading ? t('createProject.creating') : t('common.save'));
+  
+  const submitButtonDisabled = loading || !formData.name || selectedDisciplines.length === 0 || (mode === 'create' && codeValidation.exists);
+
+  
   return (
     <LocalizationProvider dateAdapter={AdapterDateFns} adapterLocale={ru}>
       <Dialog
@@ -706,16 +758,16 @@ const EditProjectDialog: React.FC<EditProjectDialogProps> = observer(({
           } 
         }}
         fullScreen={isMobile}
-        aria-labelledby="edit-project-dialog-title"
-        aria-describedby="edit-project-dialog-description"
+        aria-labelledby={`${mode}-project-dialog-title`}
+        aria-describedby={`${mode}-project-dialog-description`}
         disablePortal={false}
         keepMounted={false}
         disableAutoFocus={false}
         disableEnforceFocus={false}
         disableRestoreFocus={false}
       >
-        <DialogTitle id="edit-project-dialog-title">{t('project.edit')}</DialogTitle>
-        <Box id="edit-project-dialog-description" sx={{ display: 'none' }}>
+        <DialogTitle id={`${mode}-project-dialog-title`}>{dialogTitle}</DialogTitle>
+        <Box id={`${mode}-project-dialog-description`} sx={{ display: 'none' }}>
           {t('createProject.messages.dialog_description')}
         </Box>
         <DialogContent sx={{ 
@@ -761,23 +813,24 @@ const EditProjectDialog: React.FC<EditProjectDialogProps> = observer(({
             <Tab label={t('createProject.tabs.participants')} />
             <Tab label={t('createProject.tabs.users')} />
             <Tab label={t('createProject.tabs.summary')} />
-        </Tabs>
+          </Tabs>
 
           {/* Tab 0: Основное */}
-        {tabIndex === 0 && (
+          {tabIndex === 0 && (
             <MainTab 
               formData={formData}
               setFormData={setFormData}
-              codeValidation={{ isChecking: false, exists: false, message: '' }}
-              setCodeValidation={() => {}} // Отключаем валидацию при редактировании
+              codeValidation={mode === 'create' ? codeValidation : { isChecking: false, exists: false, message: '' }}
+              setCodeValidation={mode === 'create' ? setCodeValidation : () => {}}
+              mode={mode}
             />
           )}
 
           {/* Tab 1: Дисциплины и типы */}
           {tabIndex === 1 && (
             <DisciplinesTypesTab
-              disciplines={disciplines}
-              documentTypes={documentTypes}
+              disciplines={projectDialogStore.disciplines}
+              documentTypes={projectDialogStore.documentTypes}
               selectedDisciplines={selectedDisciplines}
               disciplineDocumentTypes={disciplineDocumentTypes}
               importWarnings={importWarnings}
@@ -792,8 +845,8 @@ const EditProjectDialog: React.FC<EditProjectDialogProps> = observer(({
           {/* Tab 2: Ревизии */}
           {tabIndex === 2 && (
             <RevisionsTab
-              revisionDescriptions={revisionDescriptions}
-              revisionSteps={revisionSteps}
+              revisionDescriptions={projectDialogStore.revisionDescriptions}
+              revisionSteps={projectDialogStore.revisionSteps}
               selectedRevisionDescriptions={selectedRevisionDescriptions}
               selectedRevisionSteps={selectedRevisionSteps}
               onRevisionDescriptionToggle={handleRevisionDescriptionToggle}
@@ -806,7 +859,7 @@ const EditProjectDialog: React.FC<EditProjectDialogProps> = observer(({
           {/* Tab 3: Workflow */}
           {tabIndex === 3 && (
             <WorkflowTab
-              workflowPresets={workflowPresets}
+              workflowPresets={projectDialogStore.workflowPresets}
               selectedWorkflowPreset={selectedWorkflowPreset}
               onWorkflowPresetChange={setSelectedWorkflowPreset}
             />
@@ -851,9 +904,9 @@ const EditProjectDialog: React.FC<EditProjectDialogProps> = observer(({
               selectedWorkflowPreset={selectedWorkflowPreset}
               pendingParticipants={pendingParticipants}
               pendingProjectMembers={pendingProjectMembers}
-              disciplines={disciplines}
-              documentTypes={documentTypes}
-              workflowPresets={workflowPresets}
+              disciplines={projectDialogStore.disciplines}
+              documentTypes={projectDialogStore.documentTypes}
+              workflowPresets={projectDialogStore.workflowPresets}
               companies={companies}
               contacts={contacts}
               companyRoles={companyRoles}
@@ -863,13 +916,15 @@ const EditProjectDialog: React.FC<EditProjectDialogProps> = observer(({
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={handleClose} disabled={loading}>{t('common.cancel')}</Button>
+          <Button onClick={handleClose} disabled={loading}>
+            {t('common.cancel')}
+          </Button>
           <Button
             onClick={handleSubmit}
             variant="contained"
-            disabled={loading || !formData.name || selectedDisciplines.length === 0}
+            disabled={submitButtonDisabled}
           >
-            {loading ? t('createProject.creating') : t('common.save')}
+            {submitButtonText}
           </Button>
         </DialogActions>
       </Dialog>
@@ -931,7 +986,7 @@ const EditProjectDialog: React.FC<EditProjectDialogProps> = observer(({
                 </Select>
               </FormControl>
               
-                    <FormControlLabel
+            <FormControlLabel
               control={
                 <Checkbox
                   checked={participantFormData.is_primary}
@@ -949,7 +1004,7 @@ const EditProjectDialog: React.FC<EditProjectDialogProps> = observer(({
               value={participantFormData.notes}
               onChange={(e) => setParticipantFormData(prev => ({ ...prev, notes: e.target.value }))}
             />
-                      </Box>
+                                </Box>
         </DialogContent>
         <DialogActions>
           <Button onClick={() => {
@@ -1020,8 +1075,8 @@ const EditProjectDialog: React.FC<EditProjectDialogProps> = observer(({
                     <Typography variant="caption" color="text.secondary">
                       {user.email}
                                   </Typography>
-                  </Box>
-              </Box>
+                            </Box>
+                          </Box>
                         );
               }}
               noOptionsText={t('createProject.messages.users_not_found')}
@@ -1063,9 +1118,9 @@ const EditProjectDialog: React.FC<EditProjectDialogProps> = observer(({
                 <MenuItem value="viewer">{t('createProject.roles.viewer')}</MenuItem>
               </Select>
             </FormControl>
-          </Box>
-      </DialogContent>
-      <DialogActions>
+                        </Box>
+        </DialogContent>
+        <DialogActions>
           <Button onClick={() => {
             setProjectMemberDialogOpen(false);
             setIsEditingProjectMember(false);
@@ -1081,8 +1136,8 @@ const EditProjectDialog: React.FC<EditProjectDialogProps> = observer(({
           <Button onClick={handleSaveProjectMember} variant="contained">
             {isEditingProjectMember ? t('createProject.buttons.save') : t('createProject.buttons.add')}
           </Button>
-      </DialogActions>
-    </Dialog>
+        </DialogActions>
+      </Dialog>
 
         {/* Диалог выбора типа документа */}
         <DocumentTypeSelectionDialog
@@ -1091,10 +1146,10 @@ const EditProjectDialog: React.FC<EditProjectDialogProps> = observer(({
           onSelect={handleDocumentTypeSelect}
           discipline={currentDiscipline}
           documentTypeCode={currentDocumentTypeCode}
-          documentTypes={foundDocumentTypes}
+          documentTypes={projectDialogStore.documentTypes}
         />
     </LocalizationProvider>
   );
 });
 
-export default EditProjectDialog;
+export default ProjectDialog;

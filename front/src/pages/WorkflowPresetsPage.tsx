@@ -133,8 +133,16 @@ const WorkflowPresetsPage: React.FC = observer(() => {
   };
 
   // CRUD operations
+  const [isCreating, setIsCreating] = useState(false);
+  
   const handleCreate = async () => {
+    if (isCreating) {
+      return;
+    }
+    
     try {
+      setIsCreating(true);
+      
       const presetData = {
         ...formData,
         sequences: workflowSequences.map((seq) => ({
@@ -153,10 +161,13 @@ const WorkflowPresetsPage: React.FC = observer(() => {
       };
       
       await workflowStore.createPreset(presetData);
+      
       setSuccessMessage(t('workflows.messages.preset_created'));
       handleCloseDialogs();
     } catch (err: any) {
       console.error(t('workflows.errors.create_preset'), err);
+    } finally {
+      setIsCreating(false);
     }
   };
 
@@ -729,9 +740,14 @@ const WorkflowPresetsPage: React.FC = observer(() => {
             onClick={createDialogOpen ? handleCreate : handleUpdate}
             variant="contained"
             startIcon={<SaveIcon />}
-            disabled={!formData.name}
+            disabled={!formData.name || isCreating}
           >
-            {createDialogOpen ? t('workflows.actions.create') : t('workflows.actions.save')}
+            {isCreating 
+              ? t('workflows.actions.creating') 
+              : createDialogOpen 
+                ? t('workflows.actions.create') 
+                : t('workflows.actions.save')
+            }
           </Button>
         </DialogActions>
       </Dialog>

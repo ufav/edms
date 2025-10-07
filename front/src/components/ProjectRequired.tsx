@@ -9,28 +9,30 @@ import {
 } from '@mui/material';
 import { observer } from 'mobx-react-lite';
 import { projectStore } from '../stores/ProjectStore';
+import { useTranslation } from 'react-i18next';
 
 interface ProjectRequiredProps {
   children: React.ReactNode;
 }
 
 const ProjectRequired: React.FC<ProjectRequiredProps> = observer(({ children }) => {
+  const { t } = useTranslation();
+  
   if (!projectStore.hasSelectedProject) {
     return (
       <Box sx={{ width: '100%', p: 3 }}>
         <Card sx={{ maxWidth: 600, mx: 'auto', mt: 4 }}>
           <CardContent sx={{ textAlign: 'center', p: 4 }}>
             <Alert severity="warning" sx={{ mb: 3 }}>
-              Для работы с документами необходимо выбрать проект
+              {t('project.required.message')}
             </Alert>
             
             <Typography variant="h6" sx={{ mb: 2, fontWeight: 'bold' }}>
-              Выберите проект для продолжения работы
+              {t('project.required.subtitle')}
             </Typography>
             
             <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-              Все документы, трансмитталы и ревью будут привязаны к выбранному проекту.
-              Это поможет избежать ошибок и обеспечить правильную организацию данных.
+              {t('project.required.description')}
             </Typography>
 
             <Button
@@ -44,7 +46,7 @@ const ProjectRequired: React.FC<ProjectRequiredProps> = observer(({ children }) 
               }}
               sx={{ mt: 2 }}
             >
-              Выбрать проект
+              {t('project.required.select_button')}
             </Button>
           </CardContent>
         </Card>

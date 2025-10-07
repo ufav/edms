@@ -178,7 +178,6 @@ const DocumentsPage: React.FC = observer(() => {
       
       if (success) {
         // Можно добавить уведомление об успешном сохранении
-        console.log('Настройки сохранены');
       }
     } catch (error) {
       console.error('Ошибка сохранения настроек:', error);

@@ -125,7 +125,6 @@ export const useExcelImport = () => {
 
       setImportWarnings(warnings);
 
-      console.log(`Обработано строк: ${processedCount}, найдено совпадений: ${matchedCount}`);
       
       return {
         processedCount,

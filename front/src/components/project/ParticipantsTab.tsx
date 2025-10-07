@@ -240,9 +240,9 @@ const ParticipantsTab: React.FC<ParticipantsTabProps> = ({
         aria-describedby="participant-dialog-description"
         disablePortal={false}
         keepMounted={false}
-        disableAutoFocus={false}
-        disableEnforceFocus={false}
-        disableRestoreFocus={false}
+        disableAutoFocus={true}
+        disableEnforceFocus={true}
+        disableRestoreFocus={true}
       >
         <DialogTitle id="participant-dialog-title">
           {isEditingParticipant ? t('createProject.dialogs.edit_participant') : t('createProject.dialogs.add_participant')}

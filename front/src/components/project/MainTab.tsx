@@ -8,7 +8,10 @@ import {
   MenuItem,
   Grid,
   Alert,
-  CircularProgress
+  CircularProgress,
+  IconButton,
+  Button,
+  Typography
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { useTranslation } from 'react-i18next';
@@ -41,17 +44,29 @@ interface MainTabProps {
     project_name?: string;
     is_deleted?: boolean;
   }) => void;
+  // Новые пропы для режима просмотра
+  mode?: 'create' | 'edit';
 }
 
-const MainTab: React.FC<MainTabProps> = ({ formData, setFormData, codeValidation, setCodeValidation }) => {
+const MainTab: React.FC<MainTabProps> = ({ 
+  formData, 
+  setFormData, 
+  codeValidation, 
+  setCodeValidation,
+  mode = 'create'
+}) => {
   const { t } = useTranslation();
   const [isMobile] = useState(false);
 
   const handleInputChange = (field: string, value: any) => {
-    setFormData((prev: any) => ({
-      ...prev,
-      [field]: value
-    }));
+    if (mode === 'view' && isFieldEditing?.(field)) {
+      updateFieldEditData?.(field, value);
+    } else {
+      setFormData((prev: any) => ({
+        ...prev,
+        [field]: value
+      }));
+    }
     
     // Очищаем валидацию кода только если поле полностью очищено
     if (field === 'project_code' && (!value || value.trim() === '')) {
@@ -62,6 +77,78 @@ const MainTab: React.FC<MainTabProps> = ({ formData, setFormData, codeValidation
         is_deleted: false
       });
     }
+  };
+
+  // Функция для рендеринга поля с возможностью редактирования
+  const renderEditableField = (
+    fieldName: string,
+    label: string,
+    children: React.ReactNode,
+    value: any
+  ) => {
+    const isEditing = isFieldEditing?.(fieldName) || false;
+    const currentValue = isEditing ? (fieldEditData?.[fieldName] ?? value) : value;
+
+    if (mode === 'view') {
+      return (
+        <Box sx={{ position: 'relative' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Box sx={{ flex: 1 }}>
+              {isEditing ? (
+                <Box>
+                  {children}
+                </Box>
+              ) : (
+                <Box sx={{ 
+                  p: 2, 
+                  border: '1px solid #e0e0e0', 
+                  borderRadius: 1,
+                  backgroundColor: '#f5f5f5',
+                  minHeight: '56px',
+                  display: 'flex',
+                  alignItems: 'center'
+                }}>
+                  <Typography variant="body1">
+                    {currentValue || t('common.no_data')}
+                  </Typography>
+                </Box>
+              )}
+            </Box>
+            <Box sx={{ display: 'flex', gap: 0.5 }}>
+              {isEditing ? (
+                <>
+                  <IconButton 
+                    size="small" 
+                    color="primary"
+                    onClick={() => saveFieldEdit?.(fieldName)}
+                    disabled={!currentValue}
+                  >
+                    <SaveIcon />
+                  </IconButton>
+                  <IconButton 
+                    size="small" 
+                    color="secondary"
+                    onClick={() => cancelFieldEdit?.(fieldName)}
+                  >
+                    <CancelIcon />
+                  </IconButton>
+                </>
+              ) : (
+                <IconButton 
+                  size="small" 
+                  color="primary"
+                  onClick={() => startFieldEdit?.(fieldName)}
+                >
+                  <EditIcon />
+                </IconButton>
+              )}
+            </Box>
+          </Box>
+        </Box>
+      );
+    }
+
+    return children;
   };
 
   const checkProjectCode = async (code: string) => {
@@ -98,18 +185,14 @@ const MainTab: React.FC<MainTabProps> = ({ formData, setFormData, codeValidation
     }
   };
 
-  // Debounced check for project code
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      if (formData.project_code) {
-        checkProjectCode(formData.project_code);
-      } else {
-        setCodeValidation({ isChecking: false, exists: false, message: '', is_deleted: false }); // Clear validation if code is empty
-      }
-    }, 500); // 500ms delay
-
-    return () => clearTimeout(timeoutId);
-  }, [formData.project_code]);
+  // Валидация кода проекта только при потере фокуса
+  const handleProjectCodeBlur = () => {
+    if (formData.project_code && formData.project_code.trim().length >= 3) {
+      checkProjectCode(formData.project_code);
+    } else {
+      setCodeValidation({ isChecking: false, exists: false, message: '', is_deleted: false });
+    }
+  };
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: isMobile ? 2 : 3, mt: 1 }}>
@@ -129,9 +212,10 @@ const MainTab: React.FC<MainTabProps> = ({ formData, setFormData, codeValidation
             label={t('createProject.fields.project_code')}
             value={formData.project_code}
             onChange={(e) => handleInputChange('project_code', e.target.value)}
+            onBlur={handleProjectCodeBlur}
             placeholder="PRJ-001"
             error={codeValidation.exists}
-                  helperText=""
+            helperText=""
             InputProps={{
               endAdornment: codeValidation.isChecking ? (
                 <CircularProgress size={20} />

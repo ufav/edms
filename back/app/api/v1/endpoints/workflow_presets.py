@@ -216,6 +216,19 @@ async def create_workflow_preset(
     current_user: User = Depends(get_current_active_user)
 ):
     """Создание нового workflow пресета"""
+    
+    # Проверяем, не существует ли уже пресет с таким именем
+    existing_preset = db.query(WorkflowPreset).filter(
+        WorkflowPreset.name == preset_data.name,
+        WorkflowPreset.is_global == preset_data.is_global
+    ).first()
+    
+    if existing_preset:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Пресет с именем '{preset_data.name}' уже существует"
+        )
+    
     # Создаем пресет
     preset = WorkflowPreset(
         name=preset_data.name,
