@@ -219,6 +219,20 @@ class ReferencesStore {
     return step.code || (language === 'en' ? 'Not defined' : 'Не определен');
   }
 
+  // Получение локализованного названия описания ревизии (код - описание)
+  getRevisionDescriptionLabel(descriptionId?: number, language: string = 'ru'): string {
+    const description = this.getRevisionDescription(descriptionId);
+    
+    if (!description) return language === 'en' ? 'Not defined' : 'Не определен';
+    
+    const code = description.code || '?';
+    const desc = language === 'en' && description.description 
+      ? description.description 
+      : (description.description_native || description.description || '');
+    
+    return desc ? `${code} - ${desc}` : code;
+  }
+
   // Получение локализованного названия кода ревью
   getReviewCodeLabel(codeId?: number, language: string = 'ru'): string {
     const code = this.getReviewCode(codeId);

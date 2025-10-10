@@ -36,6 +36,8 @@ import ProfileDialog from './ProfileDialog';
 import { useTranslation } from 'react-i18next';
 import { observer } from 'mobx-react-lite';
 import { projectStore } from '../stores/ProjectStore';
+import { userStore } from '../stores/UserStore';
+import { usePermissions } from '../hooks/usePermissions';
 import type { Project } from '../stores/ProjectStore';
 
 interface LayoutProps {
@@ -61,6 +63,7 @@ const Layout: React.FC<LayoutProps> = observer(({
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const { t, i18n } = useTranslation();
+  const permissions = usePermissions();
 
   const handleMenu = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -80,9 +83,9 @@ const Layout: React.FC<LayoutProps> = observer(({
     { id: 'documents', label: t('menu.documents'), icon: <DocumentIcon /> },
     { id: 'transmittals', label: t('menu.transmittals'), icon: <TransmittalIcon /> },
     { id: 'reviews', label: t('menu.reviews'), icon: <ReviewIcon /> },
-    { id: 'workflows', label: t('menu.workflows'), icon: <WorkflowIcon /> },
-    ...(user?.role === 'superadmin' ? [{ id: 'users', label: t('menu.users'), icon: <UserIcon /> }] : []),
-    ...((user?.role === 'admin' || user?.role === 'superadmin' || user?.is_admin) ? [
+    ...(permissions.canViewWorkflows ? [{ id: 'workflows', label: t('menu.workflows'), icon: <WorkflowIcon /> }] : []),
+    ...(permissions.canViewUsers ? [{ id: 'users', label: t('menu.users'), icon: <UserIcon /> }] : []),
+    ...(permissions.canViewAdmin ? [
       { id: 'admin', label: 'Админка', icon: <SettingsIcon />, external: true }
     ] : []),
   ];
@@ -214,9 +217,9 @@ const Layout: React.FC<LayoutProps> = observer(({
                     {user?.username || 'Гость'}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
-                    {user?.role === 'admin' ? 'Администратор' : 
-                     user?.role === 'operator' ? 'Оператор' : 
-                     user?.role === 'viewer' ? 'Читатель' : 'Пользователь'}
+                    {userStore.currentUser?.role === 'admin' ? 'Администратор' : 
+                     userStore.currentUser?.role === 'operator' ? 'Оператор' : 
+                     userStore.currentUser?.role === 'viewer' ? 'Читатель' : 'Пользователь'}
                   </Typography>
                 </Box>
               </MenuItem>

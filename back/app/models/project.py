@@ -26,7 +26,6 @@ class Project(Base):
     start_date = Column(Date)
     end_date = Column(Date)
     budget = Column(Numeric(15, 2))
-    manager_id = Column(Integer, ForeignKey("users.id"))
     created_by = Column(Integer, ForeignKey("users.id"))
     workflow_preset_id = Column(Integer, ForeignKey("workflow_presets.id"), nullable=True)
     is_deleted = Column(Integer, default=0, nullable=False)  # 0 - не удален, 1 - удален
@@ -51,7 +50,6 @@ class ProjectMember(Base):
     id = Column(Integer, primary_key=True, index=True)
     project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"))
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"))
-    role = Column(String(50), nullable=False)  # Legacy field, will be deprecated
     project_role_id = Column(Integer, ForeignKey("project_roles.id"), nullable=True)
     permissions = Column(Text)  # JSON string
     joined_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -62,7 +60,7 @@ class ProjectMember(Base):
     project_role = relationship("ProjectRole")
     
     def __repr__(self):
-        return f"<ProjectMember(project_id={self.project_id}, user_id={self.user_id}, role='{self.role}')>"
+        return f"<ProjectMember(project_id={self.project_id}, user_id={self.user_id}, project_role_id={self.project_role_id})>"
 
 
 class ProjectDisciplineDocumentType(Base):

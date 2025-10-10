@@ -16,6 +16,7 @@ import { authApi, setAuthToken, removeAuthToken, setUnauthorizedHandler } from '
 import { projectStore } from './stores/ProjectStore';
 import { userStore } from './stores/UserStore';
 import { settingsStore } from './stores/SettingsStore';
+import { usePermissions } from './hooks/usePermissions';
 import './i18n';
 
 const theme = createTheme({
@@ -37,6 +38,41 @@ function App() {
   const lastActivityRef = useRef<number>(Date.now());
   const activityWindowMs = 5 * 60 * 1000; // 5 минут окна активности
   const refreshThresholdMs = 2 * 60 * 1000; // авто-рефреш за 2 минуты до истечения
+  const permissions = usePermissions();
+
+  // Загрузка пользователя при инициализации
+  useEffect(() => {
+    const checkAuth = async () => {
+      // Проверяем, есть ли токен в localStorage
+      const token = localStorage.getItem('token');
+      if (token && !isAuthenticated) {
+        try {
+          // Пытаемся загрузить пользователя с существующим токеном
+          await userStore.loadCurrentUser();
+          if (userStore.currentUser) {
+            setIsAuthenticated(true);
+            setUser({ 
+              username: userStore.currentUser.username, 
+              role: userStore.currentUser.role 
+            });
+          }
+        } catch (error) {
+          // Токен недействителен, очищаем его
+          removeAuthToken();
+          userStore.clearCurrentUser();
+        }
+      } else if (isAuthenticated) {
+        userStore.loadCurrentUser().then(() => {
+          setUser({ 
+            username: userStore.currentUser?.username || '', 
+            role: userStore.currentUser?.role || '' 
+          });
+        });
+      }
+    };
+    
+    checkAuth();
+  }, [isAuthenticated]);
 
   // Трекинг активности пользователя
   useEffect(() => {
@@ -91,7 +127,10 @@ function App() {
       
       // Получаем информацию о пользователе с ролью
       await userStore.loadCurrentUser();
-      setUser({ username: userStore.currentUser?.username || '', role: userStore.currentUser?.role || '' });
+      setUser({ 
+        username: userStore.currentUser?.username || '', 
+        role: userStore.currentUser?.role || '' 
+      });
       
       // Загружаем проекты после успешной аутентификации
       await projectStore.loadProjects();
@@ -115,6 +154,9 @@ function App() {
     
     // Очищаем настройки при выходе
     settingsStore.clearSettings();
+    
+    // Очищаем пользователя при выходе
+    userStore.clearCurrentUser();
   };
 
   const handlePageChange = (page: string) => {
@@ -140,7 +182,7 @@ function App() {
       case 'workflows':
         return <WorkflowPresetsPage />;
       case 'users':
-        return user?.role === 'superadmin' ? <UsersPage /> : <Dashboard />;
+        return permissions.canViewUsers ? <UsersPage /> : <Dashboard />;
       default:
         return <Dashboard />;
     }

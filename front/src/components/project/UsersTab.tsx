@@ -28,47 +28,66 @@ import {
   Add as AddIcon,
   Delete as DeleteIcon
 } from '@mui/icons-material';
-import { rolesApi, type ProjectRole } from '../../api/client';
+import { type ProjectRole } from '../../api/client';
+import { userStore } from '../../stores/UserStore';
 
 interface UsersTabProps {
   pendingProjectMembers: any[];
   users: any[];
+  projectRoles: ProjectRole[];
   onDeleteProjectMember: (memberId: number) => void;
   onSaveProjectMember: (member: any) => void;
-  getRoleLabel: (role: string) => string;
-  getRoleColor: (role: string) => 'primary' | 'secondary' | 'success' | 'error' | 'warning' | 'info';
 }
 
 const UsersTab: React.FC<UsersTabProps> = ({
   pendingProjectMembers,
   users,
+  projectRoles,
   onDeleteProjectMember,
   onSaveProjectMember,
-  getRoleLabel,
-  getRoleColor,
 }) => {
   const { t } = useTranslation();
   
   const [projectMemberDialogOpen, setProjectMemberDialogOpen] = useState(false);
   const [isEditingProjectMember, setIsEditingProjectMember] = useState(false);
   const [selectedProjectMember, setSelectedProjectMember] = useState<any>(null);
-  const [projectRoles, setProjectRoles] = useState<ProjectRole[]>([]);
   const [projectMemberFormData, setProjectMemberFormData] = useState({
     user_id: null as number | null,
     project_role_id: null as number | null
   });
 
-  useEffect(() => {
-    loadProjectRoles();
-  }, []);
-
-  const loadProjectRoles = async () => {
-    try {
-      const roles = await rolesApi.getProjectRoles();
-      setProjectRoles(roles);
-    } catch (error) {
-      console.error('Ошибка загрузки проектных ролей:', error);
+  // Функция для определения цвета роли
+  const getRoleColor = (roleCode: string) => {
+    switch (roleCode) {
+      case 'owner':
+        return 'error'; // Красный для владельца
+      case 'manager':
+        return 'warning'; // Оранжевый для менеджера
+      case 'reviewer':
+        return 'info'; // Синий для рецензента
+      case 'contributor':
+        return 'success'; // Зеленый для участника
+      case 'viewer':
+        return 'default'; // Серый для наблюдателя
+      default:
+        return 'default';
     }
+  };
+
+  // Функция для фильтрации ролей в зависимости от глобальной роли пользователя
+  const getAvailableRoles = (userId: number | null) => {
+    if (!userId) return projectRoles;
+    
+    const user = users.find(u => u.id === userId);
+    if (!user) return projectRoles;
+    
+    // Если пользователь имеет глобальную роль Viewer, показываем только роль viewer
+    if (user.role === 'Viewer') {
+      return projectRoles.filter(role => role.code === 'viewer');
+    }
+    
+    // Для остальных ролей показываем все роли
+    return projectRoles;
   };
 
   const handleAddProjectMember = () => {
@@ -93,17 +112,35 @@ const UsersTab: React.FC<UsersTabProps> = ({
       alert('Этот пользователь уже добавлен в проект');
       return;
     }
-    
-    const selectedRole = projectRoles.find(role => role.id === projectMemberFormData.project_role_id);
+
     
     const memberData = {
       ...projectMemberFormData,
-      role: selectedRole?.code || 'viewer', // Legacy field for compatibility
       id: selectedProjectMember?.id || Date.now()
     };
     
     onSaveProjectMember(memberData);
     setProjectMemberDialogOpen(false);
+  };
+
+  // Обработчик изменения пользователя
+  const handleUserChange = (userId: number | null) => {
+    const availableRoles = getAvailableRoles(userId);
+    const currentRoleId = projectMemberFormData.project_role_id;
+    
+    // Если текущая выбранная роль недоступна для нового пользователя, сбрасываем её
+    if (currentRoleId && !availableRoles.some(role => role.id === currentRoleId)) {
+      setProjectMemberFormData(prev => ({
+        ...prev,
+        user_id: userId,
+        project_role_id: null
+      }));
+    } else {
+      setProjectMemberFormData(prev => ({
+        ...prev,
+        user_id: userId
+      }));
+    }
   };
 
   const handleCloseDialog = () => {
@@ -154,19 +191,38 @@ const UsersTab: React.FC<UsersTabProps> = ({
                       </Box>
                     </TableCell>
                     <TableCell>
-                      <Chip
-                        label={getRoleLabel(member.role)}
-                        color={getRoleColor(member.role)}
-                        size="small"
-                      />
+                      {(() => {
+                        const role = projectRoles.find(r => r.id === member.project_role_id);
+                        return role ? (
+                          <Chip
+                            label={role.name_en || role.name}
+                            color={getRoleColor(role.code) as any}
+                            size="small"
+                          />
+                        ) : (
+                          <Chip
+                            label="Не назначена"
+                            color="default"
+                            size="small"
+                          />
+                        );
+                      })()}
                     </TableCell>
                     <TableCell>
-                      <IconButton
-                        size="small"
-                        onClick={() => onDeleteProjectMember(member.id)}
-                      >
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
+                      {(() => {
+                        const currentUserId = userStore.currentUser?.id;
+                        const isCurrentUser = currentUserId && member.user_id === currentUserId;
+                        
+                        return (
+                          <IconButton
+                            size="small"
+                            onClick={() => onDeleteProjectMember(member.id)}
+                            disabled={isCurrentUser}
+                          >
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        );
+                      })()}
                     </TableCell>
                   </TableRow>
                 );
@@ -229,15 +285,13 @@ const UsersTab: React.FC<UsersTabProps> = ({
               value={users.find(user => user.id === projectMemberFormData.user_id) || null}
               isOptionEqualToValue={(option, value) => option.id === value.id}
               onChange={(_, newValue) => {
-                setProjectMemberFormData(prev => ({
-                  ...prev,
-                  user_id: newValue ? newValue.id : null
-                }));
+                handleUserChange(newValue ? newValue.id : null);
               }}
               renderInput={(params) => (
                 <TextField
                   {...params}
                   label={t('createProject.fields.user')}
+                  variant="standard"
                   placeholder={t('createProject.placeholders.start_typing_user')}
                 />
               )}
@@ -283,7 +337,7 @@ const UsersTab: React.FC<UsersTabProps> = ({
               }}
             />
 
-            <FormControl fullWidth>
+            <FormControl fullWidth variant="standard">
               <InputLabel>{t('createProject.fields.role')}</InputLabel>
               <Select
                 value={projectMemberFormData.project_role_id || ''}
@@ -296,7 +350,7 @@ const UsersTab: React.FC<UsersTabProps> = ({
                   disablePortal: true
                 }}
               >
-                {projectRoles.map((role) => (
+                {getAvailableRoles(projectMemberFormData.user_id).map((role) => (
                   <MenuItem key={role.id} value={role.id}>
                     {role.name_en || role.name} - {role.description}
                   </MenuItem>

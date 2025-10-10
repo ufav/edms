@@ -6,6 +6,7 @@ from .contact import Contact
 from .company_role import CompanyRole
 from .project_role import ProjectRole
 from .document import Document, DocumentRevision, DocumentReview
+from .document_comments import DocumentComment
 from .transmittal import Transmittal, TransmittalItem
 # Temporarily commented out to avoid circular imports
 # from .workflow import (
@@ -27,6 +28,7 @@ __all__ = [
     "CompanyRole",
     "ProjectRole",
     "Document", "DocumentRevision", "DocumentReview",
+    "DocumentComment",
     "Transmittal", "TransmittalItem",
     # "WorkflowTemplate", "WorkflowStep", "DocumentWorkflow", "DocumentApproval", "DocumentHistory",
     # "DocumentStatus", "ApprovalStatus",

@@ -1,12 +1,14 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
   Grid,
   Card,
-  CardContent
+  CardContent,
+  Chip
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
+import { rolesApi } from '../../api/client';
 
 interface SummaryTabProps {
   formData: {
@@ -32,7 +34,8 @@ interface SummaryTabProps {
   contacts: any[];
   companyRoles: any[];
   users: any[];
-  getRoleLabel: (role: string) => string;
+  revisionDescriptions: any[];
+  revisionSteps: any[];
 }
 
 const SummaryTab: React.FC<SummaryTabProps> = ({
@@ -51,12 +54,44 @@ const SummaryTab: React.FC<SummaryTabProps> = ({
   contacts,
   companyRoles,
   users,
-  getRoleLabel
+  revisionDescriptions,
+  revisionSteps
 }) => {
   const { t } = useTranslation();
+  const [projectRoles, setProjectRoles] = useState<any[]>([]);
+
+  useEffect(() => {
+    const loadProjectRoles = async () => {
+      try {
+        const roles = await rolesApi.getProjectRoles();
+        setProjectRoles(roles);
+      } catch (error) {
+        console.error('Ошибка загрузки ролей проектов:', error);
+      }
+    };
+    loadProjectRoles();
+  }, []);
 
   const getSelectedDiscipline = (id: number) => disciplines.find(d => d.id === id);
   const getSelectedWorkflowPreset = (id: number) => workflowPresets.find(wp => wp.id === id);
+
+  // Функция для определения цвета роли
+  const getRoleColor = (roleCode: string) => {
+    switch (roleCode) {
+      case 'owner':
+        return 'error'; // Красный для владельца
+      case 'manager':
+        return 'warning'; // Оранжевый для менеджера
+      case 'reviewer':
+        return 'info'; // Синий для рецензента
+      case 'contributor':
+        return 'success'; // Зеленый для участника
+      case 'viewer':
+        return 'default'; // Серый для наблюдателя
+      default:
+        return 'default';
+    }
+  };
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -64,9 +99,10 @@ const SummaryTab: React.FC<SummaryTabProps> = ({
         {t('createProject.sections.summary')}
       </Typography>
       
-      <Grid container spacing={2}>
-        {/* Основная информация */}
-        <Grid item xs={12} md={6}>
+      <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start' }}>
+        {/* Левая колонка - основная информация */}
+        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {/* Основная информация */}
           <Card variant="outlined">
             <CardContent>
               <Typography variant="subtitle1" gutterBottom>{t('createProject.sections.main')}</Typography>
@@ -80,10 +116,8 @@ const SummaryTab: React.FC<SummaryTabProps> = ({
               )}
             </CardContent>
           </Card>
-        </Grid>
 
-        {/* Workflow пресет */}
-        <Grid item xs={12} md={6}>
+          {/* Workflow пресет */}
           <Card variant="outlined">
             <CardContent>
               <Typography variant="subtitle1" gutterBottom>{t('createProject.summary.workflow_preset')}</Typography>
@@ -101,49 +135,65 @@ const SummaryTab: React.FC<SummaryTabProps> = ({
               )}
             </CardContent>
           </Card>
-        </Grid>
 
-        {/* Дисциплины и типы */}
-        <Grid item xs={12} md={6}>
-          <Card variant="outlined">
-            <CardContent>
-              <Typography variant="subtitle1" gutterBottom>{t('createProject.sections.disciplines_types')}</Typography>
-              {selectedDisciplines.length > 0 ? (
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                  {selectedDisciplines.map((disciplineId) => {
-                    const discipline = getSelectedDiscipline(disciplineId);
-                    const types = (disciplineDocumentTypes[disciplineId] || []).map(item => documentTypes.find(t => t.id === item.documentTypeId)?.code).filter(Boolean);
-                    return (
-                      <Typography key={disciplineId} variant="body2">
-                        {discipline?.code}: {types.length ? types.join(', ') : '—'}
-                      </Typography>
-                    );
-                  })}
-                </Box>
-              ) : (
-                <Typography variant="body2" color="text.secondary">{t('createProject.summary.not_chosen')}</Typography>
-              )}
-            </CardContent>
-          </Card>
-        </Grid>
-
-        {/* Ревизии */}
-        <Grid item xs={12} md={6}>
+          {/* Ревизии */}
           <Card variant="outlined">
             <CardContent>
               <Typography variant="subtitle1" gutterBottom>{t('createProject.sections.revisions')}</Typography>
-              <Typography variant="body2">
-                {t('createProject.sections.revision_descriptions')}: {selectedRevisionDescriptions.length}
-              </Typography>
-              <Typography variant="body2">
-                {t('createProject.sections.revision_steps')}: {selectedRevisionSteps.length}
-              </Typography>
+              
+              {/* Revision Descriptions */}
+              <Box sx={{ mb: 2 }}>
+                <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 1 }}>
+                  {t('createProject.sections.revision_descriptions')} ({selectedRevisionDescriptions.length}):
+                </Typography>
+                {selectedRevisionDescriptions.length > 0 ? (
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                    {selectedRevisionDescriptions.map((descId) => {
+                      const description = revisionDescriptions.find(d => d.id === descId);
+                      return (
+                        <Chip
+                          key={descId}
+                          label={`${description?.code} - ${description?.description || description?.description_native}`}
+                          color="primary"
+                          variant="outlined"
+                          size="small"
+                        />
+                      );
+                    })}
+                  </Box>
+                ) : (
+                  <Typography variant="body2" color="text.secondary">{t('createProject.summary.not_chosen')}</Typography>
+                )}
+              </Box>
+
+              {/* Revision Steps */}
+              <Box>
+                <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 1 }}>
+                  {t('createProject.sections.revision_steps')} ({selectedRevisionSteps.length}):
+                </Typography>
+                {selectedRevisionSteps.length > 0 ? (
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                    {selectedRevisionSteps.map((stepId) => {
+                      const step = revisionSteps.find(s => s.id === stepId);
+                      return (
+                        <Chip
+                          key={stepId}
+                          label={`${step?.code} - ${step?.description || step?.description_native}`}
+                          color="secondary"
+                          variant="outlined"
+                          size="small"
+                        />
+                      );
+                    })}
+                  </Box>
+                ) : (
+                  <Typography variant="body2" color="text.secondary">{t('createProject.summary.not_chosen')}</Typography>
+                )}
+              </Box>
             </CardContent>
           </Card>
-        </Grid>
 
-        {/* Участники проекта */}
-        <Grid item xs={12} md={6}>
+          {/* Участники проекта */}
           <Card variant="outlined">
             <CardContent>
               <Typography variant="subtitle1" gutterBottom>{t('createProject.summary.project_participants')}</Typography>
@@ -170,10 +220,8 @@ const SummaryTab: React.FC<SummaryTabProps> = ({
               )}
             </CardContent>
           </Card>
-        </Grid>
 
-        {/* Доступ к проекту */}
-        <Grid item xs={12} md={6}>
+          {/* Доступ к проекту */}
           <Card variant="outlined">
             <CardContent>
               <Typography variant="subtitle1" gutterBottom>{t('createProject.summary.project_access')}</Typography>
@@ -188,9 +236,27 @@ const SummaryTab: React.FC<SummaryTabProps> = ({
                         <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
                           {user?.full_name || t('createProject.summary.unknown_user')}
                         </Typography>
-                        <Typography variant="body2" color="text.secondary">
-                          {user?.email || t('createProject.summary.no_email')} • {getRoleLabel(member.role)}
-                        </Typography>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
+                          <Typography variant="body2" color="text.secondary">
+                            {user?.email || t('createProject.summary.no_email')}
+                          </Typography>
+                          {(() => {
+                            const role = projectRoles.find(r => r.id === member.project_role_id);
+                            return role ? (
+                              <Chip
+                                label={role.name_en || role.name}
+                                color={getRoleColor(role.code) as any}
+                                size="small"
+                              />
+                            ) : (
+                              <Chip
+                                label="Не назначена"
+                                color="default"
+                                size="small"
+                              />
+                            );
+                          })()}
+                        </Box>
                       </Box>
                     );
                   })}
@@ -198,8 +264,49 @@ const SummaryTab: React.FC<SummaryTabProps> = ({
               )}
             </CardContent>
           </Card>
-        </Grid>
-      </Grid>
+        </Box>
+
+        {/* Правая колонка - дисциплины и типы */}
+        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Card variant="outlined">
+            <CardContent>
+              <Typography variant="subtitle1" gutterBottom>{t('createProject.sections.disciplines_types')}</Typography>
+              {selectedDisciplines.length > 0 ? (
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  {selectedDisciplines.map((disciplineId) => {
+                    const discipline = getSelectedDiscipline(disciplineId);
+                    const types = (disciplineDocumentTypes[disciplineId] || []).map(item => documentTypes.find(t => t.id === item.documentTypeId)?.code).filter(Boolean);
+                    return (
+                      <Box key={disciplineId} sx={{ p: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
+                        <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 1 }}>
+                          {discipline?.code} - {discipline?.name}
+                        </Typography>
+                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                          {types.length > 0 ? (
+                            types.map((typeCode, index) => (
+                              <Chip
+                                key={index}
+                                label={typeCode}
+                                color="primary"
+                                variant="outlined"
+                                size="small"
+                              />
+                            ))
+                          ) : (
+                            <Typography variant="body2" color="text.secondary">—</Typography>
+                          )}
+                        </Box>
+                      </Box>
+                    );
+                  })}
+                </Box>
+              ) : (
+                <Typography variant="body2" color="text.secondary">{t('createProject.summary.not_chosen')}</Typography>
+              )}
+            </CardContent>
+          </Card>
+        </Box>
+      </Box>
     </Box>
   );
 };

@@ -204,6 +204,7 @@ const MainTab: React.FC<MainTabProps> = ({
             value={formData.name}
             onChange={(e) => handleInputChange('name', e.target.value)}
             required
+            variant="standard"
           />
         </Grid>
         <Grid item xs={12} md={4}>
@@ -216,6 +217,7 @@ const MainTab: React.FC<MainTabProps> = ({
             placeholder="PRJ-001"
             error={codeValidation.exists}
             helperText=""
+            variant="standard"
             InputProps={{
               endAdornment: codeValidation.isChecking ? (
                 <CircularProgress size={20} />
@@ -246,7 +248,7 @@ const MainTab: React.FC<MainTabProps> = ({
           )}
         </Grid>
         <Grid item xs={12} md={4}>
-          <FormControl fullWidth>
+          <FormControl fullWidth variant="standard">
             <InputLabel>{t('common.status')}</InputLabel>
             <Select
               value={formData.status}
@@ -273,6 +275,7 @@ const MainTab: React.FC<MainTabProps> = ({
             label={t('createProject.fields.description')}
             value={formData.description}
             onChange={(e) => handleInputChange('description', e.target.value)}
+            variant="standard"
           />
         </Grid>
 
@@ -283,7 +286,8 @@ const MainTab: React.FC<MainTabProps> = ({
             onChange={(date) => handleInputChange('start_date', date)}
             slotProps={{
               textField: {
-                fullWidth: true
+                fullWidth: true,
+                variant: "standard"
               }
             }}
           />
@@ -295,7 +299,8 @@ const MainTab: React.FC<MainTabProps> = ({
             onChange={(date) => handleInputChange('end_date', date)}
             slotProps={{
               textField: {
-                fullWidth: true
+                fullWidth: true,
+                variant: "standard"
               }
             }}
           />

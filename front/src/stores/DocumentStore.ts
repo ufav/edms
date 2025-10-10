@@ -13,10 +13,15 @@ class DocumentStore {
     makeAutoObservable(this);
   }
 
+  // Принудительная перезагрузка документов
+  async reloadDocuments(projectId?: number) {
+    return this.loadDocuments(projectId, true);
+  }
+
   // Загрузка документов из API
-  async loadDocuments(projectId?: number) {
-    // Если это тот же проект и документы уже загружены - не загружаем повторно
-    if (projectId && this.currentProjectId === projectId && this.documents.length > 0) {
+  async loadDocuments(projectId?: number, forceReload = false) {
+    // Если это тот же проект и документы уже загружены - не загружаем повторно (если не принудительная перезагрузка)
+    if (projectId && this.currentProjectId === projectId && this.documents.length > 0 && !forceReload) {
       return;
     }
     
@@ -56,6 +61,7 @@ class DocumentStore {
             project_id: apiDoc.project_id,
             language_id: apiDoc.language_id,
             uploaded_by: apiDoc.uploaded_by,
+            created_by: apiDoc.created_by,
             file_path: apiDoc.file_path,
             discipline_id: apiDoc.discipline_id,
             document_type_id: apiDoc.document_type_id,
@@ -119,7 +125,7 @@ class DocumentStore {
       'Cancelled': 'error',
       'Hold': 'warning',
       'Rejected': 'error',
-      'Superseded': 'info',
+      'Superseded': 'default',
       'Archieved': 'default'
     };
     return colorMap[statusName] || 'default';

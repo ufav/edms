@@ -478,13 +478,14 @@ const WorkflowPresetsPage: React.FC = observer(() => {
                 </Typography>
                 <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
                   <FormControl size="small" sx={{ minWidth: 150 }}>
-                    <InputLabel>{t('workflows.fields.revision_description')}</InputLabel>
+                    <InputLabel shrink>{t('workflows.fields.revision_description')}</InputLabel>
                     <Select
                       value={newSequence.revision_description_id || ''}
                       onChange={(e) => setNewSequence(prev => ({
                         ...prev,
                         revision_description_id: Number(e.target.value)
                       }))}
+                      label={t('workflows.fields.revision_description')}
                     >
                       {workflowStore.revisionDescriptions.map((rd) => (
                         <MenuItem key={rd.id} value={rd.id}>
@@ -495,13 +496,14 @@ const WorkflowPresetsPage: React.FC = observer(() => {
                   </FormControl>
                   
                   <FormControl size="small" sx={{ minWidth: 150 }}>
-                    <InputLabel>{t('workflows.fields.revision_step')}</InputLabel>
+                    <InputLabel shrink>{t('workflows.fields.revision_step')}</InputLabel>
                     <Select
                       value={newSequence.revision_step_id || ''}
                       onChange={(e) => setNewSequence(prev => ({
                         ...prev,
                         revision_step_id: Number(e.target.value)
                       }))}
+                      label={t('workflows.fields.revision_step')}
                     >
                       {workflowStore.revisionSteps.map((rs) => (
                         <MenuItem key={rs.id} value={rs.id}>
@@ -611,7 +613,7 @@ const WorkflowPresetsPage: React.FC = observer(() => {
                       {t('workflows.conditions.if')}:
                     </Typography>
                     <FormControl size="small" sx={{ minWidth: 200 }}>
-                      <InputLabel>{t('workflows.fields.sequence')}</InputLabel>
+                      <InputLabel shrink>{t('workflows.fields.sequence')}</InputLabel>
                       <Select
                         value={newRule.current_revision_description_id || ''}
                         onChange={(e) => {
@@ -626,6 +628,7 @@ const WorkflowPresetsPage: React.FC = observer(() => {
                             }));
                           }
                         }}
+                        label={t('workflows.fields.sequence')}
                       >
                         {getAvailableSequences().map((seq) => (
                           <MenuItem key={seq.id} value={seq.revision_description_id}>
@@ -638,13 +641,14 @@ const WorkflowPresetsPage: React.FC = observer(() => {
                     <Typography variant="body2" color="text.secondary">+</Typography>
                     
                     <FormControl size="small" sx={{ minWidth: 120 }}>
-                      <InputLabel>Review Code</InputLabel>
+                      <InputLabel shrink>Review Code</InputLabel>
                       <Select
                         value={newRule.review_code_id || ''}
                         onChange={(e) => setNewRule(prev => ({
                           ...prev,
                           review_code_id: Number(e.target.value)
                         }))}
+                        label="Review Code"
                       >
                         {workflowStore.reviewCodes.map((rc) => (
                           <MenuItem key={rc.id} value={rc.id}>
@@ -661,7 +665,7 @@ const WorkflowPresetsPage: React.FC = observer(() => {
                       {t('workflows.conditions.then')}:
                     </Typography>
                     <FormControl size="small" sx={{ minWidth: 200 }}>
-                      <InputLabel>{t('workflows.fields.sequence')}</InputLabel>
+                      <InputLabel shrink>{t('workflows.fields.sequence')}</InputLabel>
                       <Select
                         value={newRule.next_revision_description_id || ''}
                         onChange={(e) => {
@@ -684,6 +688,7 @@ const WorkflowPresetsPage: React.FC = observer(() => {
                             }
                           }
                         }}
+                        label={t('workflows.fields.sequence')}
                       >
                         <MenuItem value="">{t('workflows.messages.not_specified')}</MenuItem>
                         {getAvailableSequences().map((seq) => (
@@ -697,13 +702,14 @@ const WorkflowPresetsPage: React.FC = observer(() => {
                     <Typography variant="body2" color="text.secondary">{t('workflows.conditions.or')}</Typography>
                     
                     <FormControl size="small" sx={{ minWidth: 150 }}>
-                      <InputLabel>{t('workflows.fields.action_on_fail')}</InputLabel>
+                      <InputLabel shrink>{t('workflows.fields.action_on_fail')}</InputLabel>
                       <Select
                         value={newRule.action_on_fail}
                         onChange={(e) => setNewRule(prev => ({
                           ...prev,
                           action_on_fail: e.target.value
                         }))}
+                        label={t('workflows.fields.action_on_fail')}
                       >
                         <MenuItem value="increment_number">{t('workflows.messages.increment_number')}</MenuItem>
                         <MenuItem value="keep_same">{t('workflows.messages.keep_same')}</MenuItem>

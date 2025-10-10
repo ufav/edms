@@ -36,12 +36,12 @@ class ProjectParticipantResponse(BaseModel):
     project_id: int
     company_id: int
     company_name: str
-    contact_id: int
-    contact_name: str
-    contact_email: str
-    contact_phone: str
-    company_role_id: int
-    company_role_name: str
+    contact_id: int | None = None
+    contact_name: str | None = None
+    contact_email: str | None = None
+    contact_phone: str | None = None
+    company_role_id: int | None = None
+    company_role_name: str | None = None
     is_primary: bool
     notes: str | None = None
     created_at: str
@@ -78,11 +78,11 @@ async def get_project_participants(
             company_id=participant.company_id,
             company_name=company.name if company else "Неизвестная компания",
             contact_id=participant.contact_id,
-        contact_name=contact.full_name,
-        contact_email=contact.email,
-        contact_phone=contact.phone,
+        contact_name=contact.full_name if contact else None,
+        contact_email=contact.email if contact else None,
+        contact_phone=contact.phone if contact else None,
         company_role_id=participant.company_role_id,
-        company_role_name=role.name,
+        company_role_name=role.name if role else None,
             is_primary=participant.is_primary,
             notes=participant.notes,
             created_at=participant.created_at.isoformat() if participant.created_at else "",

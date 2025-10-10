@@ -16,7 +16,6 @@ export const useCurrentUser = () => {
   const user = userStore.currentUser;
   const isLoading = !userStore.isCurrentUserLoaded;
 
-  const isSuperAdmin = user?.role === 'superadmin';
   const isAdmin = user?.role === 'admin';
   const isOperator = user?.role === 'operator';
   const isViewer = user?.role === 'viewer';
@@ -25,20 +24,51 @@ export const useCurrentUser = () => {
   const canManageProject = (project: any) => {
     if (!user) return false;
     
-    // Суперадмин может управлять любыми проектами
-    if (isSuperAdmin) return true;
+    // Админ может управлять любыми проектами
+    if (isAdmin) return true;
     
     // Проверяем роль пользователя в проекте
     return project.user_role === 'admin';
   };
 
+  // Функция для проверки, может ли пользователь редактировать проект
+  const canEditProject = (project: any) => {
+    if (!user) return false;
+    
+    // Админ может редактировать любые проекты
+    if (isAdmin) return true;
+    
+    // Оператор может редактировать только свои проекты (где он владелец)
+    if (isOperator) {
+      return project.owner_id === user.id;
+    }
+    
+    return false;
+  };
+
+  // Функция для проверки, может ли пользователь удалять проект
+  const canDeleteProject = (project: any) => {
+    if (!user) return false;
+    
+    // Админ может удалять любые проекты
+    if (isAdmin) return true;
+    
+    // Оператор может удалять только свои проекты (где он владелец)
+    if (isOperator) {
+      return project.owner_id === user.id;
+    }
+    
+    return false;
+  };
+
   return {
     user,
     isLoading,
-    isSuperAdmin,
     isAdmin,
     isOperator,
     isViewer,
-    canManageProject
+    canManageProject,
+    canEditProject,
+    canDeleteProject
   };
 };

@@ -18,13 +18,13 @@ import {
   Alert,
   Tabs,
   Tab,
-  Autocomplete
+  Autocomplete,
+  Chip
 } from '@mui/material';
-import { disciplinesApi, projectsApi, projectParticipantsApi } from '../api/client';
+import { disciplinesApi, projectsApi, projectParticipantsApi, rolesApi } from '../api/client';
 import referenceDataStore from '../stores/ReferenceDataStore';
 import { projectDialogStore } from '../stores/ProjectDialogStore';
 import type { Discipline, DocumentType, ProjectParticipant, ProjectParticipantCreate, ProjectMember } from '../api/client';
-import { getRoleLabel, getRoleColor } from '../utils/roleLocalization';
 import DocumentTypeSelectionDialog from './DocumentTypeSelectionDialog';
 import MainTab from './project/MainTab';
 import DisciplinesTypesTab from './project/DisciplinesTypesTab';
@@ -60,7 +60,65 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
   onSaved,
 }) => {
   const { t, i18n } = useTranslation();
-  const { formData, setFormData } = useProjectForm();
+  const { formData, setFormData: originalSetFormData } = useProjectForm();
+  
+  // Обертка для setFormData с отслеживанием изменений
+  const setFormData = (newData: any) => {
+    originalSetFormData(newData);
+    if (mode === 'edit' && isInitialized) {
+      setHasChanges(true);
+    }
+  };
+  
+  // Обертки для отслеживания изменений в других состояниях
+  const setSelectedDisciplinesWithTracking = (newData: any) => {
+    setSelectedDisciplines(newData);
+    if (mode === 'edit' && isInitialized) {
+      setHasChanges(true);
+    }
+  };
+  
+  const setPendingParticipantsWithTracking = (newData: any) => {
+    setPendingParticipants(newData);
+    if (mode === 'edit' && isInitialized) {
+      setHasChanges(true);
+    }
+  };
+  
+  const setPendingProjectMembersWithTracking = (newData: any) => {
+    setPendingProjectMembers(newData);
+    if (mode === 'edit' && isInitialized) {
+      setHasChanges(true);
+    }
+  };
+
+  const setSelectedWorkflowPresetWithTracking = (newData: any) => {
+    setSelectedWorkflowPreset(newData);
+    if (mode === 'edit' && isInitialized) {
+      setHasChanges(true);
+    }
+  };
+
+  const setSelectedRevisionDescriptionsWithTracking = (newData: any) => {
+    setSelectedRevisionDescriptions(newData);
+    if (mode === 'edit' && isInitialized) {
+      setHasChanges(true);
+    }
+  };
+
+  const setSelectedRevisionStepsWithTracking = (newData: any) => {
+    setSelectedRevisionSteps(newData);
+    if (mode === 'edit' && isInitialized) {
+      setHasChanges(true);
+    }
+  };
+
+  const setDisciplineDocumentTypesWithTracking = (newData: any) => {
+    setDisciplineDocumentTypes(newData);
+    if (mode === 'edit' && isInitialized) {
+      setHasChanges(true);
+    }
+  };
   const [importWarnings, setImportWarnings] = useState<string[]>([]);
   const [isMobile] = useState(false);
   const [codeValidation, setCodeValidation] = useState<{
@@ -86,6 +144,9 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
   const [selectedRevisionSteps, setSelectedRevisionSteps] = useState<number[]>([]);
   const [selectedWorkflowPreset, setSelectedWorkflowPreset] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [hasChanges, setHasChanges] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [tabIndex, setTabIndex] = useState(0);
   const [pendingParticipants, setPendingParticipants] = useState<ProjectParticipant[]>([]);
@@ -103,8 +164,9 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
   const [selectedProjectMember, setSelectedProjectMember] = useState<ProjectMember | null>(null);
   const [projectMemberFormData, setProjectMemberFormData] = useState({
     user_id: null as number | null,
-    role: 'viewer'
+    project_role_id: null as number | null
   });
+  const [projectRoles, setProjectRoles] = useState<any[]>([]);
   const [participantDialogOpen, setParticipantDialogOpen] = useState(false);
   const [isEditingParticipant, setIsEditingParticipant] = useState(false);
   const [selectedParticipant, setSelectedParticipant] = useState<ProjectParticipant | null>(null);
@@ -126,7 +188,7 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
           name: '',
           project_code: '',
           description: '',
-          status: 'planning',
+          status: '',
           start_date: null,
           end_date: null,
           budget: '',
@@ -137,14 +199,14 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
         setSelectedRevisionSteps([]);
         setError(null);
         clearWarnings();
-        setPendingParticipants([]);
-        setPendingProjectMembers([]);
+        setPendingParticipantsWithTracking([]);
+        setPendingProjectMembersWithTracking([]);
         setProjectMemberDialogOpen(false);
         setIsEditingProjectMember(false);
         setSelectedProjectMember(null);
         setProjectMemberFormData({
           user_id: null,
-          role: 'viewer'
+          project_role_id: null
         });
         setParticipantDialogOpen(false);
         setIsEditingParticipant(false);
@@ -162,8 +224,20 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
         // Загрузка данных для редактирования
         loadProjectData();
       }
+      
+      // Загружаем роли проектов
+      loadProjectRoles();
     }
   }, [open, mode, projectId]);
+
+  const loadProjectRoles = async () => {
+    try {
+      const roles = await rolesApi.getProjectRoles();
+      setProjectRoles(roles);
+    } catch (error) {
+      console.error('Ошибка загрузки ролей проектов:', error);
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -174,6 +248,9 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
         projectDialogStore.loadAllData(),
         referenceDataStore.loadAllReferenceData()
       ]);
+
+      // Перезагружаем workflow presets для получения новых пресетов пользователя
+      await projectDialogStore.reloadWorkflowPresets();
     } catch (err: any) {
       console.error('Error loading data:', err);
       console.error('Error details:', err.response?.data || err.message);
@@ -187,6 +264,7 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
     try {
       setLoading(true);
       setError(null);
+      setHasChanges(false);
       
       // Загружаем данные проекта
       const project = await projectsApi.getById(projectId!);
@@ -196,7 +274,7 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
         name: project.name || '',
         project_code: project.project_code || '',
         description: project.description || '',
-        status: project.status?.toLowerCase() || 'planning',
+        status: project.status?.toLowerCase() || '',
         start_date: project.start_date ? new Date(project.start_date) : null,
         end_date: project.end_date ? new Date(project.end_date) : null,
         budget: project.budget?.toString() || '',
@@ -207,6 +285,9 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
         projectDialogStore.loadAllData(),
         referenceDataStore.loadAllReferenceData()
       ]);
+
+      // Перезагружаем workflow presets для получения новых пресетов пользователя
+      await projectDialogStore.reloadWorkflowPresets();
 
       // Загружаем данные проекта через кэшированный стор
       const projectData = await projectDialogStore.loadProjectData(projectId!);
@@ -233,28 +314,29 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
           drs: (dt as any).drs // Временное решение, пока не обновлен тип
         }));
       }
-      setDisciplineDocumentTypes(disciplineDocTypes);
+      setDisciplineDocumentTypesWithTracking(disciplineDocTypes);
 
-      setPendingParticipants(projectData.participants);
-      setPendingProjectMembers(projectData.members);
+      setPendingParticipantsWithTracking(projectData.participants);
+      setPendingProjectMembersWithTracking(projectData.members);
 
     } catch (err: any) {
       console.error('Error loading project data:', err);
       setError(`Ошибка загрузки данных проекта: ${err.response?.data?.detail || err.message || 'Неизвестная ошибка'}`);
     } finally {
       setLoading(false);
+      setIsInitialized(true);
     }
   };
 
   const handleDisciplineToggle = (disciplineId: number) => {
-    setSelectedDisciplines(prev => {
+    setSelectedDisciplinesWithTracking((prev: number[]) => {
       const newSelected = prev.includes(disciplineId)
-        ? prev.filter(id => id !== disciplineId)
+        ? prev.filter((id: number) => id !== disciplineId)
         : [...prev, disciplineId];
       
       // Очищаем типы документов для удаленных дисциплин
       if (!newSelected.includes(disciplineId)) {
-        setDisciplineDocumentTypes(prevTypes => {
+        setDisciplineDocumentTypesWithTracking((prevTypes: any) => {
           const newTypes = { ...prevTypes };
           delete newTypes[disciplineId];
           return newTypes;
@@ -266,14 +348,14 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
   };
 
   const handleDocumentTypeToggle = (disciplineId: number, documentTypeId: number) => {
-    setDisciplineDocumentTypes(prev => {
+    setDisciplineDocumentTypesWithTracking((prev: any) => {
       const currentTypes = prev[disciplineId] || [];
-      const existingIndex = currentTypes.findIndex(item => item.documentTypeId === documentTypeId);
+      const existingIndex = currentTypes.findIndex((item: any) => item.documentTypeId === documentTypeId);
       
       let newTypes;
       if (existingIndex >= 0) {
         // Удаляем существующий тип
-        newTypes = currentTypes.filter((_, index) => index !== existingIndex);
+        newTypes = currentTypes.filter((_: any, index: any) => index !== existingIndex);
       } else {
         // Добавляем новый тип
         newTypes = [...currentTypes, { documentTypeId, drs: undefined }];
@@ -287,17 +369,17 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
   };
 
   const handleRevisionDescriptionToggle = (revisionDescriptionId: number) => {
-    setSelectedRevisionDescriptions(prev => 
+    setSelectedRevisionDescriptionsWithTracking((prev: any) => 
       prev.includes(revisionDescriptionId)
-        ? prev.filter(id => id !== revisionDescriptionId)
+        ? prev.filter((id: any) => id !== revisionDescriptionId)
         : [...prev, revisionDescriptionId]
     );
   };
 
   const handleRevisionStepToggle = (revisionStepId: number) => {
-    setSelectedRevisionSteps(prev => 
+    setSelectedRevisionStepsWithTracking((prev: any) => 
       prev.includes(revisionStepId)
-        ? prev.filter(id => id !== revisionStepId)
+        ? prev.filter((id: any) => id !== revisionStepId)
         : [...prev, revisionStepId]
     );
   };
@@ -334,7 +416,7 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
     }
 
     try {
-      setLoading(true);
+      setSaving(true);
       setError(null);
 
       // Преобразуем статус в enum формат
@@ -349,7 +431,7 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
       const { budget, ...formDataWithoutBudget } = formData;
       const projectData = {
         ...formDataWithoutBudget,
-        status: statusMapping[formData.status as keyof typeof statusMapping] || 'ACTIVE',
+        status: statusMapping[formData.status as keyof typeof statusMapping] || 'PLANNING',
         start_date: formData.start_date?.toISOString().split('T')[0] || null,
         end_date: formData.end_date?.toISOString().split('T')[0] || null,
         selected_disciplines: selectedDisciplines,
@@ -363,8 +445,18 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
         selected_revision_descriptions: selectedRevisionDescriptions,
         selected_revision_steps: selectedRevisionSteps,
         workflow_preset_id: selectedWorkflowPreset,
+        members: pendingProjectMembers.map(member => ({
+          user_id: member.user_id,
+          project_role_id: member.project_role_id
+        })),
+        participants: pendingParticipants.map(participant => ({
+          company_id: participant.company_id,
+          contact_id: participant.contact_id,
+          company_role_id: participant.company_role_id,
+          is_primary: participant.is_primary,
+          notes: participant.notes
+        })),
       };
-
 
 
       if (mode === 'create') {
@@ -396,7 +488,6 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
             for (const member of pendingProjectMembers) {
               await projectsApi.members.add(newProject.id, {
                 user_id: member.user_id,
-                role: member.role, // Legacy field
                 project_role_id: member.project_role_id
               });
             }
@@ -419,7 +510,7 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
       console.error('Детали ошибки:', err.response?.data);
       setError(err.response?.data?.detail || t('createProject.messages.project_create_error'));
     } finally {
-      setLoading(false);
+      setSaving(false);
     }
   };
 
@@ -434,7 +525,7 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
 
   const handleDeleteParticipant = (participantId: number) => {
     const updatedParticipants = pendingParticipants.filter(p => p.id !== participantId);
-    setPendingParticipants(updatedParticipants);
+    setPendingParticipantsWithTracking(updatedParticipants);
   };
 
   const handleSaveParticipant = (participantData?: any) => {
@@ -461,10 +552,10 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
         const updatedParticipants = pendingParticipants.map(p => 
           p.id === selectedParticipant.id ? newParticipant : p
         );
-        setPendingParticipants(updatedParticipants);
+        setPendingParticipantsWithTracking(updatedParticipants);
       } else {
         // Добавление
-        setPendingParticipants([...pendingParticipants, newParticipant]);
+        setPendingParticipantsWithTracking([...pendingParticipants, newParticipant]);
       }
     } else {
       // Старая логика для совместимости
@@ -489,10 +580,10 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
         const updatedParticipants = pendingParticipants.map(p => 
           p.id === selectedParticipant.id ? newParticipant : p
         );
-        setPendingParticipants(updatedParticipants);
+        setPendingParticipantsWithTracking(updatedParticipants);
       } else {
         // Добавление
-        setPendingParticipants([...pendingParticipants, newParticipant]);
+        setPendingParticipantsWithTracking([...pendingParticipants, newParticipant]);
       }
 
       setParticipantFormData({
@@ -512,7 +603,7 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
   // Функции для управления участниками проекта (пользователями)
   const handleDeleteProjectMember = (memberId: number) => {
     const updatedMembers = pendingProjectMembers.filter(m => m.id !== memberId);
-    setPendingProjectMembers(updatedMembers);
+    setPendingProjectMembersWithTracking(updatedMembers);
   };
 
   const handleSaveProjectMember = (memberData?: any) => {
@@ -522,7 +613,7 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
         id: memberData.id,
         project_id: mode === 'edit' ? projectId! : 0, // Будет установлен после создания проекта
         user_id: memberData.user_id,
-        role: memberData.role,
+        project_role_id: memberData.project_role_id || undefined,
         joined_at: new Date().toISOString()
       };
 
@@ -531,11 +622,11 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
         const updatedMembers = pendingProjectMembers.map(m => 
           m.id === selectedProjectMember.id ? newMember : m
         );
-        setPendingProjectMembers(updatedMembers);
+        setPendingProjectMembersWithTracking(updatedMembers);
       } else {
         // Добавление
         const updatedMembers = [...pendingProjectMembers, newMember];
-        setPendingProjectMembers(updatedMembers);
+        setPendingProjectMembersWithTracking(updatedMembers);
       }
     } else {
       // Старая логика для совместимости
@@ -547,7 +638,7 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
         id: Date.now(), // Временный ID
         project_id: mode === 'edit' ? projectId! : 0, // Будет установлен после создания проекта
         user_id: projectMemberFormData.user_id,
-        role: projectMemberFormData.role,
+        project_role_id: projectMemberFormData.project_role_id || undefined,
         joined_at: new Date().toISOString()
       };
 
@@ -556,16 +647,16 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
         const updatedMembers = pendingProjectMembers.map(m => 
           m.id === selectedProjectMember.id ? newMember : m
         );
-        setPendingProjectMembers(updatedMembers);
+        setPendingProjectMembersWithTracking(updatedMembers);
       } else {
         // Добавление
-        setPendingProjectMembers([...pendingProjectMembers, newMember]);
+        setPendingProjectMembersWithTracking([...pendingProjectMembers, newMember]);
       }
     }
 
     setProjectMemberFormData({
       user_id: null,
-      role: 'viewer'
+      project_role_id: null
     });
     setProjectMemberDialogOpen(false);
     setIsEditingProjectMember(false);
@@ -573,13 +664,6 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
     setError(null);
   };
 
-  const getRoleLabelLocalized = (role: string): string => {
-    return getRoleLabel(role, t);
-  };
-
-  const getRoleColorLocalized = (role: string): "primary" | "secondary" | "error" | "info" | "success" | "warning" => {
-    return getRoleColor(role);
-  };
 
 
   const handleClose = () => {
@@ -587,7 +671,7 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
       name: '',
       project_code: '',
       description: '',
-      status: 'planning',
+      status: '',
       start_date: null,
       end_date: null,
       budget: '',
@@ -619,6 +703,8 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
       projectDialogStore.clearProjectCache(projectId);
     }
     
+    setHasChanges(false);
+    setIsInitialized(false);
     onClose();
   };
 
@@ -651,11 +737,11 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
       return prev;
     });
     
-    setDisciplineDocumentTypes(prev => {
+    setDisciplineDocumentTypesWithTracking((prev: any) => {
       const arr = prev[disciplineId] || [];
-      const existingIds = arr.map(item => item.documentTypeId);
-      const newTypeIds = documentTypes.map(dt => dt.id).filter(id => !existingIds.includes(id));
-      const newItems = newTypeIds.map(id => ({ documentTypeId: id, drs: undefined }));
+      const existingIds = arr.map((item: any) => item.documentTypeId);
+      const newTypeIds = documentTypes.map((dt: any) => dt.id).filter((id: any) => !existingIds.includes(id));
+      const newItems = newTypeIds.map((id: any) => ({ documentTypeId: id, drs: undefined }));
       return { ...prev, [disciplineId]: [...arr, ...newItems] };
     });
 
@@ -697,11 +783,11 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
 
     // Добавляем связи дисциплина-тип документа
     if (result.documentTypesToAdd.length > 0) {
-      setDisciplineDocumentTypes(prev => {
+      setDisciplineDocumentTypesWithTracking((prev: any) => {
         const newDisciplineDocumentTypes = { ...prev };
-        result.documentTypesToAdd.forEach(item => {
+        result.documentTypesToAdd.forEach((item: any) => {
           const arr = newDisciplineDocumentTypes[item.disciplineId] || [];
-          const existingItem = arr.find(dt => dt.documentTypeId === item.documentTypeId);
+          const existingItem = arr.find((dt: any) => dt.documentTypeId === item.documentTypeId);
           if (!existingItem) {
             newDisciplineDocumentTypes[item.disciplineId] = [
               ...arr, 
@@ -713,7 +799,7 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
               documentTypeId: item.documentTypeId,
               drs: item.drs || existingItem.drs // Используем новый drs или сохраняем существующий
             };
-            const index = arr.findIndex(dt => dt.documentTypeId === item.documentTypeId);
+            const index = arr.findIndex((dt: any) => dt.documentTypeId === item.documentTypeId);
             arr[index] = updatedItem;
             newDisciplineDocumentTypes[item.disciplineId] = arr;
           }
@@ -732,10 +818,10 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
     : t('project.edit');
   
   const submitButtonText = mode === 'create' 
-    ? (loading ? t('createProject.creating') : t('project.create'))
-    : (loading ? t('createProject.creating') : t('common.save'));
+    ? (saving ? t('createProject.creating') : t('project.create'))
+    : (saving ? t('common.saving') : t('common.save'));
   
-  const submitButtonDisabled = loading || !formData.name || selectedDisciplines.length === 0 || (mode === 'create' && codeValidation.exists);
+  const submitButtonDisabled = loading || saving || !formData.name || selectedDisciplines.length === 0 || (mode === 'create' && codeValidation.exists) || (mode === 'edit' && !hasChanges);
 
   
   return (
@@ -772,48 +858,66 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
         </Box>
         <DialogContent sx={{ 
           height: 700,
-          p: isMobile ? 1 : 3
+          p: 0,
+          display: 'flex',
+          flexDirection: 'column'
         }}>
           {error && (
-            <Alert severity="error" sx={{ mb: 2 }}>
+            <Alert severity="error" sx={{ m: isMobile ? 1 : 3, mb: 2 }}>
               {typeof error === 'string' ? error : JSON.stringify(error)}
             </Alert>
           )}
-          
-          {/* Tabs header */}
-          <Tabs
-            value={tabIndex}
-            onChange={(_, v) => setTabIndex(v)}
-            sx={{ 
-              borderBottom: 1, 
-              borderColor: 'divider', 
-              mb: 2,
-              '& .MuiTab-root': {
-                '&:focus': {
-                  outline: 'none !important',
-                  boxShadow: 'none !important',
-                },
-                '&.Mui-selected': {
-                  outline: 'none !important',
-                  boxShadow: 'none !important',
-                },
-                '&:focus-visible': {
-                  outline: 'none !important',
-                  boxShadow: 'none !important',
+
+          {/* Fixed Tabs header */}
+          <Box sx={{ 
+            position: 'sticky',
+            top: 0,
+            zIndex: 1,
+            backgroundColor: 'background.paper',
+            borderBottom: 1,
+            borderColor: 'divider',
+            px: isMobile ? 1 : 3,
+            pt: isMobile ? 1 : 3
+          }}>
+            <Tabs
+              value={tabIndex}
+              onChange={(_, v) => setTabIndex(v)}
+              sx={{ 
+                '& .MuiTab-root': {
+                  '&:focus': {
+                    outline: 'none !important',
+                    boxShadow: 'none !important',
+                  },
+                  '&.Mui-selected': {
+                    outline: 'none !important',
+                    boxShadow: 'none !important',
+                  },
+                  '&:focus-visible': {
+                    outline: 'none !important',
+                    boxShadow: 'none !important',
+                  }
                 }
-              }
-            }}
-            variant="scrollable"
-            scrollButtons="auto"
-          >
-            <Tab label={t('createProject.tabs.main')} />
-            <Tab label={t('createProject.tabs.disciplines_types')} />
-            <Tab label={t('createProject.tabs.revisions')} />
-            <Tab label={t('createProject.tabs.workflow')} />
-            <Tab label={t('createProject.tabs.participants')} />
-            <Tab label={t('createProject.tabs.users')} />
-            <Tab label={t('createProject.tabs.summary')} />
-          </Tabs>
+              }}
+              variant="scrollable"
+              scrollButtons="auto"
+            >
+              <Tab label={t('createProject.tabs.main')} />
+              <Tab label={t('createProject.tabs.disciplines_types')} />
+              <Tab label={t('createProject.tabs.revisions')} />
+              <Tab label={t('createProject.tabs.workflow')} />
+              <Tab label={t('createProject.tabs.participants')} />
+              <Tab label={t('createProject.tabs.users')} />
+              <Tab label={t('createProject.tabs.summary')} />
+            </Tabs>
+          </Box>
+
+          {/* Scrollable content area */}
+          <Box sx={{ 
+            flex: 1,
+            overflow: 'auto',
+            p: isMobile ? 1 : 3,
+            pt: 2
+          }}>
 
           {/* Tab 0: Основное */}
           {tabIndex === 0 && (
@@ -861,7 +965,7 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
             <WorkflowTab
               workflowPresets={projectDialogStore.workflowPresets}
               selectedWorkflowPreset={selectedWorkflowPreset}
-              onWorkflowPresetChange={setSelectedWorkflowPreset}
+              onWorkflowPresetChange={setSelectedWorkflowPresetWithTracking}
             />
           )}
 
@@ -886,10 +990,9 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
             <UsersTab
               pendingProjectMembers={pendingProjectMembers}
               users={users}
+              projectRoles={projectRoles}
               onDeleteProjectMember={handleDeleteProjectMember}
               onSaveProjectMember={handleSaveProjectMember}
-              getRoleLabel={getRoleLabelLocalized}
-              getRoleColor={getRoleColorLocalized}
             />
           )}
 
@@ -911,8 +1014,42 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
               contacts={contacts}
               companyRoles={companyRoles}
               users={users}
-              getRoleLabel={getRoleLabelLocalized}
+              revisionDescriptions={projectDialogStore.revisionDescriptions}
+              revisionSteps={projectDialogStore.revisionSteps}
             />
+          )}
+          </Box>
+
+          {/* Fixed bottom area for selected disciplines and types */}
+          {tabIndex === 1 && selectedDisciplines.length > 0 && (
+            <Box sx={{ 
+              position: 'sticky',
+              bottom: 0,
+              zIndex: 1,
+              backgroundColor: 'background.paper',
+              borderTop: 1,
+              borderColor: 'divider',
+              p: isMobile ? 1 : 2,
+              mt: 'auto'
+            }}>
+              <Typography variant="subtitle2" gutterBottom sx={{ mb: 1 }}>
+                {t('createProject.selected_disciplines')}
+              </Typography>
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                {selectedDisciplines.map((disciplineId) => {
+                  const discipline = projectDialogStore.disciplines.find(d => d.id === disciplineId);
+                  const selectedTypes = disciplineDocumentTypes[disciplineId] || [];
+                  return (
+                    <Chip
+                      key={disciplineId}
+                      label={`${discipline?.code} (${selectedTypes.length} ${t('common.types')})`}
+                      color="primary"
+                      variant="filled"
+                    />
+                  );
+                })}
+              </Box>
+            </Box>
           )}
         </DialogContent>
         <DialogActions>
@@ -940,7 +1077,7 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
         </DialogTitle>
         <DialogContent>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
-            <FormControl fullWidth required>
+            <FormControl fullWidth required variant="standard">
               <InputLabel>{t('createProject.fields.company')}</InputLabel>
               <Select
                 value={participantFormData.company_id || ''}
@@ -955,7 +1092,7 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
               </Select>
             </FormControl>
 
-            <FormControl fullWidth required>
+            <FormControl fullWidth required variant="standard">
               <InputLabel>{t('createProject.fields.contact_person')}</InputLabel>
                 <Select
                 value={participantFormData.contact_id || ''}
@@ -971,7 +1108,7 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
               </Select>
             </FormControl>
 
-            <FormControl fullWidth required>
+            <FormControl fullWidth required variant="standard">
               <InputLabel>{t('createProject.fields.company_role')}</InputLabel>
               <Select
                 value={participantFormData.company_role_id || ''}
@@ -1000,6 +1137,7 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
               fullWidth
               label={t('createProject.fields.notes')}
               multiline
+              variant="standard"
               rows={3}
               value={participantFormData.notes}
               onChange={(e) => setParticipantFormData(prev => ({ ...prev, notes: e.target.value }))}
@@ -1062,6 +1200,7 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
                   {...params}
                   label={t('createProject.fields.user')}
                   placeholder={t('createProject.messages.start_typing_user')}
+                  variant="standard"
                 />
               )}
               renderOption={(props, user) => {
@@ -1106,16 +1245,21 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
               }}
             />
 
-            <FormControl fullWidth>
+            <FormControl fullWidth variant="standard">
               <InputLabel>{t('createProject.fields.role')}</InputLabel>
               <Select
-                value={projectMemberFormData.role}
-                onChange={(e) => setProjectMemberFormData(prev => ({ ...prev, role: e.target.value }))}
+                value={projectMemberFormData.project_role_id || ''}
+                onChange={(e) => setProjectMemberFormData(prev => ({ 
+                  ...prev, 
+                  project_role_id: e.target.value as number
+                }))}
                 label={t('createProject.fields.role')}
               >
-                <MenuItem value="admin">{t('createProject.roles.admin')}</MenuItem>
-                <MenuItem value="operator">{t('createProject.roles.operator')}</MenuItem>
-                <MenuItem value="viewer">{t('createProject.roles.viewer')}</MenuItem>
+                {projectRoles.map((role) => (
+                  <MenuItem key={role.id} value={role.id}>
+                    {role.name_en || role.name} - {role.description}
+                  </MenuItem>
+                ))}
               </Select>
             </FormControl>
                         </Box>
@@ -1127,7 +1271,7 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
             setSelectedProjectMember(null);
             setProjectMemberFormData({
               user_id: null,
-              role: 'viewer'
+              project_role_id: null
             });
             setError(null);
           }}>

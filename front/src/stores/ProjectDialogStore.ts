@@ -152,6 +152,22 @@ class ProjectDialogStore {
     }
   }
 
+  // Принудительная перезагрузка workflow presets
+  async reloadWorkflowPresets() {
+    try {
+      const workflowPresetsData = await workflowPresetsApi.getAll();
+      runInAction(() => {
+        this.workflowPresets = workflowPresetsData;
+        this.isWorkflowPresetsLoaded = true;
+      });
+    } catch (error: any) {
+      runInAction(() => {
+        this.error = `Ошибка перезагрузки пресетов: ${error.message || 'Неизвестная ошибка'}`;
+      });
+      throw error;
+    }
+  }
+
   // Очистка всех данных (для принудительной перезагрузки)
   clearAll() {
     this.disciplines = [];

@@ -1,74 +1,118 @@
 import { useMemo } from 'react';
-import { 
-  SYSTEM_ROLES, 
-  SYSTEM_ROLE_PERMISSIONS, 
-  hasSystemPermission, 
-  type SystemRoleCode,
-  PROJECT_ROLES,
-  PROJECT_ROLE_PERMISSIONS,
-  hasProjectPermission,
-  type ProjectRoleCode
-} from '../types/roles';
+import { userStore } from '../stores/UserStore';
 
-// Хук для проверки системных прав доступа
-export const useSystemPermissions = (userRole: SystemRoleCode | null) => {
-  const permissions = useMemo(() => {
-    if (!userRole) {
-      // Если роль не определена, возвращаем все права как false
-      return Object.keys(SYSTEM_ROLE_PERMISSIONS[SYSTEM_ROLES.VIEWER]).reduce((acc, key) => {
-        acc[key as keyof typeof SYSTEM_ROLE_PERMISSIONS[SystemRoleCode]] = false;
-        return acc;
-      }, {} as Record<string, boolean>);
+export interface Permission {
+  canViewUsers: boolean;
+  canViewAdmin: boolean;
+  canCreateProjects: boolean;
+  canDeleteProjects: boolean; // Только свои проекты для operator
+  canDeleteAnyProjects: boolean; // Любые проекты для admin
+  canManageProjectMembers: boolean;
+  canViewAllProjects: boolean;
+  canViewWorkflows: boolean;
+}
+
+export const usePermissions = (): Permission => {
+  const user = userStore.currentUser;
+  
+  return useMemo(() => {
+    if (!user) {
+      return {
+        canViewUsers: false,
+        canViewAdmin: false,
+        canCreateProjects: false,
+        canDeleteProjects: false,
+        canDeleteAnyProjects: false,
+        canManageProjectMembers: false,
+        canViewAllProjects: false,
+        canViewWorkflows: false,
+      };
     }
 
-    return SYSTEM_ROLE_PERMISSIONS[userRole];
-  }, [userRole]);
+    const role = user.role;
+    
+    switch (role) {
+      case 'admin':
+        return {
+          canViewUsers: true,
+          canViewAdmin: true,
+          canCreateProjects: true,
+          canDeleteProjects: true, // Может удалять любые проекты
+          canDeleteAnyProjects: true, // Может удалять любые проекты
+          canManageProjectMembers: true,
+          canViewAllProjects: true,
+          canViewWorkflows: true,
+        };
+      
+      case 'operator':
+        return {
+          canViewUsers: false,
+          canViewAdmin: false,
+          canCreateProjects: true,
+          canDeleteProjects: true, // Может удалять только свои проекты
+          canDeleteAnyProjects: false, // НЕ может удалять чужие проекты
+          canManageProjectMembers: true, // В рамках своих проектов
+          canViewAllProjects: false, // Только свои проекты
+          canViewWorkflows: true,
+        };
+      
+      case 'viewer':
+        return {
+          canViewUsers: false,
+          canViewAdmin: false,
+          canCreateProjects: false,
+          canDeleteProjects: false,
+          canDeleteAnyProjects: false,
+          canManageProjectMembers: false,
+          canViewAllProjects: false,
+          canViewWorkflows: false,
+        };
+      
+      default:
+        return {
+          canViewUsers: false,
+          canViewAdmin: false,
+          canCreateProjects: false,
+          canDeleteProjects: false,
+          canDeleteAnyProjects: false,
+          canManageProjectMembers: false,
+          canViewAllProjects: false,
+          canViewWorkflows: false,
+        };
+    }
+  }, [user]);
+};
 
-  // Функция для проверки конкретного права
-  const checkPermission = (permission: keyof typeof SYSTEM_ROLE_PERMISSIONS[SystemRoleCode]): boolean => {
-    return hasSystemPermission(userRole || SYSTEM_ROLES.VIEWER, permission);
-  };
+// Хук для проверки конкретных разрешений
+export const usePermission = (permission: keyof Permission): boolean => {
+  const permissions = usePermissions();
+  return permissions[permission];
+};
 
+// Хук для проверки роли
+export const useRole = () => {
+  const user = userStore.currentUser;
   return {
-    permissions,
-    checkPermission,
-    isAdmin: userRole === SYSTEM_ROLES.ADMIN,
-    isOperator: userRole === SYSTEM_ROLES.OPERATOR,
-    isViewer: userRole === SYSTEM_ROLES.VIEWER
+    isAdmin: user?.role === 'admin',
+    isOperator: user?.role === 'operator',
+    isViewer: user?.role === 'viewer',
+    role: user?.role || null,
   };
 };
 
-// Хук для проверки проектных прав доступа
-export const useProjectPermissions = (projectRole: ProjectRoleCode | null) => {
-  const permissions = useMemo(() => {
-    if (!projectRole) {
-      // Если роль не определена, возвращаем все права как false
-      return Object.keys(PROJECT_ROLE_PERMISSIONS[PROJECT_ROLES.VIEWER]).reduce((acc, key) => {
-        acc[key as keyof typeof PROJECT_ROLE_PERMISSIONS[ProjectRoleCode]] = false;
-        return acc;
-      }, {} as Record<string, boolean>);
-    }
-
-    return PROJECT_ROLE_PERMISSIONS[projectRole];
-  }, [projectRole]);
-
-  // Функция для проверки конкретного права
-  const checkPermission = (permission: keyof typeof PROJECT_ROLE_PERMISSIONS[ProjectRoleCode]): boolean => {
-    return hasProjectPermission(projectRole || PROJECT_ROLES.VIEWER, permission);
-  };
-
-  return {
-    permissions,
-    checkPermission,
-    isOwner: projectRole === PROJECT_ROLES.OWNER,
-    isManager: projectRole === PROJECT_ROLES.MANAGER,
-    isReviewer: projectRole === PROJECT_ROLES.REVIEWER,
-    isContributor: projectRole === PROJECT_ROLES.CONTRIBUTOR,
-    isViewer: projectRole === PROJECT_ROLES.VIEWER
-  };
-};
-
-// Обратная совместимость - старый хук
-export const usePermissions = (userRole: SystemRoleCode | null) => {
-  return useSystemPermissions(userRole);
+// Функция для проверки, может ли пользователь удалить конкретный проект
+export const canDeleteProject = (project: { created_by?: number; owner_id?: number }): boolean => {
+  const user = userStore.currentUser;
+  if (!user) return false;
+  
+  // Админ может удалять любые проекты
+  if (user.role === 'admin') return true;
+  
+  // Оператор может удалять только свои проекты
+  if (user.role === 'operator') {
+    const projectOwnerId = project.created_by || project.owner_id;
+    return projectOwnerId === user.id;
+  }
+  
+  return false;
 };

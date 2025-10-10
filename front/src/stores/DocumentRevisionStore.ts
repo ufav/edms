@@ -48,6 +48,13 @@ class DocumentRevisionStore {
     return this.revisions[documentId] || [];
   }
 
+  // Принудительная перезагрузка ревизий документа
+  async reloadRevisions(documentId: number) {
+    // Удаляем из кэша, чтобы принудительно перезагрузить
+    this.loadedDocuments.delete(documentId);
+    return await this.loadRevisions(documentId);
+  }
+
   // Очистка ревизий документа
   clearRevisions(documentId: number) {
     delete this.revisions[documentId];

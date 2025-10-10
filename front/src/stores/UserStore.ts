@@ -143,6 +143,12 @@ class UserStore {
     this.isUsersLoaded = false;
     this.error = null;
   }
+
+  // Очистка текущего пользователя
+  clearCurrentUser() {
+    this.currentUser = null;
+    this.isCurrentUserLoaded = false;
+  }
 }
 
 export const userStore = new UserStore();

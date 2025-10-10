@@ -37,15 +37,16 @@ import {
   Card,
   CardContent,
   CardActions,
+  TablePagination,
 } from '@mui/material';
 import {
   Search as SearchIcon,
   Download as DownloadIcon,
-  CloudUpload as CloudUploadIcon,
   Settings as SettingsIcon,
   UploadFile as UploadFileIcon,
   Description as DescriptionIcon,
   Delete as DeleteIcon,
+  Add as AddIcon,
 } from '@mui/icons-material';
 import { observer } from 'mobx-react-lite';
 import { projectStore } from '../stores/ProjectStore';
@@ -59,14 +60,19 @@ import { referencesStore } from '../stores/ReferencesStore';
 import ProjectRequired from './ProjectRequired';
 import ConfirmDialog from './ConfirmDialog';
 import { documentsApi, type Document as ApiDocument, workflowApi } from '../api/client';
+import { useCurrentUser } from '../hooks/useCurrentUser';
 import { useTranslation } from 'react-i18next';
 import { useRefreshStore } from '../hooks/useRefreshStore';
+import { DocumentViewer, DocumentRevisionDialog, DocumentCompareDialog } from './document';
+import DocumentComments from './document/DocumentComments';
+import NotificationSnackbar from './NotificationSnackbar';
 
 const DocumentsPage: React.FC = observer(() => {
   const { t, i18n } = useTranslation();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const { refreshDocuments } = useRefreshStore();
+  const { isViewer } = useCurrentUser();
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -97,26 +103,33 @@ const DocumentsPage: React.FC = observer(() => {
   const [documentToDelete, setDocumentToDelete] = useState<ApiDocument | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [newRevisionOpen, setNewRevisionOpen] = useState(false);
-  const [newRevisionFile, setNewRevisionFile] = useState<File | null>(null);
-  const [changeDescription, setChangeDescription] = useState('');
-  const [fileError, setFileError] = useState<string>('');
   const [documentDetailsOpen, setDocumentDetailsOpen] = useState(false);
   const [selectedDocument, setSelectedDocument] = useState<ApiDocument | null>(null);
-  const [selectedRevisions, setSelectedRevisions] = useState<{r1: string, r2: string}>({r1: '', r2: ''});
-  const [comparison, setComparison] = useState<any>(null);
+  const [isCreatingDocument, setIsCreatingDocument] = useState(false);
   const [compareOpen, setCompareOpen] = useState(false);
   const [workflowOpen, setWorkflowOpen] = useState(false);
   const [selectedDocumentForWorkflow, setSelectedDocumentForWorkflow] = useState<ApiDocument | null>(null);
   const [workflowTemplates] = useState<any[]>([]);
   const [workflowStatus, setWorkflowStatus] = useState<any>(null);
+  const [commentsOpen, setCommentsOpen] = useState(false);
+  
+  // Состояние для уведомлений
+  const [successNotification, setSuccessNotification] = useState<{
+    open: boolean;
+    message: string;
+  }>({ open: false, message: '' });
+
+  // Состояние для пагинации
+  const [page, setPage] = useState(0);
+  const [rowsPerPage, setRowsPerPage] = useState(25);
   
   // Загружаем документы и дисциплины при изменении проекта
   useEffect(() => {
     if (projectStore.hasSelectedProject && projectStore.selectedProject) {
       const projectId = projectStore.selectedProject.id;
       
-      // Загружаем документы (store сам проверит, нужно ли загружать)
-      documentStore.loadDocuments(projectId);
+      // Загружаем документы (принудительно перезагружаем для получения обновленных данных)
+      documentStore.reloadDocuments(projectId);
       
       // Загружаем дисциплины проекта для боковой панели
       disciplineStore.loadDisciplines(projectId);
@@ -152,7 +165,10 @@ const DocumentsPage: React.FC = observer(() => {
       }
       
       if (settings.column_visibility) {
-        setVisibleCols(settings.column_visibility);
+        setVisibleCols(prev => ({
+          ...prev,
+          ...settings.column_visibility
+        }));
       }
       if (settings.sidebar_enabled !== undefined) {
         setShowSidebar(settings.sidebar_enabled);
@@ -160,7 +176,7 @@ const DocumentsPage: React.FC = observer(() => {
     };
     
     loadSettings();
-  }, []);
+  }, [userStore.currentUser?.id]); // Перезагружаем настройки при смене пользователя
 
   // Сохраняем настройки при изменении
   const saveSettings = async (newVisibleCols?: typeof visibleCols, newShowSidebar?: boolean) => {
@@ -217,7 +233,7 @@ const DocumentsPage: React.FC = observer(() => {
         if (result.errors && result.errors.length > 0) {
       }
     } catch (error) {
-      alert('Ошибка импорта документов по путям');
+      alert(t('documents.import_error'));
     } finally {
       setUploading(false);
     }
@@ -236,13 +252,99 @@ const DocumentsPage: React.FC = observer(() => {
     return statusMatch && selectedProjectMatch && disciplineMatch && searchMatch;
   });
 
+  // Пагинация документов
+  const paginatedDocuments = filteredDocuments.slice(
+    page * rowsPerPage,
+    page * rowsPerPage + rowsPerPage
+  );
+
+  // Обработчики пагинации
+  const handleChangePage = (_event: unknown, newPage: number) => {
+    setPage(newPage);
+  };
+
+  const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setRowsPerPage(parseInt(event.target.value, 10));
+    setPage(0);
+  };
+
+  // Сброс страницы при изменении фильтров
+  useEffect(() => {
+    setPage(0);
+  }, [filterStatus, searchTerm, selectedDisciplineId]);
+
   const handleUpload = () => {
-    // TODO: Реализовать загрузку документа
+    setIsCreatingDocument(true);
+    setSelectedDocument(null);
+    setDocumentDetailsOpen(true);
+  };
+
+  const handleCreateDocument = async (documentData: any) => {
+    try {
+      console.log('Creating document:', documentData);
+      
+      // Создаем FormData для отправки файла и данных
+      const formData = new FormData();
+      
+      // Добавляем файл
+      if (documentData.uploadedFile) {
+        formData.append('file', documentData.uploadedFile);
+      }
+      
+      // Добавляем данные документа
+      formData.append('title', documentData.title);
+      formData.append('title_native', documentData.title_native || '');
+      formData.append('remarks', documentData.remarks || '');
+      formData.append('number', documentData.number || '');
+      formData.append('drs', documentData.drs || '');
+      formData.append('project_id', projectStore.selectedProject?.id?.toString() || '');
+      formData.append('discipline_id', documentData.discipline_id || '');
+      formData.append('document_type_id', documentData.document_type_id || '');
+      formData.append('language_id', documentData.language_id || '1');
+      
+      // Добавляем данные ревизии
+      if (documentData.revisionDescription?.id) {
+        formData.append('revision_description_id', documentData.revisionDescription.id.toString());
+      }
+      if (documentData.revisionStep?.id) {
+        formData.append('revision_step_id', documentData.revisionStep.id.toString());
+      }
+      
+      // Отправляем запрос с отслеживанием прогресса
+      const result = await (documentsApi.createWithRevision as any)(formData, {
+        onUploadProgress: (progressEvent: any) => {
+          if (progressEvent.total) {
+            const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
+            documentData.onProgress?.(progress);
+          }
+        }
+      });
+      console.log('Document created successfully:', result);
+      
+      // Закрываем диалог и обновляем список документов
+      setDocumentDetailsOpen(false);
+      setIsCreatingDocument(false);
+      refreshDocuments();
+      
+      // Показываем сообщение об успехе
+      setSuccessNotification({
+        open: true,
+        message: t('documents.create_success')
+      });
+      
+    } catch (error) {
+      console.error('Error creating document:', error);
+      alert(t('documents.create_error'));
+    } finally {
+      // Сбрасываем состояние загрузки в любом случае
+      setIsCreatingDocument(false);
+    }
   };
 
 
   // Новый обработчик для объединенной модалки
   const handleShowDocumentDetails = async (documentId: number) => {
+    setIsCreatingDocument(false); // Сбрасываем флаг создания
     const document = documentStore.documents.find((d: ApiDocument) => d.id === documentId);
     if (document) {
       setSelectedDocument(document);
@@ -251,7 +353,7 @@ const DocumentsPage: React.FC = observer(() => {
         await documentRevisionStore.loadRevisions(documentId);
         setDocumentDetailsOpen(true);
       } catch (error) {
-        alert('Ошибка загрузки ревизий');
+        alert(t('documents.load_revisions_error'));
       }
     }
   };
@@ -261,7 +363,7 @@ const DocumentsPage: React.FC = observer(() => {
       // Получаем информацию о документе
       const doc = documentStore.documents.find((d: ApiDocument) => d.id === documentId);
       if (!doc) {
-        alert('Документ не найден');
+        alert(t('documents.not_found'));
         return;
       }
 
@@ -280,7 +382,7 @@ const DocumentsPage: React.FC = observer(() => {
       // Очищаем URL
       URL.revokeObjectURL(url);
     } catch (error) {
-      alert('Ошибка при скачивании документа');
+      alert(t('documents.download_error'));
     }
   };
 
@@ -290,86 +392,18 @@ const DocumentsPage: React.FC = observer(() => {
 
     try {
       await workflowApi.startWorkflow(selectedDocumentForWorkflow.id, templateId);
-      alert('Маршрут согласования запущен');
+      alert(t('documents.workflow_started'));
       setWorkflowOpen(false);
       
       // Обновляем статус документа
       documentStore.loadDocuments(projectStore.selectedProject!.id);
     } catch (error) {
-      alert('Ошибка запуска маршрута согласования');
+      alert(t('documents.workflow_error'));
     }
   };
 
 
   // Обработчики для работы с ревизиями
-
-  const handleCreateRevision = async () => {
-    if (!selectedDocumentId || !newRevisionFile) return;
-
-    setUploading(true);
-    try {
-      const formData = new FormData();
-      formData.append('file', newRevisionFile);
-      if (changeDescription) {
-        formData.append('change_description', changeDescription);
-      }
-
-      await documentsApi.createRevision(selectedDocumentId, formData);
-      
-      // Обновляем список ревизий
-      await documentRevisionStore.loadRevisions(selectedDocumentId);
-      
-      // Обновляем список документов
-      if (projectStore.selectedProject) {
-        documentStore.loadDocuments(projectStore.selectedProject.id);
-      }
-      
-      setNewRevisionOpen(false);
-      setNewRevisionFile(null);
-      setChangeDescription('');
-      setFileError('');
-      
-      alert('Новая ревизия создана');
-    } catch (error: any) {
-      const errorMessage = error.response?.data?.detail || 'Ошибка создания ревизии';
-      
-      if (errorMessage.includes('Неподдерживаемый тип файла')) {
-        alert(`Ошибка: ${errorMessage}\n\nПоддерживаемые типы файлов: PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, TXT, JPG, JPEG, PNG, GIF`);
-      } else {
-        alert(`Ошибка: ${errorMessage}`);
-      }
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const handleNewRevisionFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0] || null;
-    setNewRevisionFile(file);
-    setFileError('');
-    
-    if (file) {
-      const fileExtension = file.name.split('.').pop()?.toLowerCase() || '';
-      const allowedTypes = ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'jpg', 'jpeg', 'png', 'gif'];
-      
-      if (!allowedTypes.includes(fileExtension)) {
-        setFileError(`Тип файла .${fileExtension} не поддерживается`);
-        setNewRevisionFile(null);
-      }
-    }
-  };
-
-  const handleCompareRevisions = async () => {
-    if (!selectedDocumentId || !selectedRevisions.r1 || !selectedRevisions.r2) return;
-
-    try {
-      const result = await documentsApi.compareRevisions(selectedDocumentId, selectedRevisions.r1, selectedRevisions.r2);
-      setComparison(result);
-      setCompareOpen(true);
-    } catch (error) {
-      alert('Ошибка сравнения ревизий');
-    }
-  };
 
   const formatFileSize = (bytes: number): string => {
     if (bytes === 0) return '0 Bytes';
@@ -392,21 +426,6 @@ const DocumentsPage: React.FC = observer(() => {
     }
   };
 
-  const getRevisionStatusColor = (statusId?: number): 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning' => {
-    const status = referencesStore.getRevisionStatus(statusId);
-    const statusName = status?.name || '';
-    
-    // Маппинг статусов на цвета
-    const colorMap: { [key: string]: 'default' | 'primary' | 'secondary' | 'error' | 'info' | 'success' | 'warning' } = {
-      'Active': 'success',
-      'Cancelled': 'error',
-      'Hold': 'warning',
-      'Rejected': 'error',
-      'Superseded': 'info',
-      'Archieved': 'default'
-    };
-    return colorMap[statusName] || 'default';
-  };
 
   const handleSoftDelete = (document: ApiDocument) => {
     setDocumentToDelete(document);
@@ -426,10 +445,14 @@ const DocumentsPage: React.FC = observer(() => {
       setDeleteDialogOpen(false);
       setDocumentToDelete(null);
     } catch (error) {
-      alert('Ошибка удаления документа');
+      alert(t('documents.delete_error'));
     } finally {
       setDeleting(false);
     }
+  };
+
+  const handleCloseNotification = () => {
+    setSuccessNotification({ open: false, message: '' });
   };
 
   return (
@@ -446,10 +469,11 @@ const DocumentsPage: React.FC = observer(() => {
           <Typography variant={isMobile ? "h5" : "h4"} component="h1">
             {t('menu.documents')} {projectStore.selectedProject && `- ${projectStore.selectedProject.name}`}
           </Typography>
+          {!isViewer && (
           <Box sx={{ display: 'flex', gap: 1, width: isMobile ? '100%' : 'auto' }}>
             <Button
               variant="contained"
-              startIcon={<CloudUploadIcon />}
+              startIcon={<AddIcon />}
               onClick={handleUpload}
               sx={{ backgroundColor: '#1976d2', flex: isMobile ? 1 : 'none' }}
             >
@@ -464,6 +488,7 @@ const DocumentsPage: React.FC = observer(() => {
               {t('documents.import_by_paths') || 'Импорт по путям (Excel)'}
             </Button>
           </Box>
+          )}
         </Box>
 
         {/* Фильтры и поиск */}
@@ -523,7 +548,6 @@ const DocumentsPage: React.FC = observer(() => {
               width: isMobile ? '100%' : 260, 
               p: 1.5, 
               height: isMobile ? 'auto' : '100%', 
-              alignSelf: isMobile ? 'stretch' : 'stretch',
               maxHeight: isMobile ? 300 : 'none',
               overflow: isMobile ? 'auto' : 'visible'
             }}>
@@ -559,192 +583,255 @@ const DocumentsPage: React.FC = observer(() => {
                   {t('documents.no_documents')}
                 </Alert>
               ) : (
-                <Grid container spacing={2} sx={{ p: 2 }}>
-                  {filteredDocuments.map((document) => (
-                    <Grid item xs={12} key={document.id}>
-                      <Card sx={{ boxShadow: 2, border: '1px solid #e0e0e0' }}>
-                        <CardContent>
-                          <Typography variant="h6" component="h3" sx={{ mb: 1, fontWeight: 'bold' }}>
-                            {document.title}
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                            {document.description}
-                          </Typography>
-                          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
-                            <Chip 
-                              label={document.file_name || 'N/A'} 
-                              size="small" 
-                              variant="outlined" 
-                            />
-                            <Chip 
-                              label={formatFileSize(document.file_size || 0)} 
-                              size="small" 
-                              variant="outlined" 
-                            />
-                            <Chip 
-                              label={documentStore.getFullRevisionNumber(document, referencesStore)} 
-                              size="small" 
-                              variant="outlined" 
-                            />
-                            <Chip 
-                              label={documentStore.getDocumentStatusLabel(document, referencesStore, i18n.language)} 
-                              size="small" 
-                              color={documentStore.getDocumentStatusColor(document, referencesStore) as any} 
-                            />
-                            <Chip 
-                              label={formatDate(document.created_at)} 
-                              size="small" 
-                              variant="outlined" 
-                            />
-                          </Box>
-                        </CardContent>
-                        <CardActions sx={{ justifyContent: 'flex-end', gap: 1 }}>
-                          <Tooltip title="Детали документа">
-                            <IconButton size="small" onClick={() => handleShowDocumentDetails(document.id)}>
-                              <DescriptionIcon />
-                            </IconButton>
-                          </Tooltip>
-                          <Tooltip title={t('common.download')}>
-                            <IconButton size="small" onClick={() => handleDownload(document.id)}>
-                              <DownloadIcon />
-                            </IconButton>
-                          </Tooltip>
-                        </CardActions>
-                      </Card>
-                    </Grid>
-                  ))}
-                </Grid>
+                <>
+                  <Grid container spacing={2} sx={{ p: 2 }}>
+                    {paginatedDocuments.map((document) => (
+                      <Grid item xs={12} key={document.id}>
+                        <Card sx={{ boxShadow: 2, border: '1px solid #e0e0e0' }}>
+                          <CardContent>
+                            <Typography variant="h6" component="h3" sx={{ mb: 1, fontWeight: 'bold' }}>
+                              {document.title}
+                            </Typography>
+                            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                              {document.description}
+                            </Typography>
+                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
+                              <Chip 
+                                label={document.file_name || 'N/A'} 
+                                size="small" 
+                                variant="outlined" 
+                              />
+                              <Chip 
+                                label={formatFileSize(document.file_size || 0)} 
+                                size="small" 
+                                variant="outlined" 
+                              />
+                              <Chip 
+                                label={documentStore.getFullRevisionNumber(document, referencesStore)} 
+                                size="small" 
+                                variant="outlined" 
+                              />
+                              <Chip 
+                                label={documentStore.getDocumentStatusLabel(document, referencesStore, i18n.language)} 
+                                size="small" 
+                                color={documentStore.getDocumentStatusColor(document, referencesStore) as any} 
+                              />
+                              <Chip 
+                                label={formatDate(document.created_at)} 
+                                size="small" 
+                                variant="outlined" 
+                              />
+                            </Box>
+                          </CardContent>
+                          <CardActions sx={{ justifyContent: 'flex-end', gap: 1 }}>
+                            <Tooltip title={t('documents.details')}>
+                              <IconButton size="small" onClick={() => handleShowDocumentDetails(document.id)}>
+                                <DescriptionIcon />
+                              </IconButton>
+                            </Tooltip>
+                            <Tooltip title={t('common.download_latest')}>
+                              <IconButton size="small" onClick={() => handleDownload(document.id)}>
+                                <DownloadIcon />
+                              </IconButton>
+                            </Tooltip>
+                            {(document.is_deleted === 0 || document.is_deleted === undefined) && (
+                              <Tooltip title={t('common.delete')}>
+                                <IconButton size="small" onClick={() => handleSoftDelete(document)}>
+                                  <DeleteIcon />
+                                </IconButton>
+                              </Tooltip>
+                            )}
+                          </CardActions>
+                        </Card>
+                      </Grid>
+                    ))}
+                  </Grid>
+                  
+                  {!documentStore.isLoading && filteredDocuments.length > 0 && (
+                    <Box sx={{ p: 2 }}>
+                      <TablePagination
+                        rowsPerPageOptions={[10, 25, 50]}
+                        component="div"
+                        count={filteredDocuments.length}
+                        rowsPerPage={rowsPerPage}
+                        page={page}
+                        onPageChange={handleChangePage}
+                        onRowsPerPageChange={handleChangeRowsPerPage}
+                        labelRowsPerPage={t('common.rows_per_page') || 'Строк на странице:'}
+                        labelDisplayedRows={({ from, to, count }) => {
+                          const ofText = t('common.of') || 'из';
+                          const moreThanText = t('common.more_than') || 'больше чем';
+                          const countText = count !== -1 ? count.toString() : `${moreThanText} ${to}`;
+                          return `${from}-${to} ${ofText} ${countText}`;
+                        }}
+                        sx={{
+                          '& .MuiTablePagination-toolbar': {
+                            paddingLeft: 0,
+                            paddingRight: 0,
+                            flexWrap: 'wrap',
+                          },
+                          '& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows': {
+                            fontSize: '0.875rem',
+                          },
+                        }}
+                      />
+                    </Box>
+                  )}
+                </>
               )}
             </Box>
           ) : (
             // Десктопная версия - таблица
-            <TableContainer component={Paper} sx={{ boxShadow: 2, border: '1px solid #e0e0e0', flex: 1 }}>
-              {documentStore.isLoading ? (
-                <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
-                  <CircularProgress />
-                </Box>
-              ) : documentStore.error ? (
-                <Alert severity="error" sx={{ m: 2 }}>
-                  {documentStore.error}
-                </Alert>
-              ) : (
-            <Table sx={{ tableLayout: 'fixed', width: '100%', minWidth: '100%' }}>
-              <TableHead>
-                <TableRow sx={{ backgroundColor: '#f5f5f5' }}>
-                    {visibleCols.number && (<TableCell sx={{ width: '8%', fontWeight: 'bold' }}>{t('documents.columns.number')}</TableCell>)}
-                    {visibleCols.title && (<TableCell sx={{ width: '18%', fontWeight: 'bold' }}>{t('documents.columns.title')}</TableCell>)}
-                  {visibleCols.file && (<TableCell sx={{ width: '15%', fontWeight: 'bold' }}>{t('documents.columns.file')}</TableCell>)}
-                  {visibleCols.size && (<TableCell sx={{ width: '8%', fontWeight: 'bold' }}>{t('documents.columns.size')}</TableCell>)}
-                  {visibleCols.revision && (<TableCell sx={{ width: '8%', fontWeight: 'bold' }}>{t('documents.columns.revision')}</TableCell>)}
-                  {visibleCols.status && (<TableCell sx={{ width: '10%', fontWeight: 'bold' }}>{t('documents.columns.status')}</TableCell>)}
-                  {visibleCols.language && (<TableCell sx={{ width: '8%', fontWeight: 'bold' }}>{t('documents.columns.language')}</TableCell>)}
-                  {visibleCols.drs && (<TableCell sx={{ width: '10%', fontWeight: 'bold' }}>DRS</TableCell>)}
-                  {visibleCols.date && (<TableCell sx={{ width: '12%', fontWeight: 'bold' }}>{t('documents.columns.date')}</TableCell>)}
-                  {visibleCols.actions && (<TableCell sx={{ width: '15%', fontWeight: 'bold' }}>{t('common.actions')}</TableCell>)}
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {filteredDocuments.map((document) => {
-                  return (
-                  <TableRow key={document.id} hover>
-                    {visibleCols.number && (<TableCell>
-                      <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {document.number || 'DOC-' + document.id}
-                      </Typography>
-                    </TableCell>)}
-                    {visibleCols.title && (<TableCell>
-                      <Box>
-                        <Typography variant="body2" sx={{ fontWeight: 'bold', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {document.title}
-                        </Typography>
-                        <Typography variant="caption" color="text.secondary" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                          {document.description}
-                        </Typography>
-                      </Box>
-                    </TableCell>)}
-                    {visibleCols.file && (<TableCell>
-                      <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {document.file_name}
-                      </Typography>
-                    </TableCell>)}
-                    {visibleCols.size && (<TableCell>
-                      <Typography variant="body2">
-                        {formatFileSize(document.file_size)}
-                      </Typography>
-                    </TableCell>)}
-                    {visibleCols.revision && (<TableCell>
-                      <Typography variant="body2">
-                        {documentStore.getFullRevisionNumber(document, referencesStore)}
-                      </Typography>
-                    </TableCell>)}
-                    {visibleCols.status && (<TableCell>
-                      <Chip
-                        label={documentStore.getDocumentStatusLabel(document, referencesStore, i18n.language)}
-                        color={documentStore.getDocumentStatusColor(document, referencesStore) as any}
-                        size="small"
-                      />
-                    </TableCell>)}
-                    {visibleCols.language && (<TableCell>
-                      <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {(() => {
-                          const language = languageStore.languages.find(l => l.id === document.language_id);
-                          return language ? language.code : 'ru';
-                        })()}
-                      </Typography>
-                    </TableCell>)}
-                    {visibleCols.drs && (<TableCell>
-                      <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {document.drs || '-'}
-                      </Typography>
-                    </TableCell>)}
-                    {visibleCols.date && (<TableCell>
-                      <Typography variant="body2">
-                        {formatDate(document.created_at)}
-                      </Typography>
-                    </TableCell>)}
-                    {visibleCols.actions && (<TableCell>
-                      <Box sx={{ display: 'flex', gap: 1 }}>
-                        <Tooltip title="Детали документа">
-                          <IconButton size="small" onClick={() => handleShowDocumentDetails(document.id)}>
-                            <DescriptionIcon />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Скачать">
-                          <IconButton size="small" onClick={() => handleDownload(document.id)}>
-                            <DownloadIcon />
-                          </IconButton>
-                        </Tooltip>
-                        {/* TODO: Обновить проверки статуса после внедрения новой системы статусов */}
-                        {/* {document.status === DocumentStatus.DRAFT && (
-                          <Tooltip title="Запустить согласование">
-                            <IconButton size="small" onClick={() => handleStartWorkflow(document.id)}>
-                              <CloudUploadIcon />
-                            </IconButton>
-                          </Tooltip>
-                        )}
-                        {(document.status === DocumentStatus.IN_REVIEW || document.status === DocumentStatus.APPROVED) && (
-                          <Tooltip title="Статус согласования">
-                            <IconButton size="small" onClick={() => handleViewWorkflowStatus(document.id)}>
-                              <SettingsIcon />
-                            </IconButton>
-                          </Tooltip>
-                        )} */}
-                        {(document.is_deleted === 0 || document.is_deleted === undefined) && (
-                          <Tooltip title={`Удалить (is_deleted: ${document.is_deleted}, user: ${userStore.currentUser?.role})`}>
-                            <IconButton size="small" onClick={() => handleSoftDelete(document)}>
-                            <DeleteIcon />
-                          </IconButton>
-                        </Tooltip>
-                        )}
-                      </Box>
-                    </TableCell>)}
-                  </TableRow>
-                  );
-                })}
-              </TableBody>
-            </Table>
+            <Box sx={{ display: 'flex', flexDirection: 'column', flex: 1 }}>
+              <TableContainer component={Paper} sx={{ boxShadow: 2, border: '1px solid #e0e0e0', flex: 1 }}>
+                {documentStore.isLoading ? (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+                    <CircularProgress />
+                  </Box>
+                ) : documentStore.error ? (
+                  <Alert severity="error" sx={{ m: 2 }}>
+                    {documentStore.error}
+                  </Alert>
+                ) : filteredDocuments.length === 0 ? (
+                  <Box sx={{ textAlign: 'center', py: 4 }}>
+                    <Typography variant="h6" color="text.secondary">
+                      Документы не найдены
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary">
+                      Попробуйте изменить фильтры или загрузить новые документы
+                    </Typography>
+                  </Box>
+                ) : (
+                  <Table sx={{ tableLayout: 'fixed', width: '100%', minWidth: '100%' }}>
+                    <TableHead>
+                      <TableRow sx={{ backgroundColor: '#f5f5f5', '& .MuiTableCell-root': { padding: '8px 16px' } }}>
+                        {visibleCols.number && (<TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>{t('documents.columns.number')}</TableCell>)}
+                        {visibleCols.title && (<TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>{t('documents.columns.title')}</TableCell>)}
+                        {visibleCols.file && (<TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>{t('documents.columns.file')}</TableCell>)}
+                        {visibleCols.size && (<TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>{t('documents.columns.size')}</TableCell>)}
+                        {visibleCols.revision && (<TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>{t('documents.columns.revision')}</TableCell>)}
+                        {visibleCols.status && (<TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>{t('documents.columns.status')}</TableCell>)}
+                        {visibleCols.language && (<TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>{t('documents.columns.language')}</TableCell>)}
+                        {visibleCols.drs && (<TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>DRS</TableCell>)}
+                        {visibleCols.date && (<TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>{t('documents.columns.date')}</TableCell>)}
+                        {visibleCols.actions && (<TableCell sx={{ width: '160px', minWidth: '160px', fontWeight: 'bold', fontSize: '0.875rem' }}>{t('common.actions')}</TableCell>)}
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {paginatedDocuments.map((document) => (
+                        <TableRow key={document.id} hover sx={{ '& .MuiTableCell-root': { padding: '8px 16px' } }}>
+                          {visibleCols.number && (<TableCell>
+                            <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.875rem' }}>
+                              {document.number || 'DOC-' + document.id}
+                            </Typography>
+                          </TableCell>)}
+                          {visibleCols.title && (<TableCell>
+                            <Box>
+                              <Typography variant="body2" sx={{ fontWeight: 'bold', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.875rem' }}>
+                                {document.title}
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.75rem' }}>
+                                {document.description}
+                              </Typography>
+                            </Box>
+                          </TableCell>)}
+                          {visibleCols.file && (<TableCell>
+                            <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.875rem' }}>
+                              {document.file_name}
+                            </Typography>
+                          </TableCell>)}
+                          {visibleCols.size && (<TableCell>
+                            <Typography variant="body2" sx={{ fontSize: '0.875rem' }}>
+                              {formatFileSize(document.file_size)}
+                            </Typography>
+                          </TableCell>)}
+                          {visibleCols.revision && (<TableCell>
+                            <Typography variant="body2" sx={{ fontSize: '0.875rem' }}>
+                              {documentStore.getFullRevisionNumber(document, referencesStore)}
+                            </Typography>
+                          </TableCell>)}
+                          {visibleCols.status && (<TableCell>
+                            <Chip
+                              label={documentStore.getDocumentStatusLabel(document, referencesStore, i18n.language)}
+                              color={documentStore.getDocumentStatusColor(document, referencesStore) as any}
+                              size="small"
+                              sx={{ fontSize: '0.75rem', height: '24px' }}
+                            />
+                          </TableCell>)}
+                          {visibleCols.language && (<TableCell>
+                            <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.875rem' }}>
+                              {(() => {
+                                const language = languageStore.languages.find(l => l.id === document.language_id);
+                                return language ? language.code : 'ru';
+                              })()}
+                            </Typography>
+                          </TableCell>)}
+                          {visibleCols.drs && (<TableCell>
+                            <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.875rem' }}>
+                              {document.drs || '-'}
+                            </Typography>
+                          </TableCell>)}
+                          {visibleCols.date && (<TableCell>
+                            <Typography variant="body2" sx={{ fontSize: '0.875rem' }}>
+                              {formatDate(document.created_at)}
+                            </Typography>
+                          </TableCell>)}
+                          {visibleCols.actions && (<TableCell sx={{ width: '160px', minWidth: '160px' }}>
+                            <Box sx={{ display: 'flex', gap: 1 }}>
+                              <Tooltip title={t('documents.details')}>
+                                <IconButton size="small" onClick={() => handleShowDocumentDetails(document.id)} sx={{ padding: '4px' }}>
+                                  <DescriptionIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                              <Tooltip title={t('common.download_latest')}>
+                                <IconButton size="small" onClick={() => handleDownload(document.id)} sx={{ padding: '4px' }}>
+                                  <DownloadIcon fontSize="small" />
+                                </IconButton>
+                              </Tooltip>
+                              {(document.is_deleted === 0 || document.is_deleted === undefined) && (
+                                <Tooltip title={t('common.delete')}>
+                                  <IconButton size="small" onClick={() => handleSoftDelete(document)} sx={{ padding: '4px' }}>
+                                    <DeleteIcon fontSize="small" />
+                                  </IconButton>
+                                </Tooltip>
+                              )}
+                            </Box>
+                          </TableCell>)}
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </TableContainer>
+              
+              {!isMobile && !documentStore.isLoading && filteredDocuments.length > 0 && (
+                <TablePagination
+                  rowsPerPageOptions={[10, 25, 50, 100]}
+                  component="div"
+                  count={filteredDocuments.length}
+                  rowsPerPage={rowsPerPage}
+                  page={page}
+                  onPageChange={handleChangePage}
+                  onRowsPerPageChange={handleChangeRowsPerPage}
+                  labelRowsPerPage={t('common.rows_per_page') || 'Строк на странице:'}
+                  labelDisplayedRows={({ from, to, count }) => {
+                    const ofText = t('common.of') || 'из';
+                    const moreThanText = t('common.more_than') || 'больше чем';
+                    const countText = count !== -1 ? count.toString() : `${moreThanText} ${to}`;
+                    return `${from}-${to} ${ofText} ${countText}`;
+                  }}
+                  sx={{
+                    '& .MuiTablePagination-toolbar': {
+                      paddingLeft: 2,
+                      paddingRight: 2,
+                    },
+                    '& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows': {
+                      fontSize: '0.875rem',
+                    },
+                  }}
+                />
               )}
-            </TableContainer>
+            </Box>
           )}
         </Box>
 
@@ -765,16 +852,16 @@ const DocumentsPage: React.FC = observer(() => {
           <DialogContent>
             <Typography variant="subtitle2" sx={{ mb: 1 }}>{t('documents.columns.title')}</Typography>
             <FormGroup>
-              <FormControlLabel control={<Checkbox checked={visibleCols.title} onChange={(e)=>setVisibleCols(v=>{const newV={...v,title:e.target.checked}; saveSettings(newV); return newV;})} />} label={t('documents.columns.title')} />
-              <FormControlLabel control={<Checkbox checked={visibleCols.number} onChange={(e)=>setVisibleCols(v=>{const newV={...v,number:e.target.checked}; saveSettings(newV); return newV;})} />} label={t('documents.columns.number')} />
-              <FormControlLabel control={<Checkbox checked={visibleCols.file} onChange={(e)=>setVisibleCols(v=>{const newV={...v,file:e.target.checked}; saveSettings(newV); return newV;})} />} label={t('documents.columns.file')} />
-              <FormControlLabel control={<Checkbox checked={visibleCols.size} onChange={(e)=>setVisibleCols(v=>{const newV={...v,size:e.target.checked}; saveSettings(newV); return newV;})} />} label={t('documents.columns.size')} />
-              <FormControlLabel control={<Checkbox checked={visibleCols.revision} onChange={(e)=>setVisibleCols(v=>{const newV={...v,revision:e.target.checked}; saveSettings(newV); return newV;})} />} label={t('documents.columns.revision')} />
-              <FormControlLabel control={<Checkbox checked={visibleCols.status} onChange={(e)=>setVisibleCols(v=>{const newV={...v,status:e.target.checked}; saveSettings(newV); return newV;})} />} label={t('documents.columns.status')} />
-              <FormControlLabel control={<Checkbox checked={visibleCols.language} onChange={(e)=>setVisibleCols(v=>{const newV={...v,language:e.target.checked}; saveSettings(newV); return newV;})} />} label={t('documents.columns.language')} />
-              <FormControlLabel control={<Checkbox checked={visibleCols.drs} onChange={(e)=>setVisibleCols(v=>{const newV={...v,drs:e.target.checked}; saveSettings(newV); return newV;})} />} label="DRS" />
-              <FormControlLabel control={<Checkbox checked={visibleCols.date} onChange={(e)=>setVisibleCols(v=>{const newV={...v,date:e.target.checked}; saveSettings(newV); return newV;})} />} label={t('documents.columns.date')} />
-              <FormControlLabel control={<Checkbox checked={visibleCols.actions} onChange={(e)=>setVisibleCols(v=>{const newV={...v,actions:e.target.checked}; saveSettings(newV); return newV;})} />} label={t('common.actions')} />
+              <FormControlLabel control={<Checkbox checked={visibleCols.title ?? true} onChange={(e)=>setVisibleCols(v=>{const newV={...v,title:e.target.checked}; saveSettings(newV); return newV;})} />} label={t('documents.columns.title')} />
+              <FormControlLabel control={<Checkbox checked={visibleCols.number ?? true} onChange={(e)=>setVisibleCols(v=>{const newV={...v,number:e.target.checked}; saveSettings(newV); return newV;})} />} label={t('documents.columns.number')} />
+              <FormControlLabel control={<Checkbox checked={visibleCols.file ?? true} onChange={(e)=>setVisibleCols(v=>{const newV={...v,file:e.target.checked}; saveSettings(newV); return newV;})} />} label={t('documents.columns.file')} />
+              <FormControlLabel control={<Checkbox checked={visibleCols.size ?? true} onChange={(e)=>setVisibleCols(v=>{const newV={...v,size:e.target.checked}; saveSettings(newV); return newV;})} />} label={t('documents.columns.size')} />
+              <FormControlLabel control={<Checkbox checked={visibleCols.revision ?? true} onChange={(e)=>setVisibleCols(v=>{const newV={...v,revision:e.target.checked}; saveSettings(newV); return newV;})} />} label={t('documents.columns.revision')} />
+              <FormControlLabel control={<Checkbox checked={visibleCols.status ?? true} onChange={(e)=>setVisibleCols(v=>{const newV={...v,status:e.target.checked}; saveSettings(newV); return newV;})} />} label={t('documents.columns.status')} />
+              <FormControlLabel control={<Checkbox checked={visibleCols.language ?? true} onChange={(e)=>setVisibleCols(v=>{const newV={...v,language:e.target.checked}; saveSettings(newV); return newV;})} />} label={t('documents.columns.language')} />
+              <FormControlLabel control={<Checkbox checked={visibleCols.drs ?? false} onChange={(e)=>setVisibleCols(v=>{const newV={...v,drs:e.target.checked}; saveSettings(newV); return newV;})} />} label="DRS" />
+              <FormControlLabel control={<Checkbox checked={visibleCols.date ?? true} onChange={(e)=>setVisibleCols(v=>{const newV={...v,date:e.target.checked}; saveSettings(newV); return newV;})} />} label={t('documents.columns.date')} />
+              <FormControlLabel control={<Checkbox checked={visibleCols.actions ?? true} onChange={(e)=>setVisibleCols(v=>{const newV={...v,actions:e.target.checked}; saveSettings(newV); return newV;})} />} label={t('common.actions')} />
             </FormGroup>
             <Divider sx={{ my: 2 }} />
             <FormControlLabel control={<Checkbox checked={showSidebar} onChange={(e)=>{setShowSidebar(e.target.checked); saveSettings(undefined, e.target.checked);}} />} label={t('documents.sidebar_toggle') || 'Боковая панель дисциплин'} />
@@ -811,6 +898,7 @@ const DocumentsPage: React.FC = observer(() => {
                   onChange={handleMetadataFileSelect}
                   style={{ display: 'none' }}
                   id="metadata-input"
+                  name="metadata-input"
                 />
                 <label htmlFor="metadata-input">
                   <Button
@@ -860,379 +948,59 @@ const DocumentsPage: React.FC = observer(() => {
           </DialogActions>
         </Dialog>
 
-        {/* Объединенная модалка деталей документа и ревизий */}
-        <Dialog 
-          open={documentDetailsOpen} 
+        {/* Новые компоненты для работы с документами */}
+        <DocumentViewer
+          open={documentDetailsOpen}
+          document={selectedDocument}
+          documentId={selectedDocumentId}
+          isCreating={isCreatingDocument}
           onClose={() => {
             setDocumentDetailsOpen(false);
             setSelectedDocument(null);
+            setIsCreatingDocument(false);
             // Очищаем кэш ревизий при закрытии модалки
             if (selectedDocumentId) {
               documentRevisionStore.clearRevisions(selectedDocumentId);
             }
-          }} 
-          maxWidth="xl" 
-          fullWidth
-          PaperProps={{
-            sx: { height: '95vh', maxHeight: '95vh', width: '95vw', maxWidth: '95vw' }
           }}
-        >
-          <DialogTitle>
-            {selectedDocument ? `Детали документа: ${selectedDocument.title}` : 'Детали документа'}
-          </DialogTitle>
-          <DialogContent sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-            {selectedDocument && (
-              <>
-                {/* Верхняя часть - информация о документе */}
-                <Box sx={{ flexShrink: 0, mb: 3, mt: 2 }}>
-                  <Grid container spacing={3}>
-                    {/* Первая колонка: номер с датой, титл, титл натив, язык */}
-                    <Grid item xs={6}>
-                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                        {/* Номер и дата создания на одной строке */}
-                        <Box sx={{ display: 'flex', gap: 2 }}>
-                          <TextField
-                            label="Номер"
-                            value={selectedDocument.number || `DOC-${selectedDocument.id}`}
-                            fullWidth
-                            InputProps={{ readOnly: true }}
-                            size="small"
-                          />
-                          <TextField
-                            label="Дата создания"
-                            value={formatDate(selectedDocument.created_at)}
-                            fullWidth
-                            InputProps={{ readOnly: true }}
-                            size="small"
-                          />
-                        </Box>
-                        <TextField
-                          label="Название"
-                          value={selectedDocument.title}
-                          fullWidth
-                          InputProps={{ readOnly: true }}
-                          size="small"
-                        />
-                        <TextField
-                          label="Название (нативное)"
-                          value={selectedDocument.title_native || selectedDocument.description || ''}
-                          fullWidth
-                          InputProps={{ readOnly: true }}
-                          size="small"
-                        />
-                        <TextField
-                          label="Язык"
-                          value={(() => {
-                            const language = languageStore.languages.find(l => l.id === selectedDocument.language_id);
-                            return language ? language.code : 'ru';
-                          })()}
-                          fullWidth
-                          InputProps={{ readOnly: true }}
-                          size="small"
-                        />
-                      </Box>
-                    </Grid>
-                    
-                    {/* Вторая колонка: дисциплина, тип документа, DRS, примечания */}
-                    <Grid item xs={6}>
-                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                        <TextField
-                          label="Дисциплина"
-                          value={selectedDocument.discipline_name && selectedDocument.discipline_code 
-                            ? `${selectedDocument.discipline_code} - ${selectedDocument.discipline_name}`
-                            : 'Не указана'}
-                          fullWidth
-                          InputProps={{ readOnly: true }}
-                          size="small"
-                        />
-                        <TextField
-                          label="Тип документа"
-                          value={selectedDocument.document_type_name && selectedDocument.document_type_code 
-                            ? `${selectedDocument.document_type_code} - ${selectedDocument.document_type_name}`
-                            : 'Не указан'}
-                          fullWidth
-                          InputProps={{ readOnly: true }}
-                          size="small"
-                        />
-                        <TextField
-                          label="DRS"
-                          value={selectedDocument.drs || 'Не указан'}
-                          fullWidth
-                          InputProps={{ readOnly: true }}
-                          size="small"
-                        />
-                        <TextField
-                          label="Примечания"
-                          value={selectedDocument.remarks || ''}
-                          fullWidth
-                          multiline
-                          rows={3}
-                          InputProps={{ readOnly: true }}
-                          size="small"
-                        />
-                      </Box>
-                    </Grid>
-                  </Grid>
-                </Box>
-
-                {/* Нижняя часть - таблица ревизий */}
-                <Box sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                    <Typography variant="h6">История ревизий</Typography>
-                    <Button
-                      variant="contained"
-                      startIcon={<UploadFileIcon />}
-                      onClick={() => setNewRevisionOpen(true)}
-                    >
-                      Новая ревизия
-                    </Button>
-                  </Box>
-                  
-                  {/* Таблица ревизий с прокруткой */}
-                  <Box sx={{ flexGrow: 1, overflow: 'auto' }}>
-                    {documentRevisionStore.getRevisions(selectedDocumentId || 0).length === 0 ? (
-                      <Typography color="text.secondary">Ревизии не найдены</Typography>
-                    ) : (
-                      <TableContainer component={Paper} sx={{ maxHeight: '100%' }}>
-                        <Table stickyHeader size="small">
-                          <TableHead>
-                            <TableRow>
-                              <TableCell>Ревизия</TableCell>
-                              <TableCell>Статус</TableCell>
-                              <TableCell>Шаг</TableCell>
-                              <TableCell>Файл</TableCell>
-                              <TableCell>Размер</TableCell>
-                              <TableCell>Описание изменений</TableCell>
-                              <TableCell>Дата</TableCell>
-                              <TableCell>Действия</TableCell>
-                            </TableRow>
-                          </TableHead>
-                          <TableBody>
-                            {documentRevisionStore.getRevisions(selectedDocumentId || 0).map((revision) => (
-                              <TableRow key={revision.id}>
-                                <TableCell>
-                                  <Chip label={referencesStore.getFullRevisionNumber(revision)} size="small" />
-                                </TableCell>
-                                <TableCell>
-                                  <Chip 
-                                    label={referencesStore.getRevisionStatusLabel(revision.revision_status_id, i18n.language)} 
-                                    size="small"
-                                    color={getRevisionStatusColor(revision.revision_status_id)}
-                                  />
-                                </TableCell>
-                                <TableCell>
-                                  {referencesStore.getRevisionStepLabel(revision.revision_step_id, i18n.language) || '-'}
-                                </TableCell>
-                                <TableCell>{revision.file_name}</TableCell>
-                                <TableCell>{formatFileSize(revision.file_size)}</TableCell>
-                                <TableCell>{revision.change_description || '-'}</TableCell>
-                                <TableCell>{formatDate(revision.created_at)}</TableCell>
-                                <TableCell>
-                                  <Button
-                                    size="small"
-                                    onClick={() => {
-                                      setSelectedRevisions({r1: referencesStore.getFullRevisionNumber(revision), r2: ''});
-                                      setCompareOpen(true);
-                                    }}
-                                  >
-                                    Сравнить
-                                  </Button>
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </TableContainer>
-                    )}
-                  </Box>
-                </Box>
-              </>
-            )}
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setDocumentDetailsOpen(false)}>Закрыть</Button>
-          </DialogActions>
-        </Dialog>
+          onNewRevision={() => setNewRevisionOpen(true)}
+          onCompareRevisions={() => {
+            setCompareOpen(true);
+          }}
+          onCreateDocument={handleCreateDocument}
+          onOpenComments={() => setCommentsOpen(true)}
+        />
 
         {/* Диалог создания новой ревизии */}
-        <Dialog open={newRevisionOpen} onClose={() => setNewRevisionOpen(false)} maxWidth="sm" fullWidth>
-          <DialogTitle>{t('documents.revisions.create')}</DialogTitle>
-          <DialogContent>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
-              <TextField
-                label="Описание изменений"
-                multiline
-                rows={3}
-                value={changeDescription}
-                onChange={(e) => setChangeDescription(e.target.value)}
-                placeholder={t('documents.revisions.description_placeholder')}
-              />
-              
-                <input
-                  type="file"
-                onChange={handleNewRevisionFileSelect}
-                  style={{ display: 'none' }}
-                id="new-revision-input"
-                />
-              <label htmlFor="new-revision-input">
-                  <Button
-                    variant="outlined"
-                    component="span"
-                  startIcon={<CloudUploadIcon />}
-                    sx={{ width: '100%' }}
-                  >
-                  Выбрать файл
-                  </Button>
-                </label>
-              
-              {newRevisionFile && (
-                    <Typography variant="body2" color="text.secondary">
-                  Выбран файл: {newRevisionFile.name}
-                    </Typography>
-              )}
-              
-              {fileError && (
-                <Alert severity="error" sx={{ mt: 1 }}>
-                  {fileError}
-                </Alert>
-              )}
-              
-              <Alert severity="info" sx={{ mt: 1 }}>
-                <Typography variant="body2">
-                  <strong>Поддерживаемые типы файлов:</strong>
-                </Typography>
-                <Typography variant="body2">
-                  PDF, DOC, DOCX, XLS, XLSX, PPT, PPTX, TXT, JPG, JPEG, PNG, GIF
-                </Typography>
-              </Alert>
-            </Box>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={() => {
-              setNewRevisionOpen(false);
-              setFileError('');
-            }}>Отмена</Button>
-            <Button
-                onClick={handleCreateRevision}
-              variant="contained"
-              disabled={!newRevisionFile || uploading}
-              startIcon={uploading ? <CircularProgress size={20} /> : <UploadFileIcon />}
-            >
-              {uploading ? 'Создание...' : t('documents.revisions.create')}
-            </Button>
-          </DialogActions>
-        </Dialog>
+        <DocumentRevisionDialog
+          open={newRevisionOpen}
+          documentId={selectedDocumentId}
+          onClose={() => {
+            setNewRevisionOpen(false);
+          }}
+          onSuccess={() => {
+            // Обновляем список ревизий после успешного создания
+            if (selectedDocumentId) {
+              documentRevisionStore.reloadRevisions(selectedDocumentId);
+            }
+            refreshDocuments();
+          }}
+        />
 
         {/* Диалог сравнения ревизий */}
-        <Dialog open={compareOpen} onClose={() => setCompareOpen(false)} maxWidth="md" fullWidth>
-          <DialogTitle>{t('documents.revisions.compare')}</DialogTitle>
-          <DialogContent>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 2 }}>
-              {!comparison ? (
-                <>
-                  <Typography variant="h6" gutterBottom>{t('documents.revisions.select_for_compare')}</Typography>
-                  <Box sx={{ display: 'flex', gap: 2 }}>
-                    <FormControl sx={{ flex: 1 }}>
-                      <InputLabel>{t('documents.revisions.select_first')}</InputLabel>
-                      <Select
-                        value={selectedRevisions.r1}
-                        onChange={(e) => setSelectedRevisions({...selectedRevisions, r1: e.target.value})}
-                        label={t('documents.revisions.select_first')}
-                      >
-                        {documentRevisionStore.getRevisions(selectedDocumentId || 0).map((revision) => (
-                          <MenuItem key={revision.id} value={referencesStore.getFullRevisionNumber(revision)}>
-                            {t('documents.columns.revision')} {referencesStore.getFullRevisionNumber(revision)} - {revision.file_name}
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
-                    <FormControl sx={{ flex: 1 }}>
-                      <InputLabel>{t('documents.revisions.select_second')}</InputLabel>
-                      <Select
-                        value={selectedRevisions.r2}
-                        onChange={(e) => setSelectedRevisions({...selectedRevisions, r2: e.target.value})}
-                        label={t('documents.revisions.select_second')}
-                      >
-                        {documentRevisionStore.getRevisions(selectedDocumentId || 0).map((revision) => (
-                          <MenuItem key={revision.id} value={referencesStore.getFullRevisionNumber(revision)}>
-                            {t('documents.columns.revision')} {referencesStore.getFullRevisionNumber(revision)} - {revision.file_name}
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
-                  </Box>
-                </>
-              ) : (
-                <>
-                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <Typography variant="h6">{t('documents.revisions.result')}</Typography>
-                    <Chip
-                      label={comparison.equal ? 'Файлы идентичны' : 'Файлы различаются'}
-                      color={comparison.equal ? 'success' : 'warning'}
-                    />
-                  </Box>
-                  
-                  <Grid container spacing={2}>
-                    <Grid item xs={6}>
-                      <Card>
-                        <CardContent>
-                          <Typography variant="h6" gutterBottom>{t('documents.columns.revision')} {comparison.from.revision}</Typography>
-                          <Typography variant="body2">Файл: {comparison.from.file_name}</Typography>
-                          <Typography variant="body2">Размер: {formatFileSize(comparison.from.file_size)}</Typography>
-                          <Typography variant="body2">MD5: {comparison.from.md5 || 'Не вычислен'}</Typography>
-                        </CardContent>
-                      </Card>
-                    </Grid>
-                    <Grid item xs={6}>
-                      <Card>
-                        <CardContent>
-                          <Typography variant="h6" gutterBottom>{t('documents.columns.revision')} {comparison.to.revision}</Typography>
-                          <Typography variant="body2">Файл: {comparison.to.file_name}</Typography>
-                          <Typography variant="body2">Размер: {formatFileSize(comparison.to.file_size)}</Typography>
-                          <Typography variant="body2">MD5: {comparison.to.md5 || 'Не вычислен'}</Typography>
-                        </CardContent>
-                      </Card>
-                    </Grid>
-                  </Grid>
-                  
-                  {comparison.size_diff !== 0 && (
-                    <Alert severity="info">
-                      Разница в размере: {comparison.size_diff > 0 ? '+' : ''}{comparison.size_diff} байт
-                    </Alert>
-                  )}
-                </>
-              )}
-            </Box>
-          </DialogContent>
-          <DialogActions>
-            {!comparison ? (
-              <>
-                <Button onClick={() => setCompareOpen(false)}>Отмена</Button>
-                <Button 
-                  onClick={handleCompareRevisions} 
-                  variant="contained"
-                  disabled={!selectedRevisions.r1 || !selectedRevisions.r2}
-                >
-                  Сравнить
-                </Button>
-              </>
-            ) : (
-              <>
-                <Button onClick={() => {
-                  setComparison(null);
-                  setSelectedRevisions({r1: '', r2: ''});
-                }}>Новое сравнение</Button>
-                <Button onClick={() => setCompareOpen(false)}>Закрыть</Button>
-              </>
-            )}
-          </DialogActions>
-        </Dialog>
+        <DocumentCompareDialog
+          open={compareOpen}
+          documentId={selectedDocumentId}
+          onClose={() => {
+            setCompareOpen(false);
+          }}
+        />
 
 
         {/* Диалог workflow */}
         <Dialog open={workflowOpen} onClose={() => setWorkflowOpen(false)} maxWidth="md" fullWidth>
           <DialogTitle>
-            {workflowStatus ? 'Статус согласования' : 'Запуск согласования'}
+            {workflowStatus ? t('documents.workflow_status') : t('documents.start_workflow')}
           </DialogTitle>
           <DialogContent>
             {workflowStatus ? (
@@ -1246,7 +1014,7 @@ const DocumentsPage: React.FC = observer(() => {
                 </Box>
                 
                 <Typography variant="body2" color="text.secondary">
-                  Текущий шаг: {workflowStatus.current_step || 'Завершено'}
+                  {t('documents.current_step')}: {workflowStatus.current_step || t('documents.completed')}
                 </Typography>
                 
                 <Typography variant="body2" color="text.secondary">
@@ -1330,16 +1098,31 @@ const DocumentsPage: React.FC = observer(() => {
         {/* Диалог подтверждения удаления */}
         <ConfirmDialog
           open={deleteDialogOpen}
-          title="Удалить документ?"
-          content="Вы уверены, что хотите удалить этот документ? Это действие нельзя отменить."
-          confirmText="Удалить"
-          cancelText="Отмена"
+          title={t('documents.delete_confirm_title')}
+          content={t('documents.delete_confirm_content')}
+          confirmText={t('documents.delete_confirm')}
+          cancelText={t('documents.cancel')}
           onConfirm={handleConfirmDelete}
           onClose={() => {
             setDeleteDialogOpen(false);
             setDocumentToDelete(null);
           }}
           loading={deleting}
+        />
+
+        {/* Компонент комментариев */}
+        <DocumentComments
+          open={commentsOpen}
+          documentId={selectedDocumentId}
+          onClose={() => setCommentsOpen(false)}
+        />
+
+        {/* Уведомление об успешном создании документа */}
+        <NotificationSnackbar
+          open={successNotification.open}
+          message={successNotification.message}
+          severity="success"
+          onClose={handleCloseNotification}
         />
       </Box>
     </ProjectRequired>

@@ -34,7 +34,7 @@ const WorkflowTab: React.FC<WorkflowTabProps> = ({
         {t('createProject.sections.workflow_hint')}
       </Typography>
 
-      <FormControl fullWidth>
+      <FormControl fullWidth variant="standard">
         <InputLabel>{t('createProject.sections.workflow_preset')}</InputLabel>
         <Select
           value={selectedWorkflowPreset || ''}

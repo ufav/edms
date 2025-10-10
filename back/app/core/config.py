@@ -29,7 +29,7 @@ class Settings(BaseSettings):
     
     # File Upload
     UPLOAD_DIR: str = "uploads"
-    MAX_FILE_SIZE: int = 10485760  # 10MB
+    MAX_FILE_SIZE: int = 52428800  # 50MB
     ALLOWED_FILE_TYPES: str = "pdf,doc,docx,xls,xlsx,ppt,pptx,txt,jpg,jpeg,png,gif"
     
     # CORS

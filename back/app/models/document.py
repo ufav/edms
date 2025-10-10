@@ -23,7 +23,7 @@ class Document(Base):
     
     # Дополнительные метаданные
     # document_code = Column(String(100))  # Код документа
-    author = Column(String(200))  # Автор документа
+    created_by = Column(Integer, ForeignKey("users.id"))  # Создатель документа
     creation_date = Column(Date)  # Дата создания документа
     sheet_number = Column(String(50))  # Номер листа
     total_sheets = Column(Integer)  # Общее количество листов
@@ -35,7 +35,7 @@ class Document(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     
     # Relationships (temporarily commented out for seeding)
-    # project = relationship("Project", back_populates="documents")
+    project = relationship("Project")
     # discipline = relationship("Discipline", back_populates="documents")
     # document_type = relationship("DocumentType", back_populates="documents")
     # language = relationship("Language", back_populates="documents")
@@ -47,6 +47,9 @@ class Document(Base):
     # history = relationship("DocumentHistory", back_populates="document")
     # transmittal_items = relationship("TransmittalItem", back_populates="document")
     # workflow_instances = relationship("WorkflowInstance", back_populates="document")
+    
+    # Comments relationship
+    comments = relationship("DocumentComment", back_populates="document", cascade="all, delete-orphan")
     
     def __repr__(self):
         return f"<Document(id={self.id}, title='{self.title}', version='{self.version}')>"
@@ -63,13 +66,13 @@ class DocumentRevision(Base):
     file_type = Column(String(100))
     change_description = Column(Text)
     uploaded_by = Column(Integer, ForeignKey("users.id"))
+    is_deleted = Column(Integer, default=0)  # Флаг удаления: 0 - не удален, 1 - удален
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     # Foreign keys to reference tables
     revision_status_id = Column(Integer, ForeignKey("revision_statuses.id"), nullable=True)
     revision_description_id = Column(Integer, ForeignKey("revision_descriptions.id"), nullable=True)
     revision_step_id = Column(Integer, ForeignKey("revision_steps.id"), nullable=True)
-    review_code_id = Column(Integer, ForeignKey("review_codes.id"), nullable=True)
     
     # Relationships (temporarily commented out)
     # document = relationship("Document", back_populates="revisions")

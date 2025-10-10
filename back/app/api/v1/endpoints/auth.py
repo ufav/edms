@@ -121,12 +121,17 @@ async def refresh(request: Request, db: Session = Depends(get_db)):
 @router.get("/me")
 async def read_users_me(current_user: User = Depends(get_current_user)):
     """Получение информации о текущем пользователе"""
+    # Получаем правильную роль пользователя
+    user_role_code = current_user.role  # fallback на legacy поле
+    if current_user.user_role:
+        user_role_code = current_user.user_role.code
+    
     return {
         "id": current_user.id,
         "username": current_user.username,
         "email": current_user.email,
         "full_name": current_user.full_name,
-        "role": current_user.role,
+        "role": user_role_code,
         "is_active": current_user.is_active,
         "is_admin": current_user.is_admin
     }

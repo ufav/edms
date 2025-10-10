@@ -57,6 +57,8 @@ const DisciplinesTypesTab: React.FC<DisciplinesTypesTabProps> = ({
         >
           {t('createProject.buttons.import_excel')}
           <input
+            id="disciplines-excel-import"
+            name="disciplines-excel-import"
             hidden
             type="file"
             accept=".xlsx,.xls"
@@ -162,27 +164,6 @@ const DisciplinesTypesTab: React.FC<DisciplinesTypesTabProps> = ({
           </Box>
         )}
 
-        {selectedDisciplines.length > 0 && (
-          <Box sx={{ mt: 2 }}>
-            <Typography variant="subtitle2" gutterBottom>
-              {t('createProject.selected_disciplines')}
-            </Typography>
-            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-              {selectedDisciplines.map((disciplineId) => {
-                const discipline = disciplines.find(d => d.id === disciplineId);
-                const selectedTypes = disciplineDocumentTypes[disciplineId] || [];
-                return (
-                  <Chip
-                    key={disciplineId}
-                    label={`${discipline?.code} (${selectedTypes.length} ${t('common.types')})`}
-                    color="primary"
-                    variant="filled"
-                  />
-                );
-              })}
-            </Box>
-          </Box>
-        )}
       </Box>
     </Box>
   );

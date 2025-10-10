@@ -21,7 +21,7 @@ from app.models.user import User
 from app.models.document import Document, DocumentRevision
 from app.models.discipline import Discipline, DocumentType
 from app.models.references import Language
-from app.models.project import ProjectDisciplineDocumentType
+from app.models.project import ProjectDisciplineDocumentType, ProjectMember
 from app.services.auth import get_current_active_user
 
 router = APIRouter()
@@ -178,7 +178,8 @@ async def get_documents(
             "discipline_code": discipline.code if discipline else None,
             "document_type_name": document_type.name if document_type else None,
             "document_type_code": document_type.code if document_type else None,
-            "created_at": doc.created_at
+            "created_at": doc.created_at,
+            "created_by": doc.created_by
         })
     
     return result
@@ -237,7 +238,7 @@ async def upload_document(
         file_name=file.filename,
         file_size=file.size,
         file_type=file.content_type,
-        change_description="Первоначальная загрузка",
+        change_description="First revision - Первая ревизия",
         uploaded_by=current_user.id,
     )
     
@@ -253,6 +254,99 @@ async def upload_document(
         "file_type": revision_row.file_type,
         "revision": revision_row.number,
         "revision_status_id": revision_row.revision_status_id,
+        "created_at": db_document.created_at
+    }
+
+
+@router.post("/create-with-revision", response_model=dict)
+async def create_document_with_revision(
+    file: UploadFile = File(...),
+    title: str = Form(...),
+    title_native: str = Form(None),
+    remarks: str = Form(None),
+    number: str = Form(None),
+    drs: str = Form(None),
+    project_id: int = Form(...),
+    discipline_id: int = Form(None),
+    document_type_id: int = Form(None),
+    language_id: int = Form(1),
+    revision_description_id: int = Form(None),
+    revision_step_id: int = Form(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Создание документа с первой ревизией"""
+    
+    # Проверяем размер файла
+    if file.size > settings.MAX_FILE_SIZE:
+        raise HTTPException(status_code=400, detail="Файл слишком большой")
+    
+    # Проверяем тип файла
+    file_extension = file.filename.split('.')[-1].lower() if '.' in file.filename else ''
+    if file_extension and settings.ALLOWED_FILE_TYPES:
+        allowed = {ext.strip().lower() for ext in settings.ALLOWED_FILE_TYPES.split(',') if ext.strip()}
+        if file_extension not in allowed:
+            raise HTTPException(status_code=400, detail="Неподдерживаемый тип файла")
+    
+    # Генерируем уникальное имя файла
+    file_uuid = str(uuid.uuid4())
+    file_extension = file.filename.split('.')[-1] if '.' in file.filename else ''
+    new_filename = f"{file_uuid}.{file_extension}"
+    
+    # Сохраняем файл
+    file_path = os.path.join(settings.UPLOAD_DIR, new_filename)
+    with open(file_path, "wb") as buffer:
+        content = await file.read()
+        buffer.write(content)
+    
+    # Создаем запись документа в базе данных
+    db_document = Document(
+        title=title,
+        title_native=title_native,
+        remarks=remarks,
+        number=number,
+        project_id=project_id,
+        discipline_id=discipline_id,
+        document_type_id=document_type_id,
+        language_id=language_id,
+        created_by=current_user.id
+    )
+    
+    db.add(db_document)
+    db.commit()
+    db.refresh(db_document)
+    
+    # Получаем ID статуса "Active" для первой ревизии
+    from app.models.references import RevisionStatus
+    active_status = db.query(RevisionStatus).filter(RevisionStatus.id == 1).first()
+    active_status_id = active_status.id if active_status else None
+    
+    # Создаем первую ревизию документа
+    revision_row = DocumentRevision(
+        document_id=db_document.id,
+        number="01",
+        file_path=file_path,
+        file_name=file.filename,
+        file_size=file.size,
+        file_type=file.content_type,
+        change_description="First revision - Первая ревизия",
+        uploaded_by=current_user.id,
+        revision_status_id=active_status_id,
+        revision_description_id=revision_description_id,
+        revision_step_id=revision_step_id
+    )
+    
+    db.add(revision_row)
+    db.commit()
+    db.refresh(revision_row)
+    
+    return {
+        "id": db_document.id,
+        "title": db_document.title,
+        "number": db_document.number,
+        "file_name": revision_row.file_name,
+        "file_size": revision_row.file_size,
+        "revision": revision_row.number,
         "created_at": db_document.created_at
     }
 
@@ -297,7 +391,8 @@ async def get_document(
         "scale": document.scale,
         "format": document.format,
         "confidentiality": document.confidentiality,
-        "created_at": document.created_at
+        "created_at": document.created_at,
+        "created_by": document.created_by
     }
 
 
@@ -515,6 +610,7 @@ async def list_document_revisions(
     versions = (
         db.query(DocumentRevision)
         .filter(DocumentRevision.document_id == document_id)
+        .filter(DocumentRevision.is_deleted == 0)  # Показываем только неудаленные ревизии
         .order_by(DocumentRevision.created_at.desc())
         .all()
     )
@@ -528,12 +624,12 @@ async def list_document_revisions(
             "file_type": v.file_type,
             "change_description": v.change_description,
             "uploaded_by": v.uploaded_by,
+            "is_deleted": v.is_deleted,
             "created_at": v.created_at,
             # Добавляем поля для связи со справочниками
             "revision_status_id": v.revision_status_id,
             "revision_description_id": v.revision_description_id,
             "revision_step_id": v.revision_step_id,
-            "review_code_id": v.review_code_id,
         }
         for v in versions
     ]
@@ -593,6 +689,7 @@ async def create_document_revision(
         ).update({"revision_status_id": superseded_status.id})
 
     # Создаем запись ревизии с активным статусом
+    # Копируем revision_step_id и revision_description_id из предыдущей ревизии
     revision_row = DocumentRevision(
         document_id=document.id,
         number=new_revision,
@@ -603,6 +700,8 @@ async def create_document_revision(
         change_description=change_description,
         uploaded_by=current_user.id,
         revision_status_id=active_status.id if active_status else None,
+        revision_step_id=latest_revision.revision_step_id if latest_revision else None,
+        revision_description_id=latest_revision.revision_description_id if latest_revision else None,
     )
     db.add(revision_row)
 
@@ -703,6 +802,52 @@ async def download_document(
     )
 
 
+@router.get("/{document_id}/revisions/{revision_id}/download")
+async def download_document_revision(
+    document_id: int,
+    revision_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Скачать конкретную ревизию документа"""
+    # Проверяем существование документа
+    document = db.query(Document).filter(Document.id == document_id).first()
+    if not document:
+        raise HTTPException(status_code=404, detail="Документ не найден")
+    
+    # Проверяем существование ревизии
+    revision = db.query(DocumentRevision).filter(
+        DocumentRevision.id == revision_id,
+        DocumentRevision.document_id == document_id
+    ).first()
+    
+    if not revision:
+        raise HTTPException(status_code=404, detail="Ревизия не найдена")
+    
+    # Проверяем права доступа (пользователь должен быть участником проекта)
+    project_member = db.query(ProjectMember).filter(
+        ProjectMember.project_id == document.project_id,
+        ProjectMember.user_id == current_user.id
+    ).first()
+    
+    if not current_user.is_admin and not project_member:
+        raise HTTPException(status_code=403, detail="Нет прав доступа к документу")
+    
+    if not revision.file_path:
+        raise HTTPException(status_code=404, detail="Файл не найден")
+    
+    # Проверяем существование файла
+    if not os.path.exists(revision.file_path):
+        raise HTTPException(status_code=404, detail="Файл не найден")
+    
+    # Возвращаем файл
+    return FileResponse(
+        path=revision.file_path,
+        filename=revision.file_name,
+        media_type='application/octet-stream'
+    )
+
+
 @router.patch("/{document_id}/soft-delete")
 async def soft_delete_document(
     document_id: int,
@@ -715,13 +860,34 @@ async def soft_delete_document(
         raise HTTPException(status_code=404, detail="Документ не найден")
     
     # Проверяем права доступа
-    if not current_user.is_admin:
+    can_delete = False
+    
+    # Администраторы могут удалять любые документы
+    if current_user.user_role and current_user.user_role.code == 'admin':
+        can_delete = True
+    # Создатель документа может удалить свой документ
+    elif document.created_by == current_user.id:
+        can_delete = True
+    # Операторы могут удалять документы в своих проектах
+    elif (current_user.user_role and 
+          current_user.user_role.code == 'operator' and 
+          document.project_id and
+          document.project.owner_id == current_user.id):
+        can_delete = True
+    
+    if not can_delete:
         raise HTTPException(status_code=403, detail="Нет прав для удаления документа")
     
     document.is_deleted = 1
+    
+    # Помечаем все ревизии документа как удаленные
+    db.query(DocumentRevision).filter(
+        DocumentRevision.document_id == document_id
+    ).update({"is_deleted": 1})
+    
     db.commit()
     
-    return {"message": "Документ помечен как удаленный", "document_id": document_id}
+    return {"message": "Документ и все его ревизии помечены как удаленные", "document_id": document_id}
 
 
 @router.patch("/{document_id}/restore")
@@ -740,6 +906,66 @@ async def restore_document(
         raise HTTPException(status_code=403, detail="Нет прав для восстановления документа")
     
     document.is_deleted = 0
+    
+    # Восстанавливаем все ревизии документа
+    db.query(DocumentRevision).filter(
+        DocumentRevision.document_id == document_id
+    ).update({"is_deleted": 0})
+    
     db.commit()
     
-    return {"message": "Документ восстановлен", "document_id": document_id}
+    return {"message": "Документ и все его ревизии восстановлены", "document_id": document_id}
+
+
+@router.delete("/revisions/{revision_id}")
+async def soft_delete_document_revision(
+    revision_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Мягкое удаление ревизии документа (установка флага is_deleted)"""
+    revision = db.query(DocumentRevision).filter(DocumentRevision.id == revision_id).first()
+    if not revision:
+        raise HTTPException(status_code=404, detail="Ревизия не найдена")
+    
+    # Проверяем права доступа - только владелец документа или администратор
+    document = db.query(Document).filter(Document.id == revision.document_id).first()
+    if not document:
+        raise HTTPException(status_code=404, detail="Документ не найден")
+    
+    # Проверяем права: владелец документа, администратор проекта или суперадмин
+    if (document.created_by != current_user.id and 
+        current_user.role_id != 1):  # 1 = Administrator
+        raise HTTPException(status_code=403, detail="Нет прав для удаления ревизии")
+    
+    revision.is_deleted = 1
+    db.commit()
+    
+    return {"message": "Ревизия удалена", "revision_id": revision_id}
+
+
+@router.post("/revisions/{revision_id}/restore")
+async def restore_document_revision(
+    revision_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Восстановление ревизии документа (снятие флага is_deleted)"""
+    revision = db.query(DocumentRevision).filter(DocumentRevision.id == revision_id).first()
+    if not revision:
+        raise HTTPException(status_code=404, detail="Ревизия не найдена")
+    
+    # Проверяем права доступа - только владелец документа или администратор
+    document = db.query(Document).filter(Document.id == revision.document_id).first()
+    if not document:
+        raise HTTPException(status_code=404, detail="Документ не найден")
+    
+    # Проверяем права: владелец документа, администратор проекта или суперадмин
+    if (document.created_by != current_user.id and 
+        current_user.role_id != 1):  # 1 = Administrator
+        raise HTTPException(status_code=403, detail="Нет прав для восстановления ревизии")
+    
+    revision.is_deleted = 0
+    db.commit()
+    
+    return {"message": "Ревизия восстановлена", "revision_id": revision_id}

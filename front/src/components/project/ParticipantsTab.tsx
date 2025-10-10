@@ -20,6 +20,7 @@ import {
   InputLabel,
   Select,
   MenuItem,
+  Autocomplete,
   FormControlLabel,
   Checkbox,
   Alert
@@ -28,7 +29,9 @@ import { useTranslation } from 'react-i18next';
 import { 
   Add as AddIcon,
   Delete as DeleteIcon,
-  Business as CompanyIcon
+  Business as CompanyIcon,
+  Star,
+  StarBorder
 } from '@mui/icons-material';
 
 interface ParticipantsTabProps {
@@ -67,9 +70,9 @@ const ParticipantsTab: React.FC<ParticipantsTabProps> = ({
   const [isEditingParticipant, setIsEditingParticipant] = useState(false);
   const [selectedParticipant, setSelectedParticipant] = useState<any>(null);
   const [participantFormData, setParticipantFormData] = useState({
-    company_id: '',
-    contact_id: '',
-    company_role_id: '',
+    company_id: null as number | null,
+    contact_id: null as number | null,
+    company_role_id: null as number | null,
     is_primary: false,
     notes: ''
   });
@@ -96,9 +99,9 @@ const ParticipantsTab: React.FC<ParticipantsTabProps> = ({
 
   const handleAddParticipant = () => {
     setParticipantFormData({
-      company_id: '',
-      contact_id: '',
-      company_role_id: '',
+      company_id: null,
+      contact_id: null,
+      company_role_id: null,
       is_primary: false,
       notes: ''
     });
@@ -108,6 +111,13 @@ const ParticipantsTab: React.FC<ParticipantsTabProps> = ({
     setParticipantDialogOpen(true);
   };
 
+  const handleCloseDialog = () => {
+    setParticipantDialogOpen(false);
+    setSelectedParticipant(null);
+    setIsEditingParticipant(false);
+  };
+
+
 
   const handleSaveParticipant = () => {
     if (!validateForm()) {
@@ -116,12 +126,12 @@ const ParticipantsTab: React.FC<ParticipantsTabProps> = ({
     
     const participantData = {
       ...participantFormData,
-      company_id: parseInt(participantFormData.company_id),
-      contact_id: participantFormData.contact_id ? parseInt(participantFormData.contact_id) : null,
-      company_role_id: participantFormData.company_role_id ? parseInt(participantFormData.company_role_id) : null,
+      company_id: participantFormData.company_id,
+      contact_id: participantFormData.contact_id,
+      company_role_id: participantFormData.company_role_id,
       id: selectedParticipant?.id || Date.now(),
       project_id: 0,
-      company_name: availableCompanies.find(c => c.id === parseInt(participantFormData.company_id))?.name || '',
+      company_name: availableCompanies.find(c => c.id === participantFormData.company_id)?.name || '',
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
@@ -130,9 +140,11 @@ const ParticipantsTab: React.FC<ParticipantsTabProps> = ({
     setParticipantDialogOpen(false);
   };
 
-  const handleCompanyChange = (companyId: number) => {
-    setParticipantFormData(prev => ({ ...prev, company_id: companyId.toString(), contact_id: '' }));
-    onCompanyChange(companyId);
+  const handleCompanyChange = (companyId: number | null) => {
+    setParticipantFormData(prev => ({ ...prev, company_id: companyId, contact_id: null }));
+    if (companyId) {
+      onCompanyChange(companyId);
+    }
   };
 
   return (
@@ -186,7 +198,11 @@ const ParticipantsTab: React.FC<ParticipantsTabProps> = ({
                       })()}
                     </TableCell>
                     <TableCell>
-                      {participant.is_primary ? t('createProject.table.yes') : t('createProject.table.no')}
+                      {participant.is_primary ? (
+                        <Star color="primary" />
+                      ) : (
+                        <StarBorder color="disabled" />
+                      )}
                     </TableCell>
                     <TableCell>
                       <IconButton
@@ -223,11 +239,7 @@ const ParticipantsTab: React.FC<ParticipantsTabProps> = ({
 
       <Dialog
         open={participantDialogOpen}
-        onClose={() => {
-          setParticipantDialogOpen(false);
-          setSelectedParticipant(null);
-          setIsEditingParticipant(false);
-        }}
+        onClose={handleCloseDialog}
         maxWidth="sm"
         fullWidth
         PaperProps={{
@@ -240,9 +252,9 @@ const ParticipantsTab: React.FC<ParticipantsTabProps> = ({
         aria-describedby="participant-dialog-description"
         disablePortal={false}
         keepMounted={false}
-        disableAutoFocus={true}
-        disableEnforceFocus={true}
-        disableRestoreFocus={true}
+        disableAutoFocus={false}
+        disableEnforceFocus={false}
+        disableRestoreFocus={false}
       >
         <DialogTitle id="participant-dialog-title">
           {isEditingParticipant ? t('createProject.dialogs.edit_participant') : t('createProject.dialogs.add_participant')}
@@ -259,60 +271,56 @@ const ParticipantsTab: React.FC<ParticipantsTabProps> = ({
             </Alert>
           )}
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
-            <FormControl fullWidth required>
-              <InputLabel>{t('createProject.fields.company')}</InputLabel>
-              <Select
-                value={participantFormData.company_id}
-                onChange={(e) => {
-                  const companyId = parseInt(e.target.value);
-                  handleCompanyChange(companyId);
-                  
-                  // Сбрасываем контакт, если он не относится к выбранной компании
-                  if (participantFormData.contact_id) {
-                    const selectedContact = contacts.find(c => c.id === participantFormData.contact_id);
-                    if (selectedContact && selectedContact.company_id !== companyId) {
-                      setParticipantFormData(prev => ({ ...prev, contact_id: '' }));
-                    }
+            <Autocomplete
+              options={availableCompanies}
+              getOptionLabel={(company) => getCompanyName(company)}
+              value={availableCompanies.find(company => company.id === participantFormData.company_id) || null}
+              isOptionEqualToValue={(option, value) => option.id === value.id}
+              onChange={(_, newValue) => {
+                const companyId = newValue ? newValue.id : null;
+                handleCompanyChange(companyId);
+                
+                // Сбрасываем контакт, если он не относится к выбранной компании
+                if (participantFormData.contact_id) {
+                  const selectedContact = contacts.find(c => c.id === participantFormData.contact_id);
+                  if (selectedContact && selectedContact.company_id !== companyId) {
+                    setParticipantFormData(prev => ({ ...prev, contact_id: null }));
                   }
-                }}
-                label={t('createProject.fields.company')}
-                MenuProps={{
-                  disablePortal: true,
-                  PaperProps: {
-                    style: {
-                      maxHeight: '200px'
-                    }
-                  }
-                }}
-              >
-                <MenuItem value="">
-                  <em>{t('createProject.placeholders.select_company')}</em>
-                </MenuItem>
-                {availableCompanies.map((company) => (
-                  <MenuItem key={company.id} value={company.id.toString()}>
-                    {getCompanyName(company)}
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
+                }
+              }}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label={t('createProject.fields.company')}
+                  variant="standard"
+                  placeholder={t('createProject.placeholders.select_company')}
+                  required
+                />
+              )}
+              ListboxProps={{
+                style: {
+                  maxHeight: '320px' // 8 строк * 40px
+                }
+              }}
+            />
 
-            <FormControl fullWidth>
+            <FormControl fullWidth variant="standard">
               <InputLabel>{t('createProject.fields.contact_person')}</InputLabel>
               <Select
                 value={(() => {
-                  const contactId = participantFormData.contact_id || '';
+                  const contactId = participantFormData.contact_id;
                   // Проверяем, что выбранный контакт существует в списке
-                  const contactExists = contacts.some(contact => contact.id.toString() === contactId);
-                  return contactExists ? contactId : '';
+                  const contactExists = contacts.some(contact => contact.id === contactId);
+                  return contactExists ? contactId?.toString() || '' : '';
                 })()}
-                onChange={(e) => setParticipantFormData(prev => ({ ...prev, contact_id: e.target.value }))}
+                onChange={(e) => setParticipantFormData(prev => ({ ...prev, contact_id: e.target.value ? parseInt(e.target.value) : null }))}
                 label={t('createProject.fields.contact_person')}
                 disabled={!participantFormData.company_id}
                 MenuProps={{
                   disablePortal: true,
                   PaperProps: {
                     style: {
-                      maxHeight: '200px'
+                      maxHeight: '400px'
                     }
                   }
                 }}
@@ -321,7 +329,7 @@ const ParticipantsTab: React.FC<ParticipantsTabProps> = ({
                   <em>{t('createProject.placeholders.select_contact')}</em>
                 </MenuItem>
                 {contacts
-                  .filter(contact => contact.company_id === parseInt(participantFormData.company_id))
+                  .filter(contact => contact.company_id === participantFormData.company_id)
                   .map((contact) => (
                     <MenuItem key={contact.id} value={contact.id.toString()}>
                       {getContactName(contact)}
@@ -330,24 +338,21 @@ const ParticipantsTab: React.FC<ParticipantsTabProps> = ({
               </Select>
             </FormControl>
 
-            <FormControl fullWidth>
+            <FormControl fullWidth variant="standard">
               <InputLabel>{t('createProject.fields.role')}</InputLabel>
               <Select
-                value={participantFormData.company_role_id || ''}
-                onChange={(e) => setParticipantFormData(prev => ({ ...prev, company_role_id: e.target.value }))}
+                value={participantFormData.company_role_id?.toString() || ''}
+                onChange={(e) => setParticipantFormData(prev => ({ ...prev, company_role_id: e.target.value ? parseInt(e.target.value) : null }))}
                 label={t('createProject.fields.role')}
                 MenuProps={{
                   disablePortal: true,
                   PaperProps: {
                     style: {
-                      maxHeight: '200px'
+                      maxHeight: '400px'
                     }
                   }
                 }}
               >
-                <MenuItem value="">
-                  <em>{t('createProject.placeholders.select_role')}</em>
-                </MenuItem>
                 {companyRoles.map((role) => (
                   <MenuItem key={role.id} value={role.id.toString()}>
                     {getRoleName(role)}
@@ -359,6 +364,7 @@ const ParticipantsTab: React.FC<ParticipantsTabProps> = ({
             <TextField
               fullWidth
               label={t('createProject.fields.notes')}
+              variant="standard"
               multiline
               rows={2}
               value={participantFormData.notes}
@@ -377,11 +383,7 @@ const ParticipantsTab: React.FC<ParticipantsTabProps> = ({
           </Box>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => {
-            setParticipantDialogOpen(false);
-            setSelectedParticipant(null);
-            setIsEditingParticipant(false);
-          }}>{t('common.cancel')}</Button>
+          <Button onClick={handleCloseDialog}>{t('common.cancel')}</Button>
           <Button
             onClick={handleSaveParticipant}
             variant="contained"

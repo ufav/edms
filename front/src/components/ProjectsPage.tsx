@@ -27,34 +27,32 @@ import {
   Card,
   CardContent,
   CardActions,
-  Snackbar,
 } from '@mui/material';
 import {
   Search as SearchIcon,
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
-  People as PeopleIcon,
 } from '@mui/icons-material';
 import { observer } from 'mobx-react-lite';
 import { projectStore } from '../stores/ProjectStore';
 import { projectsApi } from '../api/client';
-import ProjectMembersDialog from './ProjectMembersDialog';
 import ProjectDialog from './ProjectDialog';
 import ConfirmDialog from './ConfirmDialog';
 import { useCurrentUser } from '../hooks/useCurrentUser';
+import { userStore } from '../stores/UserStore';
+import { usePermissions } from '../hooks/usePermissions';
 import { useTranslation } from 'react-i18next';
+import NotificationSnackbar from './NotificationSnackbar';
 
 const ProjectsPage: React.FC = observer(() => {
-  const { canManageProject } = useCurrentUser();
+  const { canEditProject, canDeleteProject, isAdmin, isOperator, isViewer } = useCurrentUser();
+  const permissions = usePermissions();
   const { t } = useTranslation();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
-  const [membersDialogOpen, setMembersDialogOpen] = useState<boolean>(false);
-  const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
-  const [selectedProjectName, setSelectedProjectName] = useState<string>('');
   const [projectDialogOpen, setProjectDialogOpen] = useState<boolean>(false);
   const [projectDialogMode, setProjectDialogMode] = useState<'create' | 'edit' | 'view'>('create');
   const [editProjectId, setEditProjectId] = useState<number | null>(null);
@@ -159,17 +157,6 @@ const ProjectsPage: React.FC = observer(() => {
     setSuccessNotification({ open: false, message: '' });
   };
 
-  const handleManageMembers = (projectId: number, projectName: string) => {
-    setSelectedProjectId(projectId);
-    setSelectedProjectName(projectName);
-    setMembersDialogOpen(true);
-  };
-
-  const handleCloseMembersDialog = () => {
-    setMembersDialogOpen(false);
-    setSelectedProjectId(null);
-    setSelectedProjectName('');
-  };
 
   const formatDate = (dateString: string): string => {
     try {
@@ -197,14 +184,16 @@ const ProjectsPage: React.FC = observer(() => {
         <Typography variant={isMobile ? "h5" : "h4"} component="h1">
           {t('menu.projects')}
         </Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={handleCreate}
-          sx={{ backgroundColor: '#1976d2', width: isMobile ? '100%' : 'auto' }}
-        >
-          {t('project.create')}
-        </Button>
+        {permissions.canCreateProjects && (
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={handleCreate}
+            sx={{ backgroundColor: '#1976d2', width: isMobile ? '100%' : 'auto' }}
+          >
+            {t('project.create')}
+          </Button>
+        )}
       </Box>
 
       {/* Фильтры и поиск */}
@@ -299,25 +288,24 @@ const ProjectsPage: React.FC = observer(() => {
                         />
                       </Box>
                     </CardContent>
-                    <CardActions sx={{ justifyContent: 'flex-end', gap: 1 }}>
-                      <Tooltip title={t('common.edit')}>
-                        <IconButton size="small" onClick={() => handleEdit(project.id)}>
-                          <EditIcon />
-                        </IconButton>
-                      </Tooltip>
-                      {canManageProject(project.id) && (
-                        <Tooltip title={t('projects.manage_members')}>
-                          <IconButton size="small" onClick={() => handleManageMembers(project.id, project.name)}>
-                            <PeopleIcon />
-                          </IconButton>
-                        </Tooltip>
-                      )}
-                      <Tooltip title={t('common.delete')}>
-                        <IconButton size="small" onClick={() => handleDelete(project.id)} color="error">
-                          <DeleteIcon />
-                        </IconButton>
-                      </Tooltip>
-                    </CardActions>
+                    {!isViewer && (
+                      <CardActions sx={{ justifyContent: 'flex-end', gap: 1 }}>
+                        {canEditProject(project) && (
+                          <Tooltip title={t('common.edit')}>
+                            <IconButton size="small" onClick={() => handleEdit(project.id)}>
+                              <EditIcon />
+                            </IconButton>
+                          </Tooltip>
+                        )}
+                        {canDeleteProject(project) && (
+                          <Tooltip title={t('common.delete')}>
+                            <IconButton size="small" onClick={() => handleDelete(project.id)} color="error">
+                              <DeleteIcon />
+                            </IconButton>
+                          </Tooltip>
+                        )}
+                      </CardActions>
+                    )}
                   </Card>
                 </Grid>
               ))}
@@ -395,14 +383,16 @@ const ProjectsPage: React.FC = observer(() => {
                   textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap'
                 }}>{t('projects.columns.owner')}</TableCell>
-                <TableCell sx={{ 
-                  fontWeight: 'bold',
-                  width: '12%',
-                  maxWidth: '300px',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap'
-                }}>{t('common.actions')}</TableCell>
+                {!isViewer && (
+                  <TableCell sx={{ 
+                    fontWeight: 'bold',
+                    width: '12%',
+                    maxWidth: '300px',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap'
+                  }}>{t('common.actions')}</TableCell>
+                )}
               </TableRow>
             </TableHead>
             <TableBody>
@@ -519,32 +509,31 @@ const ProjectsPage: React.FC = observer(() => {
                       </Typography>
                     </Tooltip>
                   </TableCell>
-                  <TableCell sx={{ 
-                    maxWidth: '300px',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap'
-                  }}>
-                    <Box sx={{ display: 'flex', gap: 1 }}>
-                      <Tooltip title={t('common.edit')}>
-                        <IconButton size="small" onClick={() => handleEdit(project.id)}>
-                          <EditIcon />
-                        </IconButton>
-                      </Tooltip>
-                      {canManageProject(project) && (
-                        <Tooltip title={t('projects.manage_members')}>
-                          <IconButton size="small" onClick={() => handleManageMembers(project.id, project.name)}>
-                            <PeopleIcon />
-                          </IconButton>
-                        </Tooltip>
-                      )}
-                      <Tooltip title={t('common.delete')}>
-                        <IconButton size="small" onClick={() => handleDelete(project.id)} color="error">
-                          <DeleteIcon />
-                        </IconButton>
-                      </Tooltip>
-                    </Box>
-                  </TableCell>
+                  {!isViewer && (
+                    <TableCell sx={{ 
+                      maxWidth: '300px',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap'
+                    }}>
+                      <Box sx={{ display: 'flex', gap: 1 }}>
+                        {canEditProject(project) && (
+                          <Tooltip title={t('common.edit')}>
+                            <IconButton size="small" onClick={() => handleEdit(project.id)}>
+                              <EditIcon />
+                            </IconButton>
+                          </Tooltip>
+                        )}
+                        {canDeleteProject(project) && (
+                          <Tooltip title={t('common.delete')}>
+                            <IconButton size="small" onClick={() => handleDelete(project.id)} color="error">
+                              <DeleteIcon />
+                            </IconButton>
+                          </Tooltip>
+                        )}
+                      </Box>
+                    </TableCell>
+                  )}
                 </TableRow>
               ))}
             </TableBody>
@@ -561,15 +550,6 @@ const ProjectsPage: React.FC = observer(() => {
         </Box>
       )}
 
-      {/* Диалог управления участниками */}
-      {selectedProjectId && (
-        <ProjectMembersDialog
-          open={membersDialogOpen}
-          onClose={handleCloseMembersDialog}
-          projectId={selectedProjectId}
-          projectName={selectedProjectName}
-        />
-      )}
 
       {/* Унифицированный диалог проекта */}
       <ProjectDialog
@@ -594,21 +574,12 @@ const ProjectsPage: React.FC = observer(() => {
       />
 
       {/* Уведомление об успешном создании проекта */}
-      <Snackbar
+      <NotificationSnackbar
         open={successNotification.open}
-        autoHideDuration={4000}
+        message={successNotification.message}
+        severity="success"
         onClose={handleCloseNotification}
-        anchorOrigin={{ vertical: 'top', horizontal: 'right' }}
-      >
-        <Alert
-          onClose={handleCloseNotification}
-          severity="success"
-          variant="filled"
-          sx={{ width: '100%' }}
-        >
-          {successNotification.message}
-        </Alert>
-      </Snackbar>
+      />
     </Box>
   );
 });

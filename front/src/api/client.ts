@@ -86,11 +86,12 @@ export interface Project {
   end_date: string | null;
   budget: number | null;
   client: string | null;
-  manager_id: number | null;
   created_by: number | null;
   owner_id?: number | null;
   owner_name?: string | null;
   user_role: string | null;  // Роль текущего пользователя в проекте
+  members?: ProjectMember[];  // Участники проекта (пользователи)
+  participants?: ProjectParticipant[];  // Участники проекта (компании)
   created_at: string | null;
   updated_at: string | null;
 }
@@ -118,6 +119,7 @@ export interface DocumentType {
   is_active: boolean;
   created_at: string | null;
   updated_at: string | null;
+  drs?: string | null;  // DRS из project_discipline_document_types
 }
 
 export interface Language {
@@ -172,7 +174,6 @@ export interface ProjectMember {
   id: number;
   project_id: number;
   user_id: number;
-  role: string;
   project_role_id?: number;
   joined_at: string | null;
 }
@@ -228,6 +229,7 @@ export interface Document {
   project_id: number;
   language_id?: number;
   uploaded_by: number;
+  created_by?: number;  // Создатель документа
   file_path: string;
   discipline_id?: number;
   document_type_id?: number;
@@ -382,6 +384,7 @@ export interface DocumentRevisionFile {
   file_type: string;
   change_description: string | null;
   uploaded_by: number;
+  is_deleted: number;  // Флаг удаления: 0 - не удален, 1 - удален
   created_at: string;
   // Новые поля для связи со справочниками
   revision_status_id?: number;
@@ -578,7 +581,7 @@ export const projectsApi = {
     },
 
     // Добавить участника к проекту
-    add: async (projectId: number, memberData: { user_id: number; role: string; project_role_id?: number }): Promise<ProjectMember> => {
+    add: async (projectId: number, memberData: { user_id: number; project_role_id?: number }): Promise<ProjectMember> => {
       const response = await apiClient.post(`/projects/${projectId}/members/`, memberData);
       return response.data;
     },
@@ -623,6 +626,12 @@ export const projectsApi = {
   getWorkflowPreset: async (projectId: number): Promise<any> => {
     const response = await apiClient.get(`/projects/${projectId}/workflow-preset`);
     return response.data;
+  },
+
+  // Получить sequence пресета workflow для проекта
+  getWorkflowPresetSequence: async (projectId: number): Promise<any[]> => {
+    const response = await apiClient.get(`/projects/${projectId}/workflow-preset/sequence`);
+    return response.data;
   }
 };
 
@@ -653,6 +662,17 @@ export const documentsApi = {
       headers: {
         'Content-Type': 'multipart/form-data',
       },
+    });
+    return response.data;
+  },
+
+  // Создать документ с первой ревизией
+  createWithRevision: async (formData: FormData, config?: { onUploadProgress?: (progressEvent: any) => void }): Promise<any> => {
+    const response = await apiClient.post('/documents/create-with-revision', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+      ...config,
     });
     return response.data;
   },
@@ -716,6 +736,34 @@ export const documentsApi = {
   compareRevisions: async (documentId: number, r1: string, r2: string): Promise<any> => {
     const response = await apiClient.get(`/documents/${documentId}/revisions/compare`, {
       params: { r1, r2 },
+    });
+    return response.data;
+  },
+
+  // Мягкое удаление ревизии документа
+  softDeleteRevision: async (revisionId: number): Promise<void> => {
+    await apiClient.delete(`/documents/revisions/${revisionId}`);
+  },
+
+  // Восстановление ревизии документа
+  restoreRevision: async (revisionId: number): Promise<void> => {
+    await apiClient.post(`/documents/revisions/${revisionId}/restore`);
+  },
+
+  // Загрузить новую ревизию документа
+  uploadRevision: async (documentId: number, formData: FormData): Promise<any> => {
+    const response = await apiClient.post(`/documents/${documentId}/revisions`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+
+  // Скачать ревизию документа
+  downloadRevision: async (documentId: number, revisionId: number): Promise<Blob> => {
+    const response = await apiClient.get(`/documents/${documentId}/revisions/${revisionId}/download`, {
+      responseType: 'blob',
     });
     return response.data;
   },
@@ -1412,6 +1460,19 @@ export interface ProjectRole {
   created_at: string;
 }
 
+export interface DocumentComment {
+  id: number;
+  document_id: number;
+  parent_comment_id?: number;
+  user_id: number;
+  user_name: string;
+  content: string;
+  is_resolved: boolean;
+  created_at: string;
+  updated_at: string;
+  replies: DocumentComment[];
+}
+
 export const rolesApi = {
   // User Roles
   getUserRoles: async (): Promise<UserRole[]> => {
@@ -1461,6 +1522,41 @@ export const rolesApi = {
   
   deleteProjectRole: async (roleId: number): Promise<void> => {
     await apiClient.delete(`/roles/project-roles/${roleId}`);
+  }
+};
+
+// API методы для комментариев документов
+export const documentCommentsApi = {
+  // Получить комментарии документа
+  getComments: async (documentId: number): Promise<DocumentComment[]> => {
+    const response = await apiClient.get(`/documents/${documentId}/comments`);
+    return response.data;
+  },
+
+  // Создать комментарий
+  createComment: async (documentId: number, content: string, parentCommentId?: number): Promise<DocumentComment> => {
+    const response = await apiClient.post(`/documents/${documentId}/comments`, {
+      content,
+      parent_comment_id: parentCommentId || null
+    });
+    return response.data;
+  },
+
+  // Обновить комментарий
+  updateComment: async (commentId: number, content: string): Promise<DocumentComment> => {
+    const response = await apiClient.put(`/comments/${commentId}`, { content });
+    return response.data;
+  },
+
+  // Удалить комментарий
+  deleteComment: async (commentId: number): Promise<void> => {
+    await apiClient.delete(`/comments/${commentId}`);
+  },
+
+  // Переключить статус "решено"
+  toggleResolve: async (commentId: number): Promise<{ message: string }> => {
+    const response = await apiClient.patch(`/comments/${commentId}/resolve`);
+    return response.data;
   }
 };
 

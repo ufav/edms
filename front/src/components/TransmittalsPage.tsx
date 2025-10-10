@@ -36,9 +36,11 @@ import { projectStore } from '../stores/ProjectStore';
 import { transmittalStore } from '../stores/TransmittalStore';
 import ProjectRequired from './ProjectRequired';
 import { useTranslation } from 'react-i18next';
+import { useCurrentUser } from '../hooks/useCurrentUser';
 
 const TransmittalsPage: React.FC = observer(() => {
   const { t } = useTranslation();
+  const { isViewer } = useCurrentUser();
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterProject, setFilterProject] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -89,14 +91,16 @@ const TransmittalsPage: React.FC = observer(() => {
           <Typography variant="h4" component="h1">
             {t('menu.transmittals')} {projectStore.selectedProject && `- ${projectStore.selectedProject.name}`}
           </Typography>
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={handleCreate}
-            sx={{ backgroundColor: '#1976d2' }}
-          >
-            {t('transmittals.create')}
-          </Button>
+          {!isViewer && (
+            <Button
+              variant="contained"
+              startIcon={<AddIcon />}
+              onClick={handleCreate}
+              sx={{ backgroundColor: '#1976d2' }}
+            >
+              {t('transmittals.create')}
+            </Button>
+          )}
         </Box>
 
         {/* Фильтры и поиск */}

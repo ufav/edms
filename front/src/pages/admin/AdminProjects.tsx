@@ -37,11 +37,12 @@ import {
   Visibility as ViewIcon,
   People as PeopleIcon,
 } from '@mui/icons-material';
-import { projectsApi, usersApi, type Project as ApiProject, type User as ApiUser } from '../../api/client';
+import { projectsApi, usersApi, companiesApi, type Project as ApiProject, type User as ApiUser, type Company as ApiCompany } from '../../api/client';
 
 const AdminProjects: React.FC = () => {
   const [projects, setProjects] = useState<ApiProject[]>([]);
   const [users, setUsers] = useState<ApiUser[]>([]);
+  const [companies, setCompanies] = useState<ApiCompany[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -52,7 +53,7 @@ const AdminProjects: React.FC = () => {
     status: 'active',
     start_date: '',
     end_date: '',
-    project_manager_id: null as number | null,
+    members: [] as number[],
     participants: [] as number[],
   });
 
@@ -63,13 +64,23 @@ const AdminProjects: React.FC = () => {
   const loadData = async () => {
     try {
       setLoading(true);
-      const [projectsList, usersList] = await Promise.all([
+      const [projectsList, usersList, companiesList] = await Promise.all([
         projectsApi.getAll(),
         usersApi.getAll(),
+        companiesApi.getAll(),
       ]);
+      console.log('Загруженные проекты:', projectsList);
+      console.log('Первый проект с участниками:', projectsList[0]?.members);
+      console.log('Первый проект с компаниями:', projectsList[0]?.participants);
+      console.log('Количество проектов:', projectsList.length);
+      if (projectsList.length > 0) {
+        console.log('Структура первого проекта:', Object.keys(projectsList[0]));
+      }
       setProjects(projectsList);
       setUsers(usersList);
+      setCompanies(companiesList);
     } catch (err) {
+      console.error('Ошибка загрузки данных:', err);
       setError('Ошибка загрузки данных');
     } finally {
       setLoading(false);
@@ -84,13 +95,17 @@ const AdminProjects: React.FC = () => {
       status: 'active',
       start_date: '',
       end_date: '',
-      project_manager_id: null,
+      members: [],
       participants: [],
     });
     setDialogOpen(true);
   };
 
   const handleEditProject = (project: ApiProject) => {
+    console.log('Редактирование проекта:', project);
+    console.log('Участники проекта (members):', project.members);
+    console.log('Компании-участники (participants):', project.participants);
+    
     setEditingProject(project);
     setFormData({
       name: project.name,
@@ -98,13 +113,14 @@ const AdminProjects: React.FC = () => {
       status: project.status,
       start_date: project.start_date ? project.start_date.split('T')[0] : '',
       end_date: project.end_date ? project.end_date.split('T')[0] : '',
-      project_manager_id: project.project_manager_id || null,
-      participants: project.participants?.map(p => p.id) || [],
+      members: project.members?.map(m => m.user_id) || [],
+      participants: project.participants?.map(p => p.company_id) || [],
     });
     setDialogOpen(true);
   };
 
   const handleSaveProject = async () => {
+    alert('Начинаем сохранение проекта!'); // Простое уведомление
     try {
       const projectData = {
         ...formData,
@@ -112,15 +128,27 @@ const AdminProjects: React.FC = () => {
         end_date: formData.end_date || null,
       };
 
+      console.log('Отправляемые данные проекта:', projectData);
+      console.log('Участники (members):', projectData.members);
+      console.log('Компании-участники (participants):', projectData.participants);
+      console.log('Тип members:', typeof projectData.members);
+      console.log('members is array:', Array.isArray(projectData.members));
+      console.log('Длина members:', projectData.members?.length);
+
       if (editingProject) {
+        alert('Обновляем существующий проект!');
         await projectsApi.update(editingProject.id, projectData);
       } else {
+        alert('Создаем новый проект!');
         await projectsApi.create(projectData);
       }
       
+      alert('Проект сохранен успешно!');
       setDialogOpen(false);
       loadData();
     } catch (err) {
+      console.error('Ошибка сохранения проекта:', err);
+      alert('Ошибка сохранения проекта: ' + err);
       setError('Ошибка сохранения проекта');
     }
   };
@@ -157,7 +185,6 @@ const AdminProjects: React.FC = () => {
   };
 
   const getProjectManager = (project: ApiProject) => {
-    return users.find(u => u.id === project.project_manager_id);
   };
 
   const getParticipants = (project: ApiProject) => {
@@ -337,28 +364,13 @@ const AdminProjects: React.FC = () => {
                 <MenuItem value="cancelled">Отменен</MenuItem>
               </Select>
             </FormControl>
-            <FormControl fullWidth>
-              <InputLabel>Руководитель проекта</InputLabel>
-              <Select
-                value={formData.project_manager_id || ''}
-                onChange={(e) => setFormData({ ...formData, project_manager_id: e.target.value ? Number(e.target.value) : null })}
-                label="Руководитель проекта"
-              >
-                <MenuItem value="">Не назначен</MenuItem>
-                {users.map((user) => (
-                  <MenuItem key={user.id} value={user.id}>
-                    {user.full_name} ({user.username})
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
             <Autocomplete
               multiple
               options={users}
               getOptionLabel={(option) => `${option.full_name} (${option.username})`}
-              value={users.filter(u => formData.participants.includes(u.id))}
+              value={users.filter(u => formData.members.includes(u.id))}
               onChange={(_, newValue) => {
-                setFormData({ ...formData, participants: newValue.map(u => u.id) });
+                setFormData({ ...formData, members: newValue.map(u => u.id) });
               }}
               renderInput={(params) => (
                 <TextField
@@ -374,6 +386,32 @@ const AdminProjects: React.FC = () => {
                     key={option.id}
                     label={option.full_name}
                     avatar={<Avatar>{option.full_name?.charAt(0)}</Avatar>}
+                  />
+                ))
+              }
+            />
+            <Autocomplete
+              multiple
+              options={companies}
+              getOptionLabel={(option) => option.name}
+              value={companies.filter(c => formData.participants.includes(c.id))}
+              onChange={(_, newValue) => {
+                setFormData({ ...formData, participants: newValue.map(c => c.id) });
+              }}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Компании-участники проекта"
+                  placeholder="Выберите компании"
+                />
+              )}
+              renderTags={(value, getTagProps) =>
+                value.map((option, index) => (
+                  <Chip
+                    {...getTagProps({ index })}
+                    key={option.id}
+                    label={option.name}
+                    color="secondary"
                   />
                 ))
               }
