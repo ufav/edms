@@ -43,6 +43,7 @@ class DisciplineStore {
         this.loadedProjectId = projectId;
       });
     } catch (error) {
+      console.error('Error loading disciplines:', error);
       runInAction(() => {
         this.error = 'Ошибка загрузки дисциплин';
         this.disciplines = [];

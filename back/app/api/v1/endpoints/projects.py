@@ -49,6 +49,7 @@ class ProjectCreate(BaseModel):
 class ProjectUpdate(BaseModel):
     name: str = None
     description: str = None
+    project_code: str = None
     status: str = None
     start_date: str = None
     end_date: str = None
@@ -134,13 +135,11 @@ async def get_projects(
         ).offset(skip).limit(limit)
     
     projects = projects_query.all()
-    print(f"🔍 DEBUG: Найдено проектов: {len(projects)}")
     result = []
     
     for project in projects:
         # Получаем участников проекта (пользователей)
         members = db.query(ProjectMember).filter(ProjectMember.project_id == project.id).all()
-        print(f"🔍 DEBUG: Проект {project.id} - найдено участников: {len(members)}")
         members_data = [
             {
                 "id": member.id,
@@ -222,7 +221,6 @@ async def create_project(
             if not db.query(Project).filter(Project.project_code == code, Project.is_deleted == 0).first():
                 return code
 
-    print(f"🔍 DEBUG: Creating project with workflow_preset_id: {project_data.workflow_preset_id}")
     
     db_project = Project(
         name=project_data.name,
@@ -393,10 +391,16 @@ async def update_project(
     if not project:
         raise HTTPException(status_code=404, detail="Проект не найден")
 
-    check_project_access(project, current_user, db, require_creator_or_admin=True)
+    # Проверяем права доступа
+    if current_user.user_role and current_user.user_role.code == 'admin':
+        pass  # Админ может все
+    elif project.created_by == current_user.id:
+        pass  # Создатель проекта может все
+    else:
+        raise HTTPException(status_code=403, detail="Только создатель проекта или админ могут редактировать проект")
 
     # Обновляем простые поля
-    for field in ["name", "description", "status", "start_date", "end_date", "budget"]:
+    for field in ["name", "description", "project_code", "status", "start_date", "end_date", "budget"]:
         value = getattr(project_data, field)
         if value is not None:
             setattr(project, field, value)
@@ -585,7 +589,10 @@ async def add_project_member(
     ).first()
     
     if existing_member:
-        raise HTTPException(status_code=400, detail="Пользователь уже является участником проекта")
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Пользователь с ID {member_data.user_id} уже является участником проекта. Один пользователь не может быть добавлен в проект дважды, даже с разными ролями."
+        )
     
     # Проверяем, что пользователь существует
     target_user = db.query(User).filter(User.id == member_data.user_id).first()
@@ -600,9 +607,20 @@ async def add_project_member(
         project_role_id=member_data.project_role_id
     )
     
-    db.add(project_member)
-    db.commit()
-    db.refresh(project_member)
+    try:
+        db.add(project_member)
+        db.commit()
+        db.refresh(project_member)
+    except Exception as e:
+        db.rollback()
+        # Проверяем, если это ошибка уникального ограничения
+        if "uq_project_members_project_user" in str(e) or "duplicate key" in str(e).lower():
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Пользователь с ID {member_data.user_id} уже является участником проекта. Один пользователь не может быть добавлен в проект дважды."
+            )
+        else:
+            raise HTTPException(status_code=500, detail="Ошибка при добавлении участника проекта")
     
     return {
         "id": project_member.id,

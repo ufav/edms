@@ -750,6 +750,11 @@ export const documentsApi = {
     await apiClient.post(`/documents/revisions/${revisionId}/restore`);
   },
 
+  // Отменить ревизию документа
+  cancelRevision: async (revisionId: number): Promise<void> => {
+    await apiClient.post(`/documents/revisions/${revisionId}/cancel`);
+  },
+
   // Загрузить новую ревизию документа
   uploadRevision: async (documentId: number, formData: FormData): Promise<any> => {
     const response = await apiClient.post(`/documents/${documentId}/revisions`, formData, {

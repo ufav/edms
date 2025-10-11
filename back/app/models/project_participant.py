@@ -2,13 +2,16 @@
 Project Participant model for EDMS
 """
 
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Text
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Text, UniqueConstraint
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.core.database import Base
 
 class ProjectParticipant(Base):
     __tablename__ = "project_participants"
+    __table_args__ = (
+        UniqueConstraint('project_id', 'company_id', name='uq_project_participants_project_company'),
+    )
     
     id = Column(Integer, primary_key=True, index=True)
     project_id = Column(Integer, ForeignKey("projects.id"), nullable=False)

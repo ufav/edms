@@ -21,20 +21,20 @@ import {
   Autocomplete,
   Chip
 } from '@mui/material';
-import { disciplinesApi, projectsApi, projectParticipantsApi, rolesApi } from '../api/client';
-import referenceDataStore from '../stores/ReferenceDataStore';
-import { projectDialogStore } from '../stores/ProjectDialogStore';
-import type { Discipline, DocumentType, ProjectParticipant, ProjectParticipantCreate, ProjectMember } from '../api/client';
-import DocumentTypeSelectionDialog from './DocumentTypeSelectionDialog';
-import MainTab from './project/MainTab';
-import DisciplinesTypesTab from './project/DisciplinesTypesTab';
-import { handleExcelImport } from './project/ExcelImportHandler';
-import RevisionsTab from './project/RevisionsTab';
-import WorkflowTab from './project/WorkflowTab';
-import ParticipantsTab from './project/ParticipantsTab';
-import UsersTab from './project/UsersTab';
-import SummaryTab from './project/SummaryTab';
-import { useProjectForm } from '../hooks/useProjectForm';
+import { disciplinesApi, projectsApi, projectParticipantsApi, rolesApi } from '../../api/client';
+import referenceDataStore from '../../stores/ReferenceDataStore';
+import { projectDialogStore } from '../../stores/ProjectDialogStore';
+import type { Discipline, DocumentType, ProjectParticipant, ProjectParticipantCreate, ProjectMember } from '../../api/client';
+import DocumentTypeSelectionDialog from '../DocumentTypeSelectionDialog';
+import MainTab from './MainTab';
+import DisciplinesTypesTab from './DisciplinesTypesTab';
+import { handleExcelImport } from './ExcelImportHandler';
+import RevisionsTab from './RevisionsTab';
+import WorkflowTab from './WorkflowTab';
+import ParticipantsTab from './ParticipantsTab';
+import UsersTab from './UsersTab';
+import SummaryTab from './SummaryTab';
+import { useProjectForm } from './hooks/useProjectForm';
 import { useTranslation } from 'react-i18next';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
@@ -235,7 +235,7 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
       const roles = await rolesApi.getProjectRoles();
       setProjectRoles(roles);
     } catch (error) {
-      console.error('Ошибка загрузки ролей проектов:', error);
+      // Ошибка загрузки ролей проектов
     }
   };
 
@@ -252,8 +252,6 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
       // Перезагружаем workflow presets для получения новых пресетов пользователя
       await projectDialogStore.reloadWorkflowPresets();
     } catch (err: any) {
-      console.error('Error loading data:', err);
-      console.error('Error details:', err.response?.data || err.message);
       setError(`Ошибка загрузки данных: ${err.response?.data?.detail || err.message || 'Неизвестная ошибка'}`);
     } finally {
       setLoading(false);
@@ -320,7 +318,6 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
       setPendingProjectMembersWithTracking(projectData.members);
 
     } catch (err: any) {
-      console.error('Error loading project data:', err);
       setError(`Ошибка загрузки данных проекта: ${err.response?.data?.detail || err.message || 'Неизвестная ошибка'}`);
     } finally {
       setLoading(false);
@@ -385,6 +382,11 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
   };
 
   const handleSubmit = async () => {
+    // Защита от двойного вызова
+    if (saving) {
+      return;
+    }
+    
     // Валидируем код проекта перед отправкой (только для режима create)
     if (mode === 'create' && formData.project_code && formData.project_code.trim().length >= 3) {
       try {
@@ -405,7 +407,6 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
           return;
         }
       } catch (error) {
-        console.error('Error checking project code:', error);
         setCodeValidation({
           isChecking: false,
           exists: false,
@@ -477,7 +478,6 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
               await projectParticipantsApi.create(newProject.id, participantData);
             }
           } catch (err: any) {
-            console.error(t('createProject.messages.participants_add_error'), err);
             // Не прерываем создание проекта из-за ошибки с участниками
           }
         }
@@ -492,7 +492,6 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
               });
             }
           } catch (err: any) {
-            console.error(t('createProject.messages.members_add_error'), err);
             // Не прерываем создание проекта из-за ошибки с участниками
           }
         }
@@ -506,8 +505,6 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
       
       handleClose();
     } catch (err: any) {
-      console.error(`Ошибка ${mode === 'create' ? 'создания' : 'обновления'} проекта:`, err);
-      console.error('Детали ошибки:', err.response?.data);
       setError(err.response?.data?.detail || t('createProject.messages.project_create_error'));
     } finally {
       setSaving(false);
@@ -722,7 +719,6 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
       await disciplinesApi.searchDocumentTypesByCode(pair.discipline.id, pair.code);
       setDocumentTypeSelectionOpen(true);
     } catch (error) {
-      console.error('Error searching document types:', error);
       setDocumentTypeSelectionOpen(true);
     }
   };

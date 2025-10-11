@@ -54,7 +54,17 @@ const ProjectRequired: React.FC<ProjectRequiredProps> = observer(({ children }) 
     );
   }
 
-  return <>{children}</>;
+  return (
+    <Box sx={{ 
+      width: '100%', 
+      minWidth: 0, 
+      flex: 1, 
+      display: 'flex', 
+      flexDirection: 'column'
+    }}>
+      {children}
+    </Box>
+  );
 });
 
 export default ProjectRequired;

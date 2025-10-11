@@ -67,6 +67,24 @@ class DocumentRevisionStore {
     this.loadedDocuments.clear();
     this.error = null;
   }
+
+  // Получение документа (из первой ревизии)
+  getDocument(documentId: number): any {
+    const revisions = this.getRevisions(documentId);
+    if (revisions.length > 0) {
+      return revisions[0].document;
+    }
+    return null;
+  }
+
+  // Обновление документа
+  updateDocument(documentId: number, updateData: any) {
+    const revisions = this.getRevisions(documentId);
+    if (revisions.length > 0 && revisions[0].document) {
+      // Обновляем данные документа в первой ревизии
+      Object.assign(revisions[0].document, updateData);
+    }
+  }
 }
 
 export const documentRevisionStore = new DocumentRevisionStore();

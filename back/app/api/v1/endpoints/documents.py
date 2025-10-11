@@ -667,13 +667,34 @@ async def create_document_revision(
     with open(file_path, "wb") as buffer:
         buffer.write(content)
 
-    # Получаем текущую ревизию из последней ревизии
+    # Получаем ID статуса "Cancelled"
+    from app.models.references import RevisionStatus
+    cancelled_status = db.query(RevisionStatus).filter(RevisionStatus.name == "Cancelled").first()
+    
+    # Получаем текущую ревизию из последней НЕ отмененной ревизии
     latest_revision = db.query(DocumentRevision).filter(
-        DocumentRevision.document_id == document_id
+        DocumentRevision.document_id == document_id,
+        DocumentRevision.is_deleted == 0  # Только не удаленные ревизии
     ).order_by(DocumentRevision.created_at.desc()).first()
     
-    current_revision = latest_revision.number if latest_revision else "01"
-    new_revision = _bump_revision_string(current_revision)
+    # Если есть отмененная ревизия с тем же номером, используем тот же номер
+    if latest_revision and cancelled_status:
+        # Проверяем, есть ли отмененная ревизия с тем же номером
+        cancelled_revision = db.query(DocumentRevision).filter(
+            DocumentRevision.document_id == document_id,
+            DocumentRevision.number == latest_revision.number,
+            DocumentRevision.revision_status_id == cancelled_status.id  # Отмененная ревизия
+        ).first()
+        
+        if cancelled_revision:
+            # Используем тот же номер, что и у отмененной ревизии
+            new_revision = latest_revision.number
+        else:
+            # Генерируем новый номер
+            new_revision = _bump_revision_string(latest_revision.number)
+    else:
+        # Если нет ревизий, начинаем с "01"
+        new_revision = "01"
 
     # Получаем ID статусов из справочника
     from app.models.references import RevisionStatus
@@ -682,10 +703,11 @@ async def create_document_revision(
     
     # Если есть предыдущие ревизии, помечаем их как Superseded
     if latest_revision and active_status and superseded_status:
-        # Обновляем все предыдущие активные ревизии на Superseded
+        # Обновляем все предыдущие активные ревизии на Superseded (кроме отмененных)
         db.query(DocumentRevision).filter(
             DocumentRevision.document_id == document_id,
-            DocumentRevision.revision_status_id == active_status.id
+            DocumentRevision.revision_status_id == active_status.id,
+            DocumentRevision.is_deleted == 0
         ).update({"revision_status_id": superseded_status.id})
 
     # Создаем запись ревизии с активным статусом
@@ -862,18 +884,25 @@ async def soft_delete_document(
     # Проверяем права доступа
     can_delete = False
     
-    # Администраторы могут удалять любые документы
-    if current_user.user_role and current_user.user_role.code == 'admin':
+    # 1. Администраторы могут удалять любые документы
+    if current_user.is_admin:
         can_delete = True
-    # Создатель документа может удалить свой документ
+    # 2. Создатель проекта может удалять все документы в своих проектах
+    elif document.project_id and document.project.created_by == current_user.id:
+        can_delete = True
+    # 3. Участник проекта может удалять только свои документы в проекте
     elif document.created_by == current_user.id:
-        can_delete = True
-    # Операторы могут удалять документы в своих проектах
-    elif (current_user.user_role and 
-          current_user.user_role.code == 'operator' and 
-          document.project_id and
-          document.project.owner_id == current_user.id):
-        can_delete = True
+        # Проверяем, что пользователь является участником проекта (не читателем)
+        from app.models.project import ProjectMember
+        from app.models.project_role import ProjectRole
+        project_member = db.query(ProjectMember).join(ProjectRole).filter(
+            ProjectMember.project_id == document.project_id,
+            ProjectMember.user_id == current_user.id,
+            ProjectRole.code != 'viewer'  # Исключаем читателей
+        ).first()
+        
+        if project_member:
+            can_delete = True
     
     if not can_delete:
         raise HTTPException(status_code=403, detail="Нет прав для удаления документа")
@@ -969,3 +998,120 @@ async def restore_document_revision(
     db.commit()
     
     return {"message": "Ревизия восстановлена", "revision_id": revision_id}
+
+
+@router.post("/revisions/{revision_id}/cancel")
+async def cancel_document_revision(
+    revision_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Отменить ревизию документа"""
+    
+    # Получаем ревизию
+    revision = db.query(DocumentRevision).filter(DocumentRevision.id == revision_id).first()
+    if not revision:
+        raise HTTPException(status_code=404, detail="Ревизия не найдена")
+    
+    # Получаем документ
+    document = db.query(Document).filter(Document.id == revision.document_id).first()
+    if not document:
+        raise HTTPException(status_code=404, detail="Документ не найден")
+    
+    # Проверяем права доступа
+    # 1. Администратор может отменять любые ревизии
+    # 2. Создатель документа может отменять свои ревизии
+    # 3. Участник проекта (не читатель) может отменять ревизии документов в проекте
+    if not current_user.is_admin and document.created_by != current_user.id:
+        # Проверяем, является ли пользователь участником проекта с правами (не читателем)
+        from app.models.project import ProjectMember
+        project_member = db.query(ProjectMember).filter(
+            ProjectMember.project_id == document.project_id,
+            ProjectMember.user_id == current_user.id,
+            ProjectMember.role != 'viewer'  # Исключаем читателей
+        ).first()
+        
+        if not project_member:
+            raise HTTPException(status_code=403, detail="Нет прав для отмены этой ревизии")
+    
+    # Получаем ID статуса "Cancelled"
+    from app.models.references import RevisionStatus
+    cancelled_status = db.query(RevisionStatus).filter(RevisionStatus.name == "Cancelled").first()
+    if not cancelled_status:
+        raise HTTPException(status_code=500, detail="Статус 'Cancelled' не найден в справочнике")
+    
+    # Проверяем, что ревизия не уже отменена
+    if revision.revision_status_id == cancelled_status.id:
+        raise HTTPException(status_code=400, detail="Ревизия уже отменена")
+    
+    # Получаем ID статуса "Active"
+    active_status = db.query(RevisionStatus).filter(RevisionStatus.name == "Active").first()
+    if not active_status:
+        raise HTTPException(status_code=500, detail="Статус 'Active' не найден в справочнике")
+    
+    # Проверяем, что отменяемая ревизия является последней активной ревизией
+    latest_active_revision = db.query(DocumentRevision).filter(
+        DocumentRevision.document_id == document.id,
+        DocumentRevision.revision_status_id == active_status.id,
+        DocumentRevision.is_deleted == 0
+    ).order_by(DocumentRevision.created_at.desc()).first()
+    
+    if not latest_active_revision:
+        raise HTTPException(status_code=400, detail="Нет активных ревизий для отмены")
+    
+    if latest_active_revision.id != revision_id:
+        raise HTTPException(status_code=400, detail="Можно отменять только последнюю активную ревизию")
+    
+    # Отменяем ревизию - меняем статус на "Cancelled"
+    revision.revision_status_id = cancelled_status.id
+    
+    db.commit()
+    
+    return {"message": "Ревизия отменена", "revision_id": revision_id}
+
+
+@router.put("/{document_id}")
+async def update_document(
+    document_id: int,
+    document_data: DocumentUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Обновить документ"""
+    
+    # Получаем документ
+    document = db.query(Document).filter(Document.id == document_id).first()
+    if not document:
+        raise HTTPException(status_code=404, detail="Документ не найден")
+    
+    # Проверяем права доступа
+    # 1. Администратор может редактировать любые документы
+    # 2. Создатель документа может редактировать свои документы
+    # 3. Создатель проекта может редактировать все документы в своем проекте
+    # 4. Участник проекта может редактировать только свои документы
+    if not current_user.is_admin and document.created_by != current_user.id:
+        # Проверяем, является ли пользователь создателем проекта
+        from app.models.project import Project
+        project = db.query(Project).filter(Project.id == document.project_id).first()
+        if not project or project.created_by != current_user.id:
+            # Если пользователь не создатель проекта, проверяем права участника
+            # Участники проекта могут редактировать только свои документы
+            # (это уже проверено выше - created_by != current_user.id)
+            raise HTTPException(status_code=403, detail="Нет прав для редактирования этого документа")
+    
+    # Обновляем поля документа
+    update_data = document_data.dict(exclude_unset=True)
+    
+    # Проверяем, что DRS не редактируется (если передано)
+    if 'drs' in update_data:
+        del update_data['drs']
+    
+    # Обновляем документ
+    for field, value in update_data.items():
+        if hasattr(document, field):
+            setattr(document, field, value)
+    
+    db.commit()
+    db.refresh(document)
+    
+    return {"message": "Документ обновлен", "document_id": document_id}

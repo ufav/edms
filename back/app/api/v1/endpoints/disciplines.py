@@ -63,7 +63,6 @@ async def get_document_types(
             for doc_type in document_types
         ]
     except Exception as e:
-        print(f"Error in get_document_types: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/disciplines/{discipline_id}/document-types", response_model=List[dict])

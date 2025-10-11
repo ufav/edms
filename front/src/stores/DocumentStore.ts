@@ -154,6 +154,15 @@ class DocumentStore {
     const code = description?.code || 'A';
     return `${code}${document.revision || '01'}`;
   }
+
+  // Обновление документа в store
+  updateDocument(documentId: number, updateData: any) {
+    const documentIndex = this.documents.findIndex(doc => doc.id === documentId);
+    if (documentIndex !== -1) {
+      // Обновляем данные документа
+      Object.assign(this.documents[documentIndex], updateData);
+    }
+  }
 }
 
 export const documentStore = new DocumentStore();

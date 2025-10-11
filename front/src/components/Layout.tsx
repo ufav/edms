@@ -122,7 +122,12 @@ const Layout: React.FC<LayoutProps> = observer(({
   );
 
   return (
-    <Box sx={{ display: 'flex', height: '100vh' }}>
+    <Box sx={{ 
+      display: 'flex', 
+      height: '100vh',
+      width: '100%',
+      minWidth: 0
+    }}>
       {/* App Bar */}
       <AppBar
         position="fixed"
@@ -273,16 +278,19 @@ const Layout: React.FC<LayoutProps> = observer(({
       )}
 
       {/* Main Content */}
-      <Box
-        component="main"
-        sx={{
-          flexGrow: 1,
-          width: '100%',
-          mt: '64px',
-          backgroundColor: '#ffffff',
-          minHeight: 'calc(100vh - 64px)',
-        }}
-      >
+        <Box
+          component="main"
+          sx={{
+            flexGrow: 1,
+            width: '100%',
+            minWidth: 0,
+            mt: '64px',
+            backgroundColor: '#ffffff',
+            minHeight: 'calc(100vh - 64px)',
+            display: 'flex',
+            flexDirection: 'column'
+          }}
+        >
         {children}
       </Box>
 

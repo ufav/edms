@@ -7,6 +7,7 @@ class ReferencesStore {
   revisionSteps: RevisionStep[] = [];
   reviewCodes: ReviewCode[] = [];
   documentTypes: DocumentType[] = [];
+  projectDocumentTypes: any[] = [];
   
   isLoading = false;
   error: string | null = null;
@@ -247,6 +248,11 @@ class ReferencesStore {
     return code.name_native || code.name || (language === 'en' ? 'Not defined' : 'Не определен');
   }
 
+  // Установка типов документов проекта
+  setProjectDocumentTypes(documentTypes: any[]) {
+    this.projectDocumentTypes = documentTypes;
+  }
+
   // Очистка всех данных
   clearAll() {
     this.revisionDescriptions = [];
@@ -254,6 +260,7 @@ class ReferencesStore {
     this.revisionSteps = [];
     this.reviewCodes = [];
     this.documentTypes = [];
+    this.projectDocumentTypes = [];
     this.isDescriptionsLoaded = false;
     this.isStatusesLoaded = false;
     this.isStepsLoaded = false;

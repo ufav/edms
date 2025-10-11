@@ -121,6 +121,18 @@ async def create_project_participant(
     if contact.company_id != participant_data.company_id:
         raise HTTPException(status_code=400, detail="Контакт не принадлежит указанной компании")
     
+    # Проверяем, что компания еще не является участником проекта
+    existing_participant = db.query(ProjectParticipant).filter(
+        ProjectParticipant.project_id == project_id,
+        ProjectParticipant.company_id == participant_data.company_id
+    ).first()
+    
+    if existing_participant:
+        raise HTTPException(
+            status_code=400, 
+            detail=f"Компания с ID {participant_data.company_id} уже является участником проекта. Одна компания не может быть добавлена в проект дважды, даже с разными ролями."
+        )
+    
     # Если это основной участник, снимаем флаг с других
     if participant_data.is_primary:
         db.query(ProjectParticipant).filter(
@@ -138,9 +150,20 @@ async def create_project_participant(
         notes=participant_data.notes
     )
     
-    db.add(participant)
-    db.commit()
-    db.refresh(participant)
+    try:
+        db.add(participant)
+        db.commit()
+        db.refresh(participant)
+    except Exception as e:
+        db.rollback()
+        # Проверяем, если это ошибка уникального ограничения
+        if "uq_project_participants_project_company" in str(e) or "duplicate key" in str(e).lower():
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Компания с ID {participant_data.company_id} уже является участником проекта. Одна компания не может быть добавлена в проект дважды."
+            )
+        else:
+            raise HTTPException(status_code=500, detail="Ошибка при добавлении участника проекта")
     
     # Получаем данные контакта и роли для ответа
     contact = db.query(Contact).filter(Contact.id == participant.contact_id).first()

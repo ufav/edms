@@ -11,7 +11,7 @@ import {
   Alert,
   CircularProgress,
 } from '@mui/material';
-import { documentsApi } from '../../api/client';
+import { documentsApi } from '../../../api/client';
 
 interface DocumentRevisionDialogProps {
   open: boolean;

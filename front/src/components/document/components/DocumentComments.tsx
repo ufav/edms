@@ -34,8 +34,8 @@ import {
 } from '@mui/icons-material';
 import { observer } from 'mobx-react-lite';
 import { useTranslation } from 'react-i18next';
-import { documentCommentsApi, type DocumentComment } from '../../api/client';
-import { userStore } from '../../stores/UserStore';
+import { documentCommentsApi, type DocumentComment } from '../../../api/client';
+import { userStore } from '../../../stores/UserStore';
 
 interface DocumentCommentsProps {
   open: boolean;
@@ -79,7 +79,6 @@ const DocumentComments: React.FC<DocumentCommentsProps> = observer(({
       setComments(commentsData);
     } catch (err) {
       setError(t('comments.load_error'));
-      console.error('Error loading comments:', err);
     } finally {
       setLoading(false);
     }
@@ -95,7 +94,6 @@ const DocumentComments: React.FC<DocumentCommentsProps> = observer(({
       await loadComments(); // Перезагружаем комментарии
     } catch (err) {
       setError(t('comments.create_error'));
-      console.error('Error creating comment:', err);
     } finally {
       setSubmitting(false);
     }
@@ -112,7 +110,6 @@ const DocumentComments: React.FC<DocumentCommentsProps> = observer(({
       await loadComments(); // Перезагружаем комментарии
     } catch (err) {
       setError(t('comments.reply_error'));
-      console.error('Error creating reply:', err);
     } finally {
       setSubmitting(false);
     }
@@ -129,7 +126,6 @@ const DocumentComments: React.FC<DocumentCommentsProps> = observer(({
       await loadComments(); // Перезагружаем комментарии
     } catch (err) {
       setError(t('comments.update_error'));
-      console.error('Error updating comment:', err);
     } finally {
       setSubmitting(false);
     }
@@ -141,7 +137,6 @@ const DocumentComments: React.FC<DocumentCommentsProps> = observer(({
       await loadComments(); // Перезагружаем комментарии
     } catch (err) {
       setError(t('comments.delete_error'));
-      console.error('Error deleting comment:', err);
     }
   };
 
@@ -151,7 +146,6 @@ const DocumentComments: React.FC<DocumentCommentsProps> = observer(({
       await loadComments(); // Перезагружаем комментарии
     } catch (err) {
       setError(t('comments.status_error'));
-      console.error('Error toggling resolve:', err);
     }
   };
 

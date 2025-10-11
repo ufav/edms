@@ -69,18 +69,10 @@ const AdminProjects: React.FC = () => {
         usersApi.getAll(),
         companiesApi.getAll(),
       ]);
-      console.log('Загруженные проекты:', projectsList);
-      console.log('Первый проект с участниками:', projectsList[0]?.members);
-      console.log('Первый проект с компаниями:', projectsList[0]?.participants);
-      console.log('Количество проектов:', projectsList.length);
-      if (projectsList.length > 0) {
-        console.log('Структура первого проекта:', Object.keys(projectsList[0]));
-      }
       setProjects(projectsList);
       setUsers(usersList);
       setCompanies(companiesList);
     } catch (err) {
-      console.error('Ошибка загрузки данных:', err);
       setError('Ошибка загрузки данных');
     } finally {
       setLoading(false);
@@ -102,9 +94,6 @@ const AdminProjects: React.FC = () => {
   };
 
   const handleEditProject = (project: ApiProject) => {
-    console.log('Редактирование проекта:', project);
-    console.log('Участники проекта (members):', project.members);
-    console.log('Компании-участники (participants):', project.participants);
     
     setEditingProject(project);
     setFormData({
@@ -128,12 +117,6 @@ const AdminProjects: React.FC = () => {
         end_date: formData.end_date || null,
       };
 
-      console.log('Отправляемые данные проекта:', projectData);
-      console.log('Участники (members):', projectData.members);
-      console.log('Компании-участники (participants):', projectData.participants);
-      console.log('Тип members:', typeof projectData.members);
-      console.log('members is array:', Array.isArray(projectData.members));
-      console.log('Длина members:', projectData.members?.length);
 
       if (editingProject) {
         alert('Обновляем существующий проект!');
@@ -147,7 +130,6 @@ const AdminProjects: React.FC = () => {
       setDialogOpen(false);
       loadData();
     } catch (err) {
-      console.error('Ошибка сохранения проекта:', err);
       alert('Ошибка сохранения проекта: ' + err);
       setError('Ошибка сохранения проекта');
     }

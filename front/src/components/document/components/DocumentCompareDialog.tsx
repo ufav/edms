@@ -17,8 +17,8 @@ import {
   Card,
   CardContent,
 } from '@mui/material';
-import { documentsApi } from '../../api/client';
-import { documentRevisionStore } from '../../stores/DocumentRevisionStore';
+import { documentsApi } from '../../../api/client';
+import { documentRevisionStore } from '../../../stores/DocumentRevisionStore';
 
 interface DocumentCompareDialogProps {
   open: boolean;

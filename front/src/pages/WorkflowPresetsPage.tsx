@@ -41,6 +41,7 @@ import {
 } from '@mui/icons-material';
 import { observer } from 'mobx-react-lite';
 import { workflowStore, type WorkflowPreset } from '../stores/WorkflowStore';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 const WorkflowPresetsPage: React.FC = observer(() => {
   const { t } = useTranslation();
@@ -871,20 +872,15 @@ const WorkflowPresetsPage: React.FC = observer(() => {
       </Dialog>
 
       {/* Delete Confirmation Dialog */}
-      <Dialog open={deleteDialogOpen} onClose={handleCloseDialogs}>
-        <DialogTitle>{t('workflows.dialogs.delete_title')}</DialogTitle>
-        <DialogContent>
-          <Typography>
-            {t('workflows.dialogs.delete_message', { name: selectedPreset?.name })}
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseDialogs}>{t('workflows.actions.cancel')}</Button>
-          <Button onClick={handleDelete} color="error" variant="contained">
-            {t('workflows.actions.delete')}
-          </Button>
-        </DialogActions>
-      </Dialog>
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        title={t('workflows.dialogs.delete_title')}
+        content={t('workflows.dialogs.delete_message', { name: selectedPreset?.name })}
+        confirmText={t('workflows.actions.delete')}
+        cancelText={t('workflows.actions.cancel')}
+        onConfirm={handleDelete}
+        onClose={handleCloseDialogs}
+      />
 
       {/* Notifications */}
       <Snackbar

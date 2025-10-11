@@ -57,7 +57,7 @@ const SummaryTab: React.FC<SummaryTabProps> = ({
   revisionDescriptions,
   revisionSteps
 }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [projectRoles, setProjectRoles] = useState<any[]>([]);
 
   useEffect(() => {
@@ -74,6 +74,17 @@ const SummaryTab: React.FC<SummaryTabProps> = ({
 
   const getSelectedDiscipline = (id: number) => disciplines.find(d => d.id === id);
   const getSelectedWorkflowPreset = (id: number) => workflowPresets.find(wp => wp.id === id);
+
+  // Функция для получения локализованного названия дисциплины
+  const getDisciplineName = (discipline: any) => {
+    if (i18n.language === 'en' && discipline?.name_en) {
+      return discipline.name_en;
+    }
+    return discipline?.name || '';
+  };
+
+  // Подсчитываем общее количество типов документов
+  const totalDocumentTypes = Object.values(disciplineDocumentTypes).reduce((total, types) => total + types.length, 0);
 
   // Функция для определения цвета роли
   const getRoleColor = (roleCode: string) => {
@@ -105,7 +116,20 @@ const SummaryTab: React.FC<SummaryTabProps> = ({
           {/* Основная информация */}
           <Card variant="outlined">
             <CardContent>
-              <Typography variant="subtitle1" gutterBottom>{t('createProject.sections.main')}</Typography>
+              <Typography 
+                variant="subtitle1" 
+                gutterBottom
+                sx={{ 
+                  fontWeight: 'bold',
+                  color: 'primary.main',
+                  borderBottom: '2px solid',
+                  borderColor: 'primary.main',
+                  pb: 1,
+                  mb: 2
+                }}
+              >
+                {t('createProject.sections.main')}
+              </Typography>
               <Typography variant="body2">{t('createProject.fields.name')}: {formData.name || '—'}</Typography>
               <Typography variant="body2">{t('createProject.fields.project_code')}: {formData.project_code || '—'}</Typography>
               <Typography variant="body2">{t('common.status')}: {formData.status}</Typography>
@@ -120,7 +144,20 @@ const SummaryTab: React.FC<SummaryTabProps> = ({
           {/* Workflow пресет */}
           <Card variant="outlined">
             <CardContent>
-              <Typography variant="subtitle1" gutterBottom>{t('createProject.summary.workflow_preset')}</Typography>
+              <Typography 
+                variant="subtitle1" 
+                gutterBottom
+                sx={{ 
+                  fontWeight: 'bold',
+                  color: 'primary.main',
+                  borderBottom: '2px solid',
+                  borderColor: 'primary.main',
+                  pb: 1,
+                  mb: 2
+                }}
+              >
+                {t('createProject.summary.workflow_preset')}
+              </Typography>
               {selectedWorkflowPreset ? (
                 (() => {
                   const preset = getSelectedWorkflowPreset(selectedWorkflowPreset);
@@ -139,7 +176,20 @@ const SummaryTab: React.FC<SummaryTabProps> = ({
           {/* Ревизии */}
           <Card variant="outlined">
             <CardContent>
-              <Typography variant="subtitle1" gutterBottom>{t('createProject.sections.revisions')}</Typography>
+              <Typography 
+                variant="subtitle1" 
+                gutterBottom
+                sx={{ 
+                  fontWeight: 'bold',
+                  color: 'primary.main',
+                  borderBottom: '2px solid',
+                  borderColor: 'primary.main',
+                  pb: 1,
+                  mb: 2
+                }}
+              >
+                {t('createProject.sections.revisions')}
+              </Typography>
               
               {/* Revision Descriptions */}
               <Box sx={{ mb: 2 }}>
@@ -196,7 +246,20 @@ const SummaryTab: React.FC<SummaryTabProps> = ({
           {/* Участники проекта */}
           <Card variant="outlined">
             <CardContent>
-              <Typography variant="subtitle1" gutterBottom>{t('createProject.summary.project_participants')}</Typography>
+              <Typography 
+                variant="subtitle1" 
+                gutterBottom
+                sx={{ 
+                  fontWeight: 'bold',
+                  color: 'primary.main',
+                  borderBottom: '2px solid',
+                  borderColor: 'primary.main',
+                  pb: 1,
+                  mb: 2
+                }}
+              >
+                {t('createProject.summary.project_participants')} ({pendingParticipants.length})
+              </Typography>
               {pendingParticipants.length === 0 ? (
                 <Typography variant="body2" color="text.secondary">{t('createProject.summary.not_added')}</Typography>
               ) : (
@@ -224,7 +287,20 @@ const SummaryTab: React.FC<SummaryTabProps> = ({
           {/* Доступ к проекту */}
           <Card variant="outlined">
             <CardContent>
-              <Typography variant="subtitle1" gutterBottom>{t('createProject.summary.project_access')}</Typography>
+              <Typography 
+                variant="subtitle1" 
+                gutterBottom
+                sx={{ 
+                  fontWeight: 'bold',
+                  color: 'primary.main',
+                  borderBottom: '2px solid',
+                  borderColor: 'primary.main',
+                  pb: 1,
+                  mb: 2
+                }}
+              >
+                {t('createProject.summary.project_access')} ({pendingProjectMembers.length})
+              </Typography>
               {pendingProjectMembers.length === 0 ? (
                 <Typography variant="body2" color="text.secondary">{t('createProject.summary.not_added')}</Typography>
               ) : (
@@ -270,7 +346,20 @@ const SummaryTab: React.FC<SummaryTabProps> = ({
         <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2 }}>
           <Card variant="outlined">
             <CardContent>
-              <Typography variant="subtitle1" gutterBottom>{t('createProject.sections.disciplines_types')}</Typography>
+              <Typography 
+                variant="subtitle1" 
+                gutterBottom
+                sx={{ 
+                  fontWeight: 'bold',
+                  color: 'primary.main',
+                  borderBottom: '2px solid',
+                  borderColor: 'primary.main',
+                  pb: 1,
+                  mb: 2
+                }}
+              >
+                {t('createProject.sections.disciplines_types')} ({selectedDisciplines.length} {t('createProject.summary.disciplines')}, {totalDocumentTypes} {t('createProject.summary.document_types')})
+              </Typography>
               {selectedDisciplines.length > 0 ? (
                 <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                   {selectedDisciplines.map((disciplineId) => {
@@ -279,7 +368,7 @@ const SummaryTab: React.FC<SummaryTabProps> = ({
                     return (
                       <Box key={disciplineId} sx={{ p: 1, border: '1px solid', borderColor: 'divider', borderRadius: 1 }}>
                         <Typography variant="body2" sx={{ fontWeight: 'bold', mb: 1 }}>
-                          {discipline?.code} - {discipline?.name}
+                          {discipline?.code} - {getDisciplineName(discipline)} ({types.length} {t('createProject.summary.types')})
                         </Typography>
                         <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
                           {types.length > 0 ? (
@@ -293,7 +382,7 @@ const SummaryTab: React.FC<SummaryTabProps> = ({
                               />
                             ))
                           ) : (
-                            <Typography variant="body2" color="text.secondary">—</Typography>
+                            <Typography variant="body2" color="text.secondary">{t('createProject.summary.no_types')}</Typography>
                           )}
                         </Box>
                       </Box>

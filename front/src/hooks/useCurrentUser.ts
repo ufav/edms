@@ -46,7 +46,7 @@ export const useCurrentUser = () => {
     return false;
   };
 
-  // Функция для проверки, может ли пользователь удалять проект
+  // Функция для проверки, может ли пользователь удалить проект
   const canDeleteProject = (project: any) => {
     if (!user) return false;
     

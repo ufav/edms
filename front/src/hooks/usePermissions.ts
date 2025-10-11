@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { userStore } from '../stores/UserStore';
+import { projectStore } from '../stores/ProjectStore';
 
 export interface Permission {
   canViewUsers: boolean;
@@ -100,19 +101,51 @@ export const useRole = () => {
   };
 };
 
-// Функция для проверки, может ли пользователь удалить конкретный проект
-export const canDeleteProject = (project: { created_by?: number; owner_id?: number }): boolean => {
+
+// Функция для проверки, может ли пользователь удалить конкретный документ
+export const canDeleteDocument = (document: { 
+  created_by?: number; 
+  is_deleted?: number;
+}): boolean => {
   const user = userStore.currentUser;
   if (!user) return false;
   
-  // Админ может удалять любые проекты
+  // Документ уже удален
+  if (document.is_deleted === 1) return false;
+  
+  // Читатель не может удалять документы
+  if (user.role === 'viewer') return false;
+  
+  // Админ может удалять любые документы
   if (user.role === 'admin') return true;
   
-  // Оператор может удалять только свои проекты
-  if (user.role === 'operator') {
-    const projectOwnerId = project.created_by || project.owner_id;
-    return projectOwnerId === user.id;
-  }
+  // Создатель документа может удалять свои документы
+  if (document.created_by === user.id) return true;
+  
+  // Создатель проекта может удалять все документы в своих проектах
+  if (projectStore.selectedProject?.owner_id === user.id) return true;
+  
+  return false;
+};
+
+// Функция для проверки, может ли пользователь редактировать конкретный документ
+export const canEditDocument = (document: { 
+  created_by?: number; 
+}): boolean => {
+  const user = userStore.currentUser;
+  if (!user) return false;
+  
+  // Читатель не может редактировать документы
+  if (user.role === 'viewer') return false;
+  
+  // Админ может редактировать любые документы
+  if (user.role === 'admin') return true;
+  
+  // Создатель документа может редактировать свои документы
+  if (document.created_by === user.id) return true;
+  
+  // Создатель проекта может редактировать все документы в своих проектах
+  if (projectStore.selectedProject?.owner_id === user.id) return true;
   
   return false;
 };
