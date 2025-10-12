@@ -28,6 +28,8 @@ def load_preset_data(preset_id: int, db: Session):
         sequences_data.append({
             "id": seq.id,
             "sequence_order": seq.sequence_order,
+            "revision_description_id": seq.revision_description_id,
+            "revision_step_id": seq.revision_step_id,
             "revision_description": {
                 "id": rev_desc.id,
                 "code": rev_desc.code,
@@ -40,7 +42,8 @@ def load_preset_data(preset_id: int, db: Session):
                 "description": rev_step.description,
                 "description_native": rev_step.description_native
             } if rev_step else None,
-            "is_final": seq.is_final
+            "is_final": seq.is_final,
+            "requires_transmittal": seq.requires_transmittal
         })
     
     # Загружаем правила
@@ -95,7 +98,6 @@ def load_preset_data(preset_id: int, db: Session):
                     "description_native": next_step.description_native
                 } if next_step else None
             } if rule.next_revision_description_id else None,
-            "action_on_fail": rule.action_on_fail
         })
     
     return sequences_data, rules_data
@@ -111,7 +113,6 @@ class WorkflowPresetRuleCreate(BaseModel):
     review_code_list: Optional[str] = None  # JSON для in_list/not_in_list
     next_revision_description_id: Optional[int] = None
     next_revision_step_id: Optional[int] = None
-    action_on_fail: str = "increment_number"
     priority: int = 100
 
 
@@ -249,7 +250,8 @@ async def create_workflow_preset(
             sequence_order=i + 1,
             revision_description_id=sequence_item['revision_description_id'],
             revision_step_id=sequence_item['revision_step_id'],
-            is_final=sequence_item.get('is_final', False)
+            is_final=sequence_item.get('is_final', False),
+            requires_transmittal=sequence_item.get('requires_transmittal', False)
         )
         db.add(sequence)
     
@@ -266,7 +268,6 @@ async def create_workflow_preset(
             priority=rule_item.priority,
             next_revision_description_id=rule_item.next_revision_description_id,
             next_revision_step_id=rule_item.next_revision_step_id,
-            action_on_fail=rule_item.action_on_fail
         )
         db.add(rule)
     
@@ -326,7 +327,8 @@ async def update_workflow_preset(
                 sequence_order=i + 1,
                 revision_description_id=sequence_item['revision_description_id'],
                 revision_step_id=sequence_item['revision_step_id'],
-                is_final=sequence_item.get('is_final', False)
+                is_final=sequence_item.get('is_final', False),
+                requires_transmittal=sequence_item.get('requires_transmittal', False)
             )
             db.add(sequence)
     
@@ -347,7 +349,6 @@ async def update_workflow_preset(
                 priority=rule_item.priority,
                 next_revision_description_id=rule_item.next_revision_description_id,
                 next_revision_step_id=rule_item.next_revision_step_id,
-                action_on_fail=rule_item.action_on_fail
             )
             db.add(rule)
     

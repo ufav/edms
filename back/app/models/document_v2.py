@@ -87,17 +87,3 @@ class UploadedFile(Base):
         return f"<UploadedFile(id={self.id}, filename='{self.filename}', path='{self.path}')>"
 
 
-class TransmittalRevision(Base):
-    """Ревизии в трансмитталах"""
-    __tablename__ = "transmittal_revisions"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    transmittal_id = Column(Integer, ForeignKey("transmittals.id"), nullable=False)
-    revision_id = Column(Integer, ForeignKey("document_revisions.id"), nullable=False)
-    
-    # Relationships
-    transmittal = relationship("Transmittal")
-    revision = relationship("DocumentRevision")
-    
-    def __repr__(self):
-        return f"<TransmittalRevision(id={self.id}, transmittal_id={self.transmittal_id}, revision_id={self.revision_id})>"

@@ -4,6 +4,7 @@ import { documentsApi, type DocumentRevisionFile } from '../api/client';
 class DocumentRevisionStore {
   revisions: { [documentId: number]: DocumentRevisionFile[] } = {};
   isLoading = false;
+  loadingDocuments: Set<number> = new Set(); // Отслеживаем загрузку для каждого документа
   error: string | null = null;
   loadedDocuments: Set<number> = new Set();
 
@@ -20,6 +21,7 @@ class DocumentRevisionStore {
 
     runInAction(() => {
       this.isLoading = true;
+      this.loadingDocuments.add(documentId);
       this.error = null;
     });
 
@@ -39,6 +41,7 @@ class DocumentRevisionStore {
     } finally {
       runInAction(() => {
         this.isLoading = false;
+        this.loadingDocuments.delete(documentId);
       });
     }
   }
@@ -46,6 +49,11 @@ class DocumentRevisionStore {
   // Получение ревизий документа
   getRevisions(documentId: number): DocumentRevisionFile[] {
     return this.revisions[documentId] || [];
+  }
+
+  // Проверка загрузки конкретного документа
+  isLoadingDocument(documentId: number): boolean {
+    return this.loadingDocuments.has(documentId);
   }
 
   // Принудительная перезагрузка ревизий документа
@@ -59,12 +67,14 @@ class DocumentRevisionStore {
   clearRevisions(documentId: number) {
     delete this.revisions[documentId];
     this.loadedDocuments.delete(documentId);
+    this.loadingDocuments.delete(documentId);
   }
 
   // Очистка всех ревизий
   clearAllRevisions() {
     this.revisions = {};
     this.loadedDocuments.clear();
+    this.loadingDocuments.clear();
     this.error = null;
   }
 

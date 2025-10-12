@@ -12,6 +12,7 @@ export interface ColumnVisibility {
   language: boolean;
   drs: boolean;
   date: boolean;
+  updated_at: boolean;
   created_by: boolean;
   discipline: boolean;
   document_type: boolean;
@@ -45,6 +46,7 @@ const defaultColumnVisibility: ColumnVisibility = {
   language: true,
   drs: false,
   date: true,
+  updated_at: true,
   created_by: true,
   discipline: true,
   document_type: true,

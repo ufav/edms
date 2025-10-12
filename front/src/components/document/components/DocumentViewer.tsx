@@ -266,7 +266,6 @@ const DocumentViewer: React.FC<DocumentViewerProps> = observer(({
                     onClick={() => {
                       if (validation.validate()) {
                         documentState.saveEditing();
-                        documentState.showNotification(t('document.saved_successfully'), 'success');
                       }
                     }} 
                     variant="contained"

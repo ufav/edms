@@ -21,6 +21,7 @@ import {
   Delete as DeleteIcon,
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
+import ProjectTableSkeleton from './ProjectTableSkeleton';
 
 interface ProjectTableProps {
   projects: any[];
@@ -62,11 +63,7 @@ export const ProjectTable: React.FC<ProjectTableProps> = ({
   const { t } = useTranslation();
 
   if (isLoading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
-        <CircularProgress />
-      </Box>
-    );
+    return <ProjectTableSkeleton />;
   }
 
   if (error) {

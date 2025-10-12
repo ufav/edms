@@ -1,14 +1,17 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
   Button,
   useTheme,
   useMediaQuery,
+  IconButton,
+  Badge,
 } from '@mui/material';
 import {
   Add as AddIcon,
   UploadFile as UploadFileIcon,
+  Send as SendIcon,
 } from '@mui/icons-material';
 import { observer } from 'mobx-react-lite';
 import { projectStore } from '../stores/ProjectStore';
@@ -37,6 +40,8 @@ import { DocumentTable } from './document/components/DocumentTable';
 import { DocumentBatchUploadDialog } from './document/components/DocumentBatchUploadDialog';
 import { DocumentSettingsDialog } from './document/components/DocumentSettingsDialog';
 import { DocumentWorkflowDialog } from './document/components/DocumentWorkflowDialog';
+import { TransmittalCartModal, useActiveRevisions } from './transmittal';
+import { transmittalCartStore } from '../stores/TransmittalCartStore';
 
 const DocumentsPage: React.FC = observer(() => {
   const { t, i18n } = useTranslation();
@@ -44,6 +49,75 @@ const DocumentsPage: React.FC = observer(() => {
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const { refreshDocuments } = useRefreshStore();
   const { isViewer } = useCurrentUser();
+  
+  // Состояние для выбранных документов в трансмиттал
+  const [selectedDocuments, setSelectedDocuments] = useState<number[]>([]);
+  const [showSelectColumn, setShowSelectColumn] = useState(true); // Всегда показываем колонку с галочками
+  const [cartModalOpen, setCartModalOpen] = useState(false); // Состояние модалки трансмитталов
+  
+  // Состояние для уведомлений трансмиттала
+  const [transmittalNotification, setTransmittalNotification] = useState<{
+    open: boolean;
+    message: string;
+    severity: 'success' | 'error' | 'warning' | 'info';
+  }>({
+    open: false,
+    message: '',
+    severity: 'success'
+  });
+  
+  // Хуки для работы с трансмитталами
+  const { activeRevisions, loadActiveRevisions } = useActiveRevisions();
+  
+  // Загружаем активные ревизии при монтировании компонента
+  useEffect(() => {
+    if (projectStore.selectedProject?.id) {
+      loadActiveRevisions(projectStore.selectedProject.id);
+    }
+  }, [projectStore.selectedProject?.id, loadActiveRevisions]);
+
+  // Перезагружаем активные ревизии при изменении документов
+  useEffect(() => {
+    if (projectStore.selectedProject?.id) {
+      loadActiveRevisions(projectStore.selectedProject.id);
+    }
+  }, [documentStore.documents, projectStore.selectedProject?.id, loadActiveRevisions]);
+  
+  // Обработчик выбора документа
+  const handleDocumentSelect = (documentId: number, selected: boolean) => {
+    if (selected) {
+      setSelectedDocuments(prev => [...prev, documentId]);
+    } else {
+      setSelectedDocuments(prev => prev.filter(id => id !== documentId));
+    }
+  };
+  
+  // Обработчик добавления выбранных документов в трансмиттал
+  const handleAddToTransmittal = () => {
+    (activeRevisions || []).forEach(activeRevision => {
+      if (selectedDocuments.includes(activeRevision.document_id)) {
+        transmittalCartStore.addRevision(activeRevision.id);
+      }
+    });
+    // Очищаем выбор после добавления в трансмиттал
+    setSelectedDocuments([]);
+    // Открываем модалку трансмитталов
+    setCartModalOpen(true);
+  };
+
+  // Функция для показа уведомлений трансмиттала
+  const handleShowTransmittalNotification = (message: string, severity: 'success' | 'error' | 'warning' | 'info' = 'success') => {
+    setTransmittalNotification({
+      open: true,
+      message,
+      severity
+    });
+  };
+
+  // Функция для закрытия уведомлений трансмиттала
+  const handleCloseTransmittalNotification = () => {
+    setTransmittalNotification(prev => ({ ...prev, open: false }));
+  };
   
   const {
     filterStatus,
@@ -114,7 +188,12 @@ const DocumentsPage: React.FC = observer(() => {
     handleCloseNotification,
   } = useDocumentActions({ 
     t, 
-    onCloseDialog: handleCloseDocumentDetails 
+    onCloseDialog: handleCloseDocumentDetails,
+    onRefreshActiveRevisions: () => {
+      if (projectStore.selectedProject?.id) {
+        loadActiveRevisions(projectStore.selectedProject.id);
+      }
+    }
   });
 
   const {
@@ -172,11 +251,12 @@ const DocumentsPage: React.FC = observer(() => {
   const formatDate = (dateString: string): string => {
     try {
       const date = new Date(dateString);
-      return date.toLocaleDateString('ru-RU', {
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
-      });
+      const day = date.getDate().toString().padStart(2, '0');
+      const month = (date.getMonth() + 1).toString().padStart(2, '0');
+      const year = date.getFullYear();
+      const hours = date.getHours().toString().padStart(2, '0');
+      const minutes = date.getMinutes().toString().padStart(2, '0');
+      return `${day}.${month}.${year} ${hours}:${minutes}`;
     } catch (error) {
       return dateString;
     }
@@ -203,9 +283,12 @@ const DocumentsPage: React.FC = observer(() => {
           flexDirection: isMobile ? 'column' : 'row',
           gap: isMobile ? 2 : 0
         }}>
-          <Typography variant={isMobile ? "h5" : "h4"} component="h1">
-            {t('menu.documents')} {projectStore.selectedProject && `- ${projectStore.selectedProject.name}`}
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+            <Typography variant={isMobile ? "h5" : "h4"} component="h1">
+              {t('menu.documents')} {projectStore.selectedProject && `- ${projectStore.selectedProject.name}`}
+            </Typography>
+            
+          </Box>
           {!isViewer && (
           <Box sx={{ display: 'flex', gap: 1, width: isMobile ? '100%' : 'auto' }}>
             <Button
@@ -227,6 +310,36 @@ const DocumentsPage: React.FC = observer(() => {
             >
               {t('documents.import_by_paths') || 'Импорт по путям (Excel)'}
             </Button>
+            {selectedDocuments.length > 0 && (
+              <Button
+                variant="contained"
+                onClick={handleAddToTransmittal}
+                sx={{ backgroundColor: '#1976d2', flex: isMobile ? 1 : 'none' }}
+              >
+{t('transmittals.add_to_transmittal')} ({selectedDocuments.length})
+              </Button>
+            )}
+            
+            {/* Кнопка корзины для мобильной версии */}
+            {isMobile && transmittalCartStore.selectedCount > 0 && (
+              <Badge badgeContent={transmittalCartStore.selectedCount} color="primary">
+                <IconButton
+                  onClick={() => setCartModalOpen(true)}
+                  sx={{ 
+                    color: 'primary.main',
+                    border: '1px solid',
+                    borderColor: 'primary.main',
+                    '&:hover': {
+                      backgroundColor: 'primary.light',
+                      color: 'white'
+                    }
+                  }}
+                  title={t('documents.open_transmittal_cart')}
+                >
+                  <SendIcon />
+                </IconButton>
+              </Badge>
+            )}
           </Box>
           )}
         </Box>
@@ -299,6 +412,9 @@ const DocumentsPage: React.FC = observer(() => {
                 onDelete={(document) => {
                   deleteDialog.openDeleteDialog(document);
                 }}
+                showSelectColumn={showSelectColumn}
+                selectedDocuments={selectedDocuments}
+                onDocumentSelect={handleDocumentSelect}
                 formatFileSize={formatFileSize}
                 formatDate={formatDate}
                 language={i18n.language}
@@ -307,6 +423,56 @@ const DocumentsPage: React.FC = observer(() => {
           )}
         </Box>
 
+        {/* Модалка трансмитталов */}
+        <TransmittalCartModal
+          open={cartModalOpen}
+          selectedRevisionIds={transmittalCartStore.selectedRevisionIds}
+          activeRevisions={activeRevisions || []}
+          isLoading={transmittalCartStore.isLoading}
+          error={transmittalCartStore.error}
+          onClose={() => setCartModalOpen(false)}
+          onRemoveRevision={transmittalCartStore.removeRevision}
+          onClearAll={transmittalCartStore.clearAll}
+          onCreateTransmittal={async (transmittalData) => {
+            await transmittalCartStore.createTransmittal(transmittalData, projectStore.selectedProject.id);
+            setCartModalOpen(false);
+          }}
+          onShowNotification={handleShowTransmittalNotification}
+          formatFileSize={formatFileSize}
+          formatDate={formatDate}
+        />
+
+        {/* Кнопка открытия корзины трансмитталов в правом нижнем углу */}
+        {!cartModalOpen && transmittalCartStore.selectedCount > 0 && (
+          <Box
+            sx={{
+              position: 'fixed',
+              bottom: 20,
+              right: 20,
+              zIndex: 1000,
+            }}
+          >
+            <Badge badgeContent={transmittalCartStore.selectedCount} color="primary">
+              <IconButton
+                onClick={() => setCartModalOpen(true)}
+                sx={{
+                  backgroundColor: 'primary.main',
+                  color: 'white',
+                  width: 56,
+                  height: 56,
+                  boxShadow: 3,
+                  '&:hover': {
+                    backgroundColor: 'primary.dark',
+                    boxShadow: 6,
+                  },
+                }}
+                title={t('documents.open_transmittal_cart')}
+              >
+                <SendIcon />
+              </IconButton>
+            </Badge>
+          </Box>
+        )}
 
         <DocumentSettingsDialog
           open={settingsOpen}
@@ -396,6 +562,14 @@ const DocumentsPage: React.FC = observer(() => {
           message={successNotification.message}
           severity="success"
           onClose={handleCloseNotification}
+        />
+
+        {/* Уведомления для трансмитталов */}
+        <NotificationSnackbar
+          open={transmittalNotification.open}
+          message={transmittalNotification.message}
+          severity={transmittalNotification.severity}
+          onClose={handleCloseTransmittalNotification}
         />
       </Box>
     </ProjectRequired>

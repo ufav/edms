@@ -22,6 +22,7 @@ export interface ColumnVisibility {
   language: boolean;
   drs: boolean;
   date: boolean;
+  updated_at: boolean;
   created_by: boolean;
   discipline: boolean;
   document_type: boolean;
@@ -152,6 +153,15 @@ export const DocumentSettingsDialog: React.FC<DocumentSettingsDialogProps> = ({
               />
             } 
             label={t('documents.columns.created_at')} 
+          />
+          <FormControlLabel 
+            control={
+              <Checkbox 
+                checked={visibleCols.updated_at ?? true} 
+                onChange={(e) => onColumnVisibilityChange('updated_at', e.target.checked)} 
+              />
+            } 
+            label={t('documents.columns.updated_at')} 
           />
           <FormControlLabel 
             control={

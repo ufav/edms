@@ -817,6 +817,13 @@ export const transmittalsApi = {
     const response = await apiClient.post(`/transmittals/${id}/receive`);
     return response.data;
   },
+
+  // Получить активные ревизии документов
+  getActiveRevisions: async (projectId?: number): Promise<any[]> => {
+    const params = projectId ? { project_id: projectId } : {};
+    const response = await apiClient.get('/transmittals/documents/active-revisions', { params });
+    return response.data;
+  },
 };
 
 // API методы для ревью

@@ -163,17 +163,29 @@ async def get_projects(
         else:
             user_role = 'member'
         
-        # Получаем участников проекта (компании)
+        # Получаем участников проекта (компании) с контактами
         participants = db.query(ProjectParticipant).filter(ProjectParticipant.project_id == project.id).all()
-        participants_data = [
-            {
+        participants_data = []
+        for participant in participants:
+            # Получаем данные компании
+            from app.models.references import Company
+            company = db.query(Company).filter(Company.id == participant.company_id).first()
+            
+            
+            participants_data.append({
                 "id": participant.id,
                 "company_id": participant.company_id,
+                "company": {
+                    "id": company.id if company else participant.company_id,
+                    "name": company.name if company else f"Company {participant.company_id}",
+                    "name_native": company.name_native if company else None,
+                } if company else None,
+                "contact_id": participant.contact_id,
+                "company_role_id": participant.company_role_id,
                 "is_primary": participant.is_primary,
+                "notes": participant.notes,
                 "created_at": participant.created_at.isoformat() if participant.created_at else None
-            }
-            for participant in participants
-        ]
+            })
         
         result.append({
             "id": project.id,

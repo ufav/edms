@@ -63,7 +63,7 @@ const DocumentForm: React.FC<DocumentFormProps> = ({
         {/* Первая колонка: номер с датой, титл, титл натив, язык */}
         <Grid item xs={6}>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {/* Номер документа */}
+            {/* Номер документа и Язык */}
             {isCreating ? (
               <Box sx={{ display: 'flex', gap: 2 }}>
                 <TextField
@@ -71,13 +71,33 @@ const DocumentForm: React.FC<DocumentFormProps> = ({
                   label={t('document.number')}
                   value={documentData.number || ''}
                   onChange={(e) => setDocumentData({number: e.target.value})}
-                  sx={{ flex: 0.5 }} // Половина ширины
+                  sx={{ flex: 0.5 }} // 1/2 ширины
                   size="small"
                   variant="standard"
                   error={validationErrors.number}
                   helperText={validationErrors.number ? t('document.number_required') : ''}
                 />
-                <Box sx={{ flex: 0.5 }} /> {/* Пустое место для выравнивания */}
+                <FormControl sx={{ flex: 0.25 }} size="small" variant="standard" error={validationErrors.language_id}>
+                  <InputLabel htmlFor="document-language-select">{t('document.language')}</InputLabel>
+                  <Select
+                    id="document-language-select"
+                    value={documentData.language_id || ''}
+                    onChange={(e) => setDocumentData({language_id: e.target.value})}
+                    label={t('document.language')}
+                  >
+                    {languageStore.languages.map((language) => (
+                      <MenuItem key={language.id} value={language.id}>
+                        {language.code} - {language.name}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                  {validationErrors.language_id && (
+                    <Typography variant="caption" color="error" sx={{ fontSize: '0.75rem', mt: 0.5 }}>
+                      {t('document.language_required')}
+                    </Typography>
+                  )}
+                </FormControl>
+                <Box sx={{ flex: 0.25 }} /> {/* Пустое место для выравнивания */}
               </Box>
             ) : (
               <Box sx={{ display: 'flex', gap: 2 }}>
@@ -86,13 +106,51 @@ const DocumentForm: React.FC<DocumentFormProps> = ({
                   label={t('document.number')}
                   value={isEditing ? (documentData.number || '') : (document?.number || `DOC-${document?.id}`)}
                   onChange={isEditing ? (e) => setDocumentData({number: e.target.value}) : undefined}
-                  sx={{ flex: 0.5 }} // Половина ширины
+                  sx={{ flex: 0.5 }} // 1/2 ширины
                   InputProps={{ readOnly: !isEditing }}
                   size="small"
                   variant="standard"
                   error={validationErrors.number}
                   helperText={validationErrors.number ? t('document.number_required') : ''}
                 />
+                {isEditing ? (
+                  <FormControl sx={{ flex: 0.25 }} size="small" variant="standard" error={validationErrors.language_id}>
+                    <InputLabel htmlFor="document-language-select">{t('document.language')}</InputLabel>
+                    <Select
+                      id="document-language-select"
+                      value={documentData.language_id || ''}
+                      onChange={(e) => setDocumentData({language_id: e.target.value})}
+                      label={t('document.language')}
+                    >
+                      {languageStore.languages.map((language) => (
+                        <MenuItem key={language.id} value={language.id}>
+                          {language.code} - {language.name}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                    {validationErrors.language_id && (
+                      <Typography variant="caption" color="error" sx={{ fontSize: '0.75rem', mt: 0.5 }}>
+                        {t('document.language_required')}
+                      </Typography>
+                    )}
+                  </FormControl>
+                ) : (
+                  <TextField
+                    id="document-language"
+                    label={t('document.language')}
+                    value={(() => {
+                      const language = languageStore.languages.find(l => l.id === document?.language_id);
+                      return language ? language.code : 'ru';
+                    })()}
+                    sx={{ flex: 0.25 }} // 1/4 ширины
+                    InputProps={{ readOnly: true }}
+                    size="small"
+                    variant="standard"
+                    error={validationErrors.language_id}
+                    helperText={validationErrors.language_id ? t('document.language_required') : ''}
+                  />
+                )}
+                <Box sx={{ flex: 0.25 }} /> {/* Пустое место для выравнивания */}
               </Box>
             )}
             <TextField
@@ -117,46 +175,6 @@ const DocumentForm: React.FC<DocumentFormProps> = ({
               size="small"
               variant="standard"
             />
-            <Box sx={{ display: 'flex', gap: 2 }}>
-              {(isCreating || isEditing) ? (
-                <FormControl sx={{ flex: 0.25 }} size="small" variant="standard" error={validationErrors.language_id}> {/* 1/4 ширины */}
-                  <InputLabel htmlFor="document-language-select">{t('document.language')}</InputLabel>
-                  <Select
-                    id="document-language-select"
-                    value={isCreating ? documentData.language_id : (documentData.language_id || '')}
-                        onChange={(e) => setDocumentData({language_id: e.target.value})}
-                    label={t('document.language')}
-                  >
-                    {languageStore.languages.map((language) => (
-                      <MenuItem key={language.id} value={language.id}>
-                        {language.code} - {language.name}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                  {validationErrors.language_id && (
-                    <Typography variant="caption" color="error" sx={{ fontSize: '0.75rem', mt: 0.5 }}>
-                      {t('document.language_required')}
-                    </Typography>
-                  )}
-                </FormControl>
-              ) : (
-                <TextField
-                  id="document-language"
-                  label={t('document.language')}
-                  value={(() => {
-                    const language = languageStore.languages.find(l => l.id === document?.language_id);
-                    return language ? language.code : 'ru';
-                  })()}
-                  sx={{ flex: 0.25 }} // 1/4 ширины
-                  InputProps={{ readOnly: true }}
-                  size="small"
-                  variant="standard"
-                  error={validationErrors.language_id}
-                  helperText={validationErrors.language_id ? t('document.language_required') : ''}
-                />
-              )}
-              <Box sx={{ flex: 0.75 }} /> {/* Пустое место для выравнивания */}
-            </Box>
           </Box>
         </Grid>
         

@@ -73,6 +73,7 @@ class DocumentRevision(Base):
     revision_status_id = Column(Integer, ForeignKey("revision_statuses.id"), nullable=True)
     revision_description_id = Column(Integer, ForeignKey("revision_descriptions.id"), nullable=True)
     revision_step_id = Column(Integer, ForeignKey("revision_steps.id"), nullable=True)
+    workflow_status_id = Column(Integer, ForeignKey("workflow_statuses.id"), nullable=True)
     
     # Relationships (temporarily commented out)
     # document = relationship("Document", back_populates="revisions")

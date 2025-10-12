@@ -15,6 +15,7 @@ import {
   CircularProgress,
   Alert,
   TablePagination,
+  Checkbox,
 } from '@mui/material';
 import {
   Description as DescriptionIcon,
@@ -39,6 +40,7 @@ import { languageStore } from '../../../stores/LanguageStore';
 import { referencesStore } from '../../../stores/ReferencesStore';
 import { canDeleteDocument } from '../../../hooks/usePermissions';
 import { userStore } from '../../../stores/UserStore';
+import DocumentsTableSkeleton from './DocumentsTableSkeleton';
 
 export interface DocumentTableProps {
   // Данные
@@ -58,6 +60,7 @@ export interface DocumentTableProps {
     language: boolean;
     drs: boolean;
     date: boolean;
+    updated_at: boolean;
     created_by: boolean;
     discipline: boolean;
     document_type: boolean;
@@ -75,6 +78,11 @@ export interface DocumentTableProps {
   onShowDetails: (documentId: number) => void;
   onDownload: (documentId: number) => void;
   onDelete: (document: any) => void;
+  
+  // Обработчики для выбора документов в трансмиттал
+  showSelectColumn?: boolean; // Показывать ли колонку с галочками
+  selectedDocuments?: number[]; // Массив ID выбранных документов
+  onDocumentSelect?: (documentId: number, selected: boolean) => void; // Обработчик выбора документа
   
   // Утилиты
   formatFileSize: (bytes: number) => string;
@@ -96,6 +104,9 @@ export const DocumentTable: React.FC<DocumentTableProps> = observer(({
   onShowDetails,
   onDownload,
   onDelete,
+  showSelectColumn = false,
+  selectedDocuments = [],
+  onDocumentSelect,
   formatFileSize,
   formatDate,
   language,
@@ -170,11 +181,7 @@ export const DocumentTable: React.FC<DocumentTableProps> = observer(({
   };
 
   if (isLoading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
-        <CircularProgress />
-      </Box>
-    );
+    return <DocumentsTableSkeleton visibleCols={visibleCols} showSelectColumn={showSelectColumn} />;
   }
 
   if (error) {
@@ -219,6 +226,7 @@ export const DocumentTable: React.FC<DocumentTableProps> = observer(({
         <Table sx={{ tableLayout: 'fixed', width: '100%', minWidth: '100%' }}>
           <TableHead>
             <TableRow sx={{ backgroundColor: '#f5f5f5', '& .MuiTableCell-root': { padding: '8px 16px' } }}>
+              {showSelectColumn && (<TableCell sx={{ width: '50px', minWidth: '50px', maxWidth: '50px', fontWeight: 'bold', fontSize: '0.875rem', whiteSpace: 'nowrap', textAlign: 'center', position: 'sticky', left: 0, backgroundColor: '#f5f5f5', zIndex: 1 }}></TableCell>)}
               {visibleCols.number && (<TableCell sx={{ width: '123px', minWidth: '123px', maxWidth: '320px', fontWeight: 'bold', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>{t('documents.columns.number')}</TableCell>)}
               {visibleCols.title && (<TableCell sx={{ width: '200px', minWidth: '200px', maxWidth: '320px', fontWeight: 'bold', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>{t('documents.columns.title')}</TableCell>)}
               {visibleCols.file && (<TableCell sx={{ width: '200px', minWidth: '200px', maxWidth: '320px', fontWeight: 'bold', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>{t('documents.columns.file')}</TableCell>)}
@@ -229,7 +237,8 @@ export const DocumentTable: React.FC<DocumentTableProps> = observer(({
               {visibleCols.drs && (<TableCell sx={{ width: '83px', minWidth: '83px', maxWidth: '320px', fontWeight: 'bold', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>DRS</TableCell>)}
               {visibleCols.discipline && (<TableCell sx={{ width: '103px', minWidth: '103px', maxWidth: '320px', fontWeight: 'bold', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>{t('documents.columns.discipline')}</TableCell>)}
               {visibleCols.document_type && (<TableCell sx={{ width: '123px', minWidth: '123px', maxWidth: '320px', fontWeight: 'bold', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>{t('documents.columns.document_type')}</TableCell>)}
-              {visibleCols.date && (<TableCell sx={{ width: '123px', minWidth: '123px', maxWidth: '320px', fontWeight: 'bold', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>{t('documents.columns.created_at')}</TableCell>)}
+              {visibleCols.date && (<TableCell sx={{ width: '140px', minWidth: '140px', maxWidth: '320px', fontWeight: 'bold', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>{t('documents.columns.created_at')}</TableCell>)}
+              {visibleCols.updated_at && (<TableCell sx={{ width: '140px', minWidth: '140px', maxWidth: '320px', fontWeight: 'bold', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>{t('documents.columns.updated_at')}</TableCell>)}
               {visibleCols.created_by && (<TableCell sx={{ width: '123px', minWidth: '123px', maxWidth: '320px', fontWeight: 'bold', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>{t('documents.columns.created_by')}</TableCell>)}
               {visibleCols.actions && (<TableCell sx={{ width: '110px', minWidth: '110px', maxWidth: '110px', fontWeight: 'bold', fontSize: '0.875rem', whiteSpace: 'nowrap', position: 'sticky', right: 0, backgroundColor: '#f5f5f5', zIndex: 1 }}>{t('common.actions')}</TableCell>)}
             </TableRow>
@@ -237,6 +246,16 @@ export const DocumentTable: React.FC<DocumentTableProps> = observer(({
           <TableBody>
             {documents.map((document) => (
               <TableRow key={document.id} hover sx={{ '& .MuiTableCell-root': { padding: '8px 16px' } }}>
+                {showSelectColumn && (
+                  <TableCell sx={{ width: '50px', minWidth: '50px', maxWidth: '50px', textAlign: 'center', position: 'sticky', left: 0, backgroundColor: 'white', zIndex: 1 }}>
+                    <Checkbox
+                      checked={selectedDocuments.includes(document.id)}
+                      onChange={(e) => onDocumentSelect?.(document.id, e.target.checked)}
+                      size="small"
+                      sx={{ padding: 0 }}
+                    />
+                  </TableCell>
+                )}
                 {visibleCols.number && (<TableCell sx={{ width: '123px', minWidth: '123px', maxWidth: '320px' }}>
                   <Tooltip title={document.number || 'DOC-' + document.id} arrow>
                     <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.875rem' }}>
@@ -317,9 +336,14 @@ export const DocumentTable: React.FC<DocumentTableProps> = observer(({
                     </Typography>
                   </Tooltip>
                 </TableCell>)}
-                {visibleCols.date && (<TableCell sx={{ width: '123px', minWidth: '123px', maxWidth: '320px' }}>
+                {visibleCols.date && (<TableCell sx={{ width: '140px', minWidth: '140px', maxWidth: '320px' }}>
                   <Typography variant="body2" sx={{ fontSize: '0.875rem' }}>
                     {formatDate(document.created_at)}
+                  </Typography>
+                </TableCell>)}
+                {visibleCols.updated_at && (<TableCell sx={{ width: '140px', minWidth: '140px', maxWidth: '320px' }}>
+                  <Typography variant="body2" sx={{ fontSize: '0.875rem' }}>
+                    {formatDate(document.updated_at)}
                   </Typography>
                 </TableCell>)}
                 {visibleCols.created_by && (<TableCell sx={{ width: '123px', minWidth: '123px', maxWidth: '320px' }}>

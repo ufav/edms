@@ -27,25 +27,23 @@ class Transmittal(Base):
     # project = relationship("Project", back_populates="transmittals")
     # sender = relationship("User", foreign_keys=[sender_id])
     # recipient = relationship("User", foreign_keys=[recipient_id])
-    items = relationship("TransmittalItem", back_populates="transmittal")
+    revisions = relationship("TransmittalRevision", back_populates="transmittal")
     
     def __repr__(self):
         return f"<Transmittal(id={self.id}, number='{self.transmittal_number}', title='{self.title}')>"
 
-class TransmittalItem(Base):
-    __tablename__ = "transmittal_items"
+class TransmittalRevision(Base):
+    """Ревизии в трансмитталах"""
+    __tablename__ = "transmittal_revisions"
     
     id = Column(Integer, primary_key=True, index=True)
     transmittal_id = Column(Integer, ForeignKey("transmittals.id", ondelete="CASCADE"))
-    document_id = Column(Integer, ForeignKey("documents.id", ondelete="CASCADE"))
-    item_number = Column(String(50))
-    description = Column(Text)
-    action_required = Column(String(100))
+    revision_id = Column(Integer, ForeignKey("document_revisions.id", ondelete="CASCADE"))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
-    # Relationships (temporarily commented out)
-    transmittal = relationship("Transmittal", back_populates="items")
-    # document = relationship("Document", back_populates="transmittal_items")
+    # Relationships
+    transmittal = relationship("Transmittal", back_populates="revisions")
+    revision = relationship("DocumentRevision")
     
     def __repr__(self):
-        return f"<TransmittalItem(id={self.id}, transmittal_id={self.transmittal_id}, document_id={self.document_id})>"
+        return f"<TransmittalRevision(id={self.id}, transmittal_id={self.transmittal_id}, revision_id={self.revision_id})>"

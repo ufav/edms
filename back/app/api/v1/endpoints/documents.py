@@ -125,7 +125,7 @@ async def get_documents(
     if project_id:
         query = query.filter(Document.project_id == project_id)
     
-    documents = query.offset(skip).limit(limit).all()
+    documents = query.order_by(Document.updated_at.desc()).offset(skip).limit(limit).all()
     
     result = []
     for doc in documents:
@@ -179,6 +179,7 @@ async def get_documents(
             "document_type_name": document_type.name if document_type else None,
             "document_type_code": document_type.code if document_type else None,
             "created_at": doc.created_at,
+            "updated_at": doc.updated_at,
             "created_by": doc.created_by
         })
     
@@ -726,7 +727,6 @@ async def create_document_revision(
         revision_description_id=latest_revision.revision_description_id if latest_revision else None,
     )
     db.add(revision_row)
-
     db.commit()
     db.refresh(revision_row)
     db.refresh(document)

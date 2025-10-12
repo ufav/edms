@@ -13,6 +13,22 @@ export interface Project {
   owner_name?: string | null;
   created_at: string;
   updated_at: string;
+  participants?: ProjectParticipant[];
+}
+
+export interface ProjectParticipant {
+  id: number;
+  company_id: number;
+  company?: {
+    id: number;
+    name: string;
+    name_native?: string;
+  };
+  contact_id?: number;
+  company_role_id?: number;
+  is_primary: boolean;
+  notes?: string;
+  created_at: string;
 }
 
 class ProjectStore {
@@ -54,7 +70,8 @@ class ProjectStore {
           owner_id: apiProject.owner_id ?? null,
           owner_name: apiProject.owner_name ?? null,
           created_at: apiProject.created_at || '',
-          updated_at: apiProject.updated_at || ''
+          updated_at: apiProject.updated_at || '',
+          participants: apiProject.participants || []
         }));
         this.isLoaded = true;
       });

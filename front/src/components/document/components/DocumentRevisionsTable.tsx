@@ -24,6 +24,7 @@ import { observer } from 'mobx-react-lite';
 import { documentRevisionStore } from '../../../stores/DocumentRevisionStore';
 import { referencesStore } from '../../../stores/ReferencesStore';
 import { getFileTypeInfo } from '../utils/fileTypeUtils';
+import RevisionsTableSkeleton from './RevisionsTableSkeleton';
 
 interface DocumentRevisionsTableProps {
   documentId: number | null;
@@ -62,6 +63,12 @@ const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer((
 
   const hasRevisions = !isCreating && documentId && documentRevisionStore.getRevisions(documentId || 0).length > 0;
   const hasFile = isCreating && fileMetadata;
+  const isLoading = !isCreating && documentId && documentRevisionStore.isLoadingDocument(documentId);
+
+  // Показываем скелетон во время загрузки
+  if (isLoading) {
+    return <RevisionsTableSkeleton />;
+  }
 
   return (
     <Box sx={{ flexGrow: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
@@ -100,7 +107,7 @@ const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer((
                     position: 'sticky', 
                     right: 0, 
                     backgroundColor: 'background.paper',
-                    zIndex: 1,
+                    zIndex: 2,
                     width: '160px',
                     minWidth: '160px',
                     fontWeight: 'bold',
@@ -326,7 +333,7 @@ const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer((
                     position: 'sticky', 
                     right: 0, 
                     backgroundColor: 'background.paper',
-                    zIndex: 1,
+                    zIndex: 2,
                     width: '160px',
                     minWidth: '160px',
                     fontWeight: 'bold',

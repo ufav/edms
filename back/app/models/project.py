@@ -150,6 +150,7 @@ class WorkflowPresetSequence(Base):
     revision_description_id = Column(Integer, ForeignKey("revision_descriptions.id", ondelete="CASCADE"))
     revision_step_id = Column(Integer, ForeignKey("revision_steps.id", ondelete="CASCADE"))
     is_final = Column(Boolean, default=False)
+    requires_transmittal = Column(Boolean, default=False)  # Требуется трансмиттал для этой пары (описание, шаг)
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
@@ -185,8 +186,6 @@ class WorkflowPresetRule(Base):
     next_revision_description_id = Column(Integer, ForeignKey("revision_descriptions.id", ondelete="CASCADE"), nullable=True)
     next_revision_step_id = Column(Integer, ForeignKey("revision_steps.id", ondelete="CASCADE"), nullable=True)
     
-    # Действие при невыполнении условия
-    action_on_fail = Column(String(50), default="increment_number")
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     

@@ -141,6 +141,21 @@ class Company(Base):
         return f"<Company(id={self.id}, name='{self.name}')>"
 
 
+class WorkflowStatus(Base):
+    """Статусы workflow документов"""
+    __tablename__ = "workflow_statuses"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(32), nullable=False)
+    name_native = Column(String(32))
+    description = Column(String(255))
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    def __repr__(self):
+        return f"<WorkflowStatus(id={self.id}, name='{self.name}')>"
+
+
 class UserRole(Base):
     """Роли пользователей (системные роли)"""
     __tablename__ = "user_roles"

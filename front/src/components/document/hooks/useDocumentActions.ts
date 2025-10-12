@@ -8,6 +8,7 @@ import { useRefreshStore } from '../../../hooks/useRefreshStore';
 export interface UseDocumentActionsProps {
   t: (key: string) => string;
   onCloseDialog?: () => void;
+  onRefreshActiveRevisions?: () => void;
 }
 
 export interface UseDocumentActionsReturn {
@@ -41,7 +42,7 @@ export interface UseDocumentActionsReturn {
   handleCloseNotification: () => void;
 }
 
-export const useDocumentActions = ({ t, onCloseDialog }: UseDocumentActionsProps): UseDocumentActionsReturn => {
+export const useDocumentActions = ({ t, onCloseDialog, onRefreshActiveRevisions }: UseDocumentActionsProps): UseDocumentActionsReturn => {
   const { refreshDocuments } = useRefreshStore();
   
   // Состояния для действий
@@ -109,6 +110,11 @@ export const useDocumentActions = ({ t, onCloseDialog }: UseDocumentActionsProps
         open: true,
         message: t('documents.create_success')
       });
+
+      // Перезагружаем активные ревизии для обновления данных в корзине
+      if (onRefreshActiveRevisions) {
+        onRefreshActiveRevisions();
+      }
       
     } catch (error) {
       console.error('Error in handleCreateDocument:', error);
@@ -143,6 +149,11 @@ export const useDocumentActions = ({ t, onCloseDialog }: UseDocumentActionsProps
           open: true,
           message: t('documents.update_success')
         });
+
+        // Перезагружаем активные ревизии для обновления данных в корзине
+        if (onRefreshActiveRevisions) {
+          onRefreshActiveRevisions();
+        }
       }
     } catch (error) {
       console.error('Error saving document:', error);
@@ -210,6 +221,11 @@ export const useDocumentActions = ({ t, onCloseDialog }: UseDocumentActionsProps
       
       // Обновляем список документов в store
       await refreshDocuments();
+      
+      // Перезагружаем активные ревизии для обновления данных в корзине
+      if (onRefreshActiveRevisions) {
+        onRefreshActiveRevisions();
+      }
       
       setDocumentToDelete(null);
     } catch (error) {
