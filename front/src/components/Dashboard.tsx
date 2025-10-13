@@ -25,7 +25,7 @@ const Dashboard: React.FC = observer(() => {
   }, [projectStore.selectedProject]);
 
   const stats = dashboardStore.getStats();
-  const recentActivities = dashboardStore.getRecentActivities();
+  const recentActivities = dashboardStore.getRecentActivities(t);
 
   const handleCreateProject = () => {
     // TODO: Реализовать создание проекта
@@ -46,15 +46,15 @@ const Dashboard: React.FC = observer(() => {
   const getActivityIcon = (iconType: string) => {
     switch (iconType) {
       case 'document':
-        return <DocumentIcon color="primary" />;
+        return <DocumentIcon color="success" />; // Зеленый - как в карточке
       case 'transmittal':
-        return <TransmittalIcon color="success" />;
+        return <TransmittalIcon color="warning" />; // Оранжевый - как в карточке
       case 'review':
-        return <ReviewIcon color="warning" />;
+        return <ReviewIcon color="error" />; // Красный - как в карточке
       case 'project':
-        return <ProjectIcon color="info" />;
+        return <ProjectIcon color="primary" />; // Синий - как в карточке
       default:
-        return <DocumentIcon color="primary" />;
+        return <DocumentIcon color="success" />;
     }
   };
 
@@ -216,7 +216,7 @@ const Dashboard: React.FC = observer(() => {
         <Grid item xs={12} md={6}>
           <Paper sx={{ p: isMobile ? 2 : 3, boxShadow: '0 2px 8px rgba(0,0,0,0.1)', border: '1px solid #e0e0e0' }}>
             <Typography variant="h6" gutterBottom>
-              Последние активности
+              {t('dashboard.recent_activities')}
             </Typography>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: isMobile ? 1 : 2 }}>
               {recentActivities.length > 0 ? (
@@ -235,7 +235,7 @@ const Dashboard: React.FC = observer(() => {
                 ))
               ) : (
                 <Typography variant="body2" color="text.secondary">
-                  Нет недавних активностей
+                  {t('dashboard.no_recent_activities')}
                 </Typography>
               )}
             </Box>

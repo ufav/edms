@@ -59,7 +59,7 @@ const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer((
   getRevisionStatusColor,
   canCancelRevision,
 }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   const hasRevisions = !isCreating && documentId && documentRevisionStore.getRevisions(documentId || 0).length > 0;
   const hasFile = isCreating && fileMetadata;
@@ -121,7 +121,16 @@ const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer((
             <TableBody>
               {isCreating && fileMetadata ? (
                 // Показываем загруженный файл в режиме создания
-                <TableRow>
+                <TableRow 
+                  sx={{ 
+                    '&:hover': {
+                      backgroundColor: 'rgba(0, 0, 0, 0.04) !important',
+                      '& .MuiTableCell-root': {
+                        backgroundColor: 'rgba(0, 0, 0, 0.04) !important'
+                      }
+                    }
+                  }}
+                >
                   <TableCell>
                     <Chip 
                       label={workflowPresetSequence.length > 0 && workflowPresetSequence[0].revision_description 
@@ -217,19 +226,29 @@ const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer((
               ) : (
                 // Показываем ревизии существующего документа
                 documentRevisionStore.getRevisions(documentId || 0).map((revision) => (
-                  <TableRow key={revision.id}>
+                  <TableRow 
+                    key={revision.id}
+                    sx={{ 
+                      '&:hover': {
+                        backgroundColor: 'rgba(0, 0, 0, 0.04) !important',
+                        '& .MuiTableCell-root': {
+                          backgroundColor: 'rgba(0, 0, 0, 0.04) !important'
+                        }
+                      }
+                    }}
+                  >
                     <TableCell>
                       <Chip label={referencesStore.getFullRevisionNumber(revision)} size="small" />
                     </TableCell>
                     <TableCell>
-                      {referencesStore.getRevisionDescriptionLabel(revision.revision_description_id, 'ru') || '-'}
+                      {referencesStore.getRevisionDescriptionLabel(revision.revision_description_id, i18n.language) || '-'}
                     </TableCell>
                     <TableCell>
-                      {referencesStore.getRevisionStepLabel(revision.revision_step_id, 'ru') || '-'}
+                      {referencesStore.getRevisionStepLabel(revision.revision_step_id, i18n.language) || '-'}
                     </TableCell>
                     <TableCell>
                       <Chip 
-                        label={referencesStore.getRevisionStatusLabel(revision.revision_status_id, 'ru')} 
+                        label={referencesStore.getRevisionStatusLabel(revision.revision_status_id, i18n.language)} 
                         size="small"
                         color={getRevisionStatusColor(revision.revision_status_id || null) as any}
                       />
@@ -303,6 +322,9 @@ const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer((
           flexGrow: 1, 
           maxHeight: '400px', 
           overflow: 'auto',
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center',
           '&::-webkit-scrollbar': {
             width: '8px',
           },
@@ -318,42 +340,11 @@ const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer((
             },
           },
         }}>
-          <Table stickyHeader size="small">
-            <TableHead>
-              <TableRow>
-                <TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>{t('document.revision')}</TableCell>
-                <TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>{t('document.revision_description')}</TableCell>
-                <TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>{t('document.step')}</TableCell>
-                <TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>{t('document.status')}</TableCell>
-                <TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>{t('document.file_name')}</TableCell>
-                <TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>{t('document.change_description')}</TableCell>
-                <TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>{t('document.uploaded_at')}</TableCell>
-                <TableCell 
-                  sx={{ 
-                    position: 'sticky', 
-                    right: 0, 
-                    backgroundColor: 'background.paper',
-                    zIndex: 2,
-                    width: '160px',
-                    minWidth: '160px',
-                    fontWeight: 'bold',
-                    fontSize: '0.875rem'
-                  }}
-                >
-                  {t('document.actions')}
-                </TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              <TableRow>
-                <TableCell colSpan={8} align="center">
-                  <Typography color="text.secondary">
-                    {!isCreating && documentId ? t('document.no_revisions') : t('document.no_revisions_created')}
-                  </Typography>
-                </TableCell>
-              </TableRow>
-            </TableBody>
-          </Table>
+          <Box sx={{ textAlign: 'center', py: 4 }}>
+            <Typography variant="h6" color="text.secondary">
+              {!isCreating && documentId ? t('document.no_revisions') : t('document.no_revisions_created')}
+            </Typography>
+          </Box>
         </TableContainer>
       )}
     </Box>

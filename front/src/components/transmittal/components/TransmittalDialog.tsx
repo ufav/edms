@@ -48,7 +48,7 @@ import { projectStore } from '../../../stores/ProjectStore';
 export interface TransmittalData {
   transmittal_number: string;
   title: string;
-  recipient_company_id?: number;
+  recipient_id?: number;
 }
 
 export interface TransmittalDialogProps {
@@ -148,13 +148,13 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
   const [formData, setFormData] = useState<TransmittalData>({
     transmittal_number: '',
     title: '',
-    recipient_company_id: undefined,
+    recipient_id: undefined,
   });
 
   // Состояние валидации
   const [validationErrors, setValidationErrors] = useState<{
     transmittal_number?: boolean;
-    recipient_company_id?: boolean;
+    recipient_id?: boolean;
   }>({});
 
 
@@ -164,20 +164,20 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
       setFormData({
         transmittal_number: '',
         title: '',
-        recipient_company_id: undefined,
+        recipient_id: undefined,
       });
     }
   }, [open]);
 
   // Функция валидации
   const validateForm = () => {
-    const errors: { transmittal_number?: boolean; recipient_company_id?: boolean } = {};
+    const errors: { transmittal_number?: boolean; recipient_id?: boolean } = {};
     
     if (!formData.transmittal_number?.trim()) {
       errors.transmittal_number = true;
     }
-    if (!formData.recipient_company_id) {
-      errors.recipient_company_id = true;
+    if (!formData.recipient_id) {
+      errors.recipient_id = true;
     }
     
     setValidationErrors(errors);
@@ -189,7 +189,7 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
     if (Object.keys(validationErrors).length > 0) {
       setValidationErrors({});
     }
-  }, [formData.transmittal_number, formData.recipient_company_id]);
+  }, [formData.transmittal_number, formData.recipient_id]);
 
 
   // Обработчики
@@ -277,14 +277,14 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
             </Grid>
             
             <Grid item xs={3}>
-              <FormControl variant="standard" fullWidth required error={validationErrors.recipient_company_id}>
+              <FormControl variant="standard" fullWidth required error={validationErrors.recipient_id}>
                 <InputLabel>{t('transmittals.recipient_company')}</InputLabel>
                 <Select
-                  value={formData.recipient_company_id || ''}
+                  value={formData.recipient_id || ''}
                   onChange={(e) => {
                     setFormData(prev => ({ 
                       ...prev, 
-                      recipient_company_id: e.target.value as number
+                      recipient_id: e.target.value as number
                     }));
                   }}
                   disabled={isLoading}
@@ -295,7 +295,7 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
                     </MenuItem>
                   ))}
                 </Select>
-                {validationErrors.recipient_company_id && (
+                {validationErrors.recipient_id && (
                   <Typography variant="caption" color="error" sx={{ fontSize: '0.75rem', mt: 0.5 }}>
                     {t('transmittals.recipient_company_required')}
                   </Typography>

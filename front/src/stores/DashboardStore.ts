@@ -40,7 +40,7 @@ class DashboardStore {
   }
 
   // Получение последних активностей
-  getRecentActivities(): RecentActivity[] {
+  getRecentActivities(t?: (key: string, options?: any) => string): RecentActivity[] {
     const activities: RecentActivity[] = [];
 
     // Добавляем последние документы
@@ -53,8 +53,8 @@ class DashboardStore {
       activities.push({
         id: `doc-${doc.id}`,
         type: 'document',
-        title: 'Загружен новый документ',
-        description: `"${doc.title}" - ${this.formatTimeAgo(doc.created_at)}`,
+        title: t ? t('dashboard.activity.document_uploaded') : 'Загружен новый документ',
+        description: `"${doc.title}" - ${this.formatTimeAgo(doc.created_at, t)}`,
         timestamp: doc.created_at,
         icon: 'document'
       });
@@ -67,11 +67,16 @@ class DashboardStore {
       .slice(0, 2);
     
     recentTransmittals.forEach(transmittal => {
+      const isSent = transmittal.status === 'sent';
+      const title = isSent 
+        ? (t ? t('dashboard.activity.transmittal_sent') : 'Трансмиттал отправлен')
+        : (t ? t('dashboard.activity.transmittal_created') : 'Создан трансмиттал');
+      
       activities.push({
         id: `trans-${transmittal.id}`,
         type: 'transmittal',
-        title: 'Трансмиттал отправлен',
-        description: `${transmittal.transmittal_number} - ${this.formatTimeAgo(transmittal.created_at)}`,
+        title: title,
+        description: `${transmittal.transmittal_number} - ${this.formatTimeAgo(transmittal.created_at, t)}`,
         timestamp: transmittal.created_at,
         icon: 'transmittal'
       });
@@ -87,8 +92,8 @@ class DashboardStore {
       activities.push({
         id: `review-${review.id}`,
         type: 'review',
-        title: 'Документ одобрен',
-        description: `"${review.document_title}" - ${this.formatTimeAgo(review.created_at)}`,
+        title: t ? t('dashboard.activity.document_approved') : 'Документ одобрен',
+        description: `"${review.document_title}" - ${this.formatTimeAgo(review.created_at, t)}`,
         timestamp: review.created_at,
         icon: 'review'
       });
@@ -104,8 +109,8 @@ class DashboardStore {
       activities.push({
         id: `project-${project.id}`,
         type: 'project',
-        title: 'Создан новый проект',
-        description: `"${project.name}" - ${this.formatTimeAgo(project.created_at)}`,
+        title: t ? t('dashboard.activity.project_created') : 'Создан новый проект',
+        description: `"${project.name}" - ${this.formatTimeAgo(project.created_at, t)}`,
         timestamp: project.created_at,
         icon: 'project'
       });
@@ -119,22 +124,28 @@ class DashboardStore {
   }
 
   // Форматирование времени "назад"
-  private formatTimeAgo(dateString: string): string {
+  private formatTimeAgo(dateString: string, t?: (key: string, options?: any) => string): string {
     try {
       const date = new Date(dateString);
       const now = new Date();
       const diffInHours = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60));
       
       if (diffInHours < 1) {
-        return 'только что';
+        return t ? t('dashboard.time.just_now') : 'только что';
       } else if (diffInHours < 24) {
+        if (t) {
+          return t('dashboard.time.hours_ago', { count: diffInHours });
+        }
         return `${diffInHours} час${diffInHours === 1 ? '' : diffInHours < 5 ? 'а' : 'ов'} назад`;
       } else {
         const diffInDays = Math.floor(diffInHours / 24);
+        if (t) {
+          return t('dashboard.time.days_ago', { count: diffInDays });
+        }
         return `${diffInDays} дн${diffInDays === 1 ? 'ь' : diffInDays < 5 ? 'я' : 'ей'} назад`;
       }
     } catch (error) {
-      return 'недавно';
+      return t ? t('dashboard.time.recently') : 'недавно';
     }
   }
 

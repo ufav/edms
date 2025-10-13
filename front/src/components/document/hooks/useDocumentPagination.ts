@@ -34,7 +34,7 @@ export const useDocumentPagination = ({
   dependencies = [] 
 }: UseDocumentPaginationProps): UseDocumentPaginationReturn => {
   const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(25);
+  const [rowsPerPage, setRowsPerPage] = useState(13);
 
   // Сброс страницы при изменении фильтров
   useEffect(() => {
@@ -68,6 +68,6 @@ export const useDocumentPagination = ({
     handleChangeRowsPerPage,
     paginatedDocuments,
     totalCount: filteredDocuments.length,
-    rowsPerPageOptions: [10, 25, 50, 100],
+    rowsPerPageOptions: [10, 13, 25, 50, 100],
   };
 };

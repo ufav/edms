@@ -16,7 +16,7 @@ class Transmittal(Base):
     description = Column(Text)
     project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"))
     sender_id = Column(Integer, ForeignKey("users.id"))
-    recipient_id = Column(Integer, ForeignKey("users.id"))
+    recipient_id = Column(Integer, ForeignKey("companies.id"))
     status = Column(String(20), default="draft")
     sent_date = Column(DateTime(timezone=True))
     received_date = Column(DateTime(timezone=True))

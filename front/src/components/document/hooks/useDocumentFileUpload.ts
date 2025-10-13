@@ -74,6 +74,17 @@ export const useDocumentFileUpload = ({
     setUploadProgress(0);
   };
 
+  // Функция для полного сброса состояния
+  const resetAll = () => {
+    setUploadedFile(null);
+    setFileMetadata(null);
+    setIsUploadingDocument(false);
+    setUploadProgress(0);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   return {
     // Состояние
     uploadedFile,
@@ -89,6 +100,7 @@ export const useDocumentFileUpload = ({
     createProgressHandler,
     resetUploadState,
     startUpload,
+    resetAll,
     setUploadProgress,
     setIsUploadingDocument,
   };

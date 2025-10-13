@@ -20,7 +20,7 @@ class TransmittalCreate(BaseModel):
     transmittal_number: str
     title: str
     project_id: int
-    recipient_company_id: int
+    recipient_id: int
     revision_ids: List[int] = []  # Список ID ревизий для добавления в трансмиттал
 
 class TransmittalUpdate(BaseModel):
@@ -79,7 +79,7 @@ async def create_transmittal(
         description=None,  # Убираем description
         project_id=transmittal_data.project_id,
         sender_id=current_user.id,
-        recipient_id=None,  # Пока не используем recipient_id
+        recipient_id=transmittal_data.recipient_id,  # Используем переданный recipient_id
         status="draft"  # Статус draft по умолчанию
     )
     
@@ -108,6 +108,8 @@ async def create_transmittal(
         "title": db_transmittal.title,
         "description": db_transmittal.description,
         "project_id": db_transmittal.project_id,
+        "sender_id": db_transmittal.sender_id,
+        "recipient_id": db_transmittal.recipient_id,
         "status": db_transmittal.status,
         "created_at": db_transmittal.created_at
     }
@@ -124,27 +126,33 @@ async def get_transmittal(
         raise HTTPException(status_code=404, detail="Трансмиттал не найден")
     
     # Получаем ревизии трансмиттала
-    transmittal_revisions = db.query(TransmittalRevision).filter(
+    # Используем JOIN'ы вместо N+1 запросов
+    revisions_data = db.query(
+        DocumentRevision,
+        Document,
+        TransmittalRevision
+    ).join(
+        TransmittalRevision,
+        TransmittalRevision.revision_id == DocumentRevision.id
+    ).join(
+        Document,
+        Document.id == DocumentRevision.document_id
+    ).filter(
         TransmittalRevision.transmittal_id == transmittal_id
     ).all()
     
-    revisions_data = []
-    for tr in transmittal_revisions:
-        revision = db.query(DocumentRevision).filter(DocumentRevision.id == tr.revision_id).first()
-        if revision:
-            # Получаем документ
-            document = db.query(Document).filter(Document.id == revision.document_id).first()
-            if document:
-                revisions_data.append({
-                    "id": revision.id,
-                    "document_id": document.id,
-                    "document_title": document.title,
-                    "document_number": document.number,
-                    "revision_number": revision.number,
-                    "file_name": revision.file_name,
-                    "file_size": revision.file_size,
-                    "created_at": revision.created_at
-                })
+    result = []
+    for revision, document, tr in revisions_data:
+        result.append({
+            "id": revision.id,
+            "document_id": document.id,
+            "document_title": document.title,
+            "document_number": document.number,
+            "revision_number": revision.number,
+            "file_name": revision.file_name,
+            "file_size": revision.file_size,
+            "created_at": revision.created_at
+        })
     
     return {
         "id": transmittal.id,
@@ -172,26 +180,33 @@ async def get_transmittal_revisions(
     if not transmittal:
         raise HTTPException(status_code=404, detail="Трансмиттал не найден")
     
-    transmittal_revisions = db.query(TransmittalRevision).filter(
+    # Используем JOIN'ы вместо N+1 запросов
+    revisions_data = db.query(
+        DocumentRevision,
+        Document,
+        TransmittalRevision
+    ).join(
+        TransmittalRevision,
+        TransmittalRevision.revision_id == DocumentRevision.id
+    ).join(
+        Document,
+        Document.id == DocumentRevision.document_id
+    ).filter(
         TransmittalRevision.transmittal_id == transmittal_id
     ).all()
     
-    revisions_data = []
-    for tr in transmittal_revisions:
-        revision = db.query(DocumentRevision).filter(DocumentRevision.id == tr.revision_id).first()
-        if revision:
-            document = db.query(Document).filter(Document.id == revision.document_id).first()
-            if document:
-                revisions_data.append({
-                    "id": revision.id,
-                    "document_id": document.id,
-                    "document_title": document.title,
-                    "document_number": document.number,
-                    "revision_number": revision.number,
-                    "file_name": revision.file_name,
-                    "file_size": revision.file_size,
-                    "created_at": revision.created_at
-                })
+    result = []
+    for revision, document, tr in revisions_data:
+        result.append({
+            "id": revision.id,
+            "document_id": document.id,
+            "document_title": document.title,
+            "document_number": document.number,
+            "revision_number": revision.number,
+            "file_name": revision.file_name,
+            "file_size": revision.file_size,
+            "created_at": revision.created_at
+        })
     
     return revisions_data
 
@@ -267,6 +282,9 @@ async def get_active_revisions(
     current_user: User = Depends(get_current_active_user)
 ):
     """Получение активных ревизий документов для выбора в трансмиттал"""
+    from sqlalchemy import func, and_
+    from app.models.references import RevisionDescription
+    
     # Получаем статус "Active" (используем name вместо code)
     active_status = db.query(RevisionStatus).filter(
         RevisionStatus.name == "Active"
@@ -279,51 +297,58 @@ async def get_active_revisions(
     if not active_status:
         return []
     
-    # Запрос для получения последних ревизий документов со статусом "active"
-    query = db.query(DocumentRevision).filter(
+    # Создаем подзапрос для получения последней ревизии каждого документа со статусом "active"
+    latest_revision_subquery = db.query(
+        DocumentRevision.document_id,
+        func.max(DocumentRevision.created_at).label('max_created_at')
+    ).filter(
+        DocumentRevision.revision_status_id == active_status.id,
+        DocumentRevision.is_deleted == 0
+    ).group_by(DocumentRevision.document_id).subquery()
+    
+    # Основной запрос с JOIN'ами для получения всех данных за один раз
+    query = db.query(
+        DocumentRevision,
+        Document,
+        RevisionDescription
+    ).join(
+        latest_revision_subquery,
+        and_(
+            DocumentRevision.document_id == latest_revision_subquery.c.document_id,
+            DocumentRevision.created_at == latest_revision_subquery.c.max_created_at
+        )
+    ).join(
+        Document,
+        Document.id == DocumentRevision.document_id
+    ).outerjoin(
+        RevisionDescription,
+        RevisionDescription.id == DocumentRevision.revision_description_id
+    ).filter(
         DocumentRevision.revision_status_id == active_status.id,
         DocumentRevision.is_deleted == 0
     )
     
     if project_id:
-        # Фильтруем по проекту через документы
-        query = query.join(Document).filter(Document.project_id == project_id)
+        query = query.filter(Document.project_id == project_id)
     
-    # Получаем последние ревизии для каждого документа
-    revisions = query.order_by(DocumentRevision.document_id, DocumentRevision.created_at.desc()).all()
+    # Выполняем запрос
+    results = query.all()
     
-    # Группируем по document_id и берем только последнюю ревизию для каждого документа
-    latest_revisions = {}
-    for revision in revisions:
-        if revision.document_id not in latest_revisions:
-            latest_revisions[revision.document_id] = revision
-    
+    # Формируем результат
     revisions_data = []
-    for revision in latest_revisions.values():
-        document = db.query(Document).filter(Document.id == revision.document_id).first()
-        if document:
-            # Получаем код описания ревизии
-            revision_description_code = None
-            if revision.revision_description_id:
-                from app.models.references import RevisionDescription
-                revision_description = db.query(RevisionDescription).filter(
-                    RevisionDescription.id == revision.revision_description_id
-                ).first()
-                if revision_description:
-                    revision_description_code = revision_description.code
-            
-            revisions_data.append({
-                "id": revision.id,
-                "document_id": document.id,
-                "document_title": document.title,
-                "document_number": document.number,
-                "revision_number": revision.number,
-                "revision_description_code": revision_description_code,
-                "file_name": revision.file_name,
-                "file_type": revision.file_type,
-                "file_size": revision.file_size,
-                "created_at": revision.created_at,
-                "project_id": document.project_id
-            })
+    for revision, document, revision_description in results:
+        revisions_data.append({
+            "id": revision.id,
+            "document_id": document.id,
+            "document_title": document.title,
+            "document_number": document.number,
+            "revision_number": revision.number,
+            "revision_description_code": revision_description.code if revision_description else None,
+            "file_name": revision.file_name,
+            "file_type": revision.file_type,
+            "file_size": revision.file_size,
+            "created_at": revision.created_at,
+            "project_id": document.project_id
+        })
     
     return revisions_data

@@ -13,4 +13,5 @@ export { useTransmittalCart } from './hooks/useTransmittalCart';
 export type { UseTransmittalCartReturn } from './hooks/useTransmittalCart';
 
 export { useActiveRevisions } from './hooks/useActiveRevisions';
-export type { UseActiveRevisionsReturn, ActiveRevision } from './hooks/useActiveRevisions';
+export type { UseActiveRevisionsReturn } from './hooks/useActiveRevisions';
+export type { ActiveRevision } from '../../stores/ActiveRevisionsStore';

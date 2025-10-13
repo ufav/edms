@@ -827,21 +827,23 @@ async def get_project_disciplines(
         ProjectDisciplineDocumentType.project_id == project_id
     ).all()
     
-    # Получаем уникальные дисциплины
-    discipline_ids = list(set([pddt.discipline_id for pddt in project_discipline_document_types]))
+    # Получаем уникальные дисциплины через JOIN
+    disciplines = db.query(Discipline).join(
+        ProjectDisciplineDocumentType,
+        Discipline.id == ProjectDisciplineDocumentType.discipline_id
+    ).filter(
+        ProjectDisciplineDocumentType.project_id == project_id
+    ).distinct().all()
     
-    disciplines = []
-    for discipline_id in discipline_ids:
-        discipline = db.query(Discipline).filter(Discipline.id == discipline_id).first()
-        if discipline:
-            disciplines.append({
-                "id": discipline.id,
-                "code": discipline.code,
-                "name": discipline.name,
-                "description": discipline.description
-            })
-    
-    return disciplines
+    return [
+        {
+            "id": discipline.id,
+            "code": discipline.code,
+            "name": discipline.name,
+            "description": discipline.description
+        }
+        for discipline in disciplines
+    ]
 
 
 @router.get("/{project_id}/document-types/{discipline_id}", response_model=List[dict])
@@ -859,24 +861,28 @@ async def get_project_document_types(
     check_project_access(project, current_user, db)
     
     # Получаем типы документов для дисциплины в проекте
-    project_discipline_document_types = db.query(ProjectDisciplineDocumentType).filter(
+    # Используем JOIN вместо N+1 запросов
+    results = db.query(
+        DocumentType,
+        ProjectDisciplineDocumentType
+    ).join(
+        ProjectDisciplineDocumentType,
+        DocumentType.id == ProjectDisciplineDocumentType.document_type_id
+    ).filter(
         ProjectDisciplineDocumentType.project_id == project_id,
         ProjectDisciplineDocumentType.discipline_id == discipline_id
     ).all()
     
-    document_types = []
-    for pddt in project_discipline_document_types:
-        doc_type = db.query(DocumentType).filter(DocumentType.id == pddt.document_type_id).first()
-        if doc_type:
-            document_types.append({
-                "id": doc_type.id,
-                "code": doc_type.code,
-                "name": doc_type.name,
-                "description": doc_type.description,
-                "drs": pddt.drs  # Добавляем DRS из project_discipline_document_types
-            })
-    
-    return document_types
+    return [
+        {
+            "id": doc_type.id,
+            "code": doc_type.code,
+            "name": doc_type.name,
+            "description": doc_type.description,
+            "drs": pddt.drs  # Добавляем DRS из project_discipline_document_types
+        }
+        for doc_type, pddt in results
+    ]
 
 
 @router.get("/{project_id}/document-types", response_model=dict)

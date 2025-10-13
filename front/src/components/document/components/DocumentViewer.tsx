@@ -90,8 +90,8 @@ const DocumentViewer: React.FC<DocumentViewerProps> = observer(({
     documentState.cancelEditing();
     documentState.hideNotification();
     
-    // Очищаем загруженный файл
-    fileUpload.handleRemoveFile();
+    // Очищаем загруженный файл и все связанное состояние
+    fileUpload.resetAll();
     
     // Очищаем состояние загрузки (как в старом коде)
     setIsUploadingDocument(false);

@@ -46,16 +46,6 @@ const DocumentFileUpload: React.FC<DocumentFileUploadProps> = ({
           {t('document.upload_file')}
         </Button>
       </Box>
-      {fileMetadata && (
-        <Box sx={{ p: 1, bgcolor: 'grey.100', borderRadius: 1 }}>
-          <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-            {fileMetadata.name}
-          </Typography>
-          <Typography variant="caption" color="text.secondary">
-            {(fileMetadata.size / 1024 / 1024).toFixed(2)} MB
-          </Typography>
-        </Box>
-      )}
       {validationErrors.file && (
         <Typography variant="caption" color="error" sx={{ fontSize: '0.75rem' }}>
           {t('document.file_required')}

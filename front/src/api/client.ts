@@ -639,7 +639,9 @@ export const projectsApi = {
 export const documentsApi = {
   // Получить все документы
   getAll: async (projectId?: number): Promise<Document[]> => {
-    const params = projectId ? { project_id: projectId } : {};
+    const params: any = {};
+    if (projectId) params.project_id = projectId;
+    // Убираем лимит и офсет - загружаем все документы
     const response = await apiClient.get('/documents/', { params });
     return response.data;
   },
@@ -778,7 +780,9 @@ export const documentsApi = {
 export const transmittalsApi = {
   // Получить все трансмитталы
   getAll: async (projectId?: number): Promise<Transmittal[]> => {
-    const params = projectId ? { project_id: projectId } : {};
+    const params: any = {};
+    if (projectId) params.project_id = projectId;
+    // Убираем лимит и офсет - загружаем все трансмитталы
     const response = await apiClient.get('/transmittals/', { params });
     return response.data;
   },
@@ -830,7 +834,9 @@ export const transmittalsApi = {
 export const reviewsApi = {
   // Получить все ревью
   getAll: async (projectId?: number): Promise<Review[]> => {
-    const params = projectId ? { project_id: projectId } : {};
+    const params: any = {};
+    if (projectId) params.project_id = projectId;
+    // Убираем лимит и офсет - загружаем все ревью
     const response = await apiClient.get('/reviews/', { params });
     return response.data;
   },
@@ -872,6 +878,7 @@ export const reviewsApi = {
 export const usersApi = {
   // Получить всех пользователей
   getAll: async (): Promise<User[]> => {
+    // Убираем лимит и офсет - загружаем всех пользователей
     const response = await apiClient.get('/users/');
     return response.data;
   },
@@ -919,6 +926,7 @@ export const usersApi = {
 export const disciplinesApi = {
   // Получить все дисциплины
   getAll: async (): Promise<Discipline[]> => {
+    // Убираем лимит и офсет - загружаем все дисциплины
     const response = await apiClient.get('/disciplines');
     return response.data;
   },
@@ -942,12 +950,14 @@ export const disciplinesApi = {
 
   // Получить все типы документов
   getDocumentTypes: async (): Promise<DocumentType[]> => {
+    // Убираем лимит и офсет - загружаем все типы документов
     const response = await apiClient.get('/disciplines/document-types');
     return response.data;
   },
 
   // Получить типы документов для дисциплины
   getDocumentTypesByDiscipline: async (disciplineId: number): Promise<DocumentType[]> => {
+    // Убираем лимит и офсет - загружаем все типы документов для дисциплины
     const response = await apiClient.get(`/disciplines/${disciplineId}/document-types`);
     return response.data;
   },
@@ -962,6 +972,7 @@ export const disciplinesApi = {
 export const languagesApi = {
   // Получить все языки
   getAll: async (): Promise<Language[]> => {
+    // Убираем лимит и офсет - загружаем все языки
     const response = await apiClient.get('/references/languages');
     return response.data;
   },
@@ -998,6 +1009,7 @@ export const languagesApi = {
 export const documentTypesApi = {
   // Получить все типы документов
   getAll: async (): Promise<DocumentType[]> => {
+    // Убираем лимит и офсет - загружаем все типы документов
     const response = await apiClient.get('/disciplines/document-types');
     return response.data;
   },

@@ -14,7 +14,6 @@ import {
   Tooltip,
   CircularProgress,
   Alert,
-  TablePagination,
   Checkbox,
 } from '@mui/material';
 import {
@@ -42,6 +41,11 @@ import { canDeleteDocument } from '../../../hooks/usePermissions';
 import { userStore } from '../../../stores/UserStore';
 import DocumentsTableSkeleton from './DocumentsTableSkeleton';
 
+export interface ColumnOrder {
+  column: string;
+  order: number;
+}
+
 export interface DocumentTableProps {
   // Данные
   documents: any[];
@@ -67,12 +71,9 @@ export interface DocumentTableProps {
     actions: boolean;
   };
   
-  // Пагинация
-  page: number;
-  rowsPerPage: number;
-  rowsPerPageOptions: number[];
-  onPageChange: (event: unknown, newPage: number) => void;
-  onRowsPerPageChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  // Порядок колонок
+  columnOrder?: ColumnOrder[];
+  
   
   // Обработчики действий
   onShowDetails: (documentId: number) => void;
@@ -96,11 +97,7 @@ export const DocumentTable: React.FC<DocumentTableProps> = observer(({
   isLoading,
   error,
   visibleCols,
-  page,
-  rowsPerPage,
-  rowsPerPageOptions,
-  onPageChange,
-  onRowsPerPageChange,
+  columnOrder = [],
   onShowDetails,
   onDownload,
   onDelete,
@@ -112,6 +109,291 @@ export const DocumentTable: React.FC<DocumentTableProps> = observer(({
   language,
 }) => {
   const { t } = useTranslation();
+
+  // Функция для расчета высоты таблицы - всегда 13 строк
+  const calculateTableHeight = () => {
+    const headerHeight = 48; // Высота заголовка
+    const rowHeight = 48; // Высота одной строки
+    const visibleRows = 13; // Всегда 13 видимых строк
+    return headerHeight + (visibleRows * rowHeight);
+  };
+
+  // Функция для получения отсортированных колонок
+  const getSortedColumns = () => {
+    if (columnOrder.length === 0) {
+      // Если порядок не задан, используем дефолтный порядок
+      return [
+        'number', 'title', 'file', 'size', 'revision', 'status', 
+        'language', 'discipline', 'document_type', 'drs', 
+        'date', 'updated_at', 'created_by'
+      ];
+    }
+    
+    // Сортируем колонки по порядку, исключая actions (он всегда справа)
+    return columnOrder
+      .filter(col => col.column !== 'actions')
+      .sort((a, b) => a.order - b.order)
+      .map(col => col.column);
+  };
+
+  // Функция для получения ширины колонки
+  const getColumnWidth = (key: string) => {
+    switch (key) {
+      case 'number': return { width: '123px', minWidth: '123px' };
+      case 'title': return { width: '200px', minWidth: '200px' };
+      case 'file': return { width: '200px', minWidth: '200px' };
+      case 'size': return { width: '83px', minWidth: '83px' };
+      case 'revision': return { width: '83px', minWidth: '83px' };
+      case 'status': return { width: '103px', minWidth: '103px' };
+      case 'language': return { width: '83px', minWidth: '83px' };
+      case 'drs': return { width: '83px', minWidth: '83px' };
+      case 'discipline': return { width: '103px', minWidth: '103px' };
+      case 'document_type': return { width: '123px', minWidth: '123px' };
+      case 'date': return { width: '140px', minWidth: '140px' };
+      case 'updated_at': return { width: '140px', minWidth: '140px' };
+      case 'created_by': return { width: '123px', minWidth: '123px' };
+      default: return { width: '100px', minWidth: '100px' };
+    }
+  };
+
+  // Функция для рендеринга заголовка колонки
+  const renderColumnHeader = (columnKey: string) => {
+    const getColumnLabel = (key: string) => {
+      switch (key) {
+        case 'number': return t('documents.columns.number');
+        case 'title': return t('documents.columns.title');
+        case 'file': return t('documents.columns.file');
+        case 'size': return t('documents.columns.size');
+        case 'revision': return t('documents.columns.revision');
+        case 'status': return t('documents.columns.status');
+        case 'language': return t('documents.columns.language');
+        case 'drs': return 'DRS';
+        case 'date': return t('documents.columns.created_at');
+        case 'updated_at': return t('documents.columns.updated_at');
+        case 'created_by': return t('documents.columns.created_by');
+        case 'discipline': return t('documents.columns.discipline');
+        case 'document_type': return t('documents.columns.document_type');
+        default: return key;
+      }
+    };
+
+    return (
+      <TableCell 
+        key={columnKey}
+        sx={{ 
+          ...getColumnWidth(columnKey), 
+          maxWidth: '320px', 
+          fontWeight: 'bold', 
+          fontSize: '0.875rem', 
+          whiteSpace: 'nowrap' 
+        }}
+      >
+        {getColumnLabel(columnKey)}
+      </TableCell>
+    );
+  };
+
+  // Функция для рендеринга ячейки данных
+  const renderDataCell = (columnKey: string, document: any) => {
+    const getColumnWidth = (key: string) => {
+      switch (key) {
+        case 'number': return { width: '123px', minWidth: '123px' };
+        case 'title': return { width: '200px', minWidth: '200px' };
+        case 'file': return { width: '200px', minWidth: '200px' };
+        case 'size': return { width: '83px', minWidth: '83px' };
+        case 'revision': return { width: '83px', minWidth: '83px' };
+        case 'status': return { width: '103px', minWidth: '103px' };
+        case 'language': return { width: '83px', minWidth: '83px' };
+        case 'drs': return { width: '83px', minWidth: '83px' };
+        case 'discipline': return { width: '103px', minWidth: '103px' };
+        case 'document_type': return { width: '123px', minWidth: '123px' };
+        case 'date': return { width: '140px', minWidth: '140px' };
+        case 'updated_at': return { width: '140px', minWidth: '140px' };
+        case 'created_by': return { width: '123px', minWidth: '123px' };
+        default: return { width: '100px', minWidth: '100px' };
+      }
+    };
+
+    const renderCellContent = () => {
+      switch (columnKey) {
+        case 'number':
+          return (
+            <Tooltip title={document.number || `DOC-${document.id}`} arrow>
+              <Typography 
+                variant="body2" 
+                sx={{ 
+                  fontSize: '0.875rem',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  cursor: 'pointer',
+                  '&:hover': { textDecoration: 'underline' }
+                }}
+                onClick={() => onShowDetails(document.id)}
+              >
+                {document.number || `DOC-${document.id}`}
+              </Typography>
+            </Tooltip>
+          );
+        case 'title':
+          return (
+            <Tooltip title={document.title || 'Без названия'} arrow>
+              <Typography variant="body2" sx={{ 
+                fontSize: '0.875rem',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap'
+              }}>
+                {document.title || 'Без названия'}
+              </Typography>
+            </Tooltip>
+          );
+        case 'file':
+          return (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              {(() => {
+                const fileTypeInfo = getFileTypeInfo(document.file_type || '', document.file_name);
+                const IconComponent = fileTypeInfo.icon;
+                return <IconComponent sx={{ fontSize: '1.5rem', color: `${fileTypeInfo.color}.main` }} />;
+              })()}
+              <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.875rem' }}>
+                {document.file_name || 'N/A'}
+              </Typography>
+            </Box>
+          );
+        case 'size':
+          return (
+            <Typography variant="body2" sx={{ 
+              fontSize: '0.875rem',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap'
+            }}>
+              {formatFileSize(document.file_size)}
+            </Typography>
+          );
+        case 'revision':
+          return (
+            <Typography variant="body2" sx={{ 
+              fontSize: '0.875rem',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap'
+            }}>
+              {documentStore.getFullRevisionNumber(document, referencesStore)}
+            </Typography>
+          );
+        case 'status':
+          return (
+            <Chip
+              label={documentStore.getDocumentStatusLabel(document, referencesStore, language)}
+              color={documentStore.getDocumentStatusColor(document, referencesStore) as any}
+              size="small"
+              sx={{ fontSize: '0.75rem', height: '24px' }}
+            />
+          );
+        case 'language':
+          return (
+            <Tooltip title={(() => {
+              const languageItem = languageStore.languages.find(l => l.id === document.language_id);
+              return languageItem ? languageItem.code : 'ru';
+            })()} arrow>
+              <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.875rem' }}>
+                {(() => {
+                  const languageItem = languageStore.languages.find(l => l.id === document.language_id);
+                  return languageItem ? languageItem.code : 'ru';
+                })()}
+              </Typography>
+            </Tooltip>
+          );
+        case 'drs':
+          return (
+            <Tooltip title={document.drs || '-'} arrow>
+              <Typography variant="body2" sx={{ 
+                fontSize: '0.875rem',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap'
+              }}>
+                {document.drs || '-'}
+              </Typography>
+            </Tooltip>
+          );
+        case 'discipline':
+          return (
+            <Tooltip title={document.discipline_code || '-'} arrow>
+              <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.875rem' }}>
+                {document.discipline_code || '-'}
+              </Typography>
+            </Tooltip>
+          );
+        case 'document_type':
+          return (
+            <Tooltip title={document.document_type_code || '-'} arrow>
+              <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.875rem' }}>
+                {document.document_type_code || '-'}
+              </Typography>
+            </Tooltip>
+          );
+        case 'date':
+          return (
+            <Typography variant="body2" sx={{ 
+              fontSize: '0.875rem',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap'
+            }}>
+              {formatDate(document.created_at)}
+            </Typography>
+          );
+        case 'updated_at':
+          return (
+            <Typography variant="body2" sx={{ 
+              fontSize: '0.875rem',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap'
+            }}>
+              {formatDate(document.updated_at)}
+            </Typography>
+          );
+        case 'created_by':
+          return (
+            <Tooltip title={(() => {
+              const creator = userStore.users.find(user => user.id === document.created_by);
+              return creator ? creator.full_name : `User ${document.created_by}`;
+            })()} arrow>
+              <Typography variant="body2" sx={{ 
+                fontSize: '0.875rem',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap'
+              }}>
+                {(() => {
+                  const creator = userStore.users.find(user => user.id === document.created_by);
+                  return creator ? creator.full_name : `User ${document.created_by}`;
+                })()}
+              </Typography>
+            </Tooltip>
+          );
+        default:
+          return null;
+      }
+    };
+
+    return (
+      <TableCell 
+        key={columnKey}
+        sx={{ 
+          ...getColumnWidth(columnKey), 
+          maxWidth: '320px',
+          fontSize: '0.875rem'
+        }}
+      >
+        {renderCellContent()}
+      </TableCell>
+    );
+  };
 
   // Функция для получения иконки и названия типа файла
   const getFileTypeInfo = (fileType: string, fileName?: string) => {
@@ -194,60 +476,142 @@ export const DocumentTable: React.FC<DocumentTableProps> = observer(({
 
   if (totalCount === 0) {
     return (
-            <TableContainer component={Paper} sx={{ 
-              boxShadow: 2, 
-              width: '100%', 
-              minWidth: '100%', 
-              minHeight: '400px', 
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center'
-            }}>
-        <Box sx={{ textAlign: 'center', py: 4 }}>
-          <Typography variant="h6" color="text.secondary">
-            {t('documents.no_documents')}
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            {t('documents.no_documents_hint')}
-          </Typography>
-        </Box>
-      </TableContainer>
-    );
-  }
-
-  return (
-    <>
+      <Box sx={{ 
+        display: 'flex', 
+        flexDirection: 'column', 
+        height: '100%',
+        minHeight: 0,
+        marginBottom: 0, // Убираем отступ снизу
+        paddingBottom: 0 // Убираем padding снизу
+      }}>
         <TableContainer component={Paper} sx={{ 
           boxShadow: 2, 
           width: '100%', 
           minWidth: '100%', 
-          flex: 1
+          flex: 1, // Занимаем всю высоту желтого контейнера
+          minHeight: 0, // Важно для flex
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          borderRadius: 0, // Убираем скругленные углы
         }}>
-        <Table sx={{ tableLayout: 'fixed', width: '100%', minWidth: '100%' }}>
-          <TableHead>
-            <TableRow sx={{ backgroundColor: '#f5f5f5', '& .MuiTableCell-root': { padding: '8px 16px' } }}>
-              {showSelectColumn && (<TableCell sx={{ width: '50px', minWidth: '50px', maxWidth: '50px', fontWeight: 'bold', fontSize: '0.875rem', whiteSpace: 'nowrap', textAlign: 'center', position: 'sticky', left: 0, backgroundColor: '#f5f5f5', zIndex: 1 }}></TableCell>)}
-              {visibleCols.number && (<TableCell sx={{ width: '123px', minWidth: '123px', maxWidth: '320px', fontWeight: 'bold', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>{t('documents.columns.number')}</TableCell>)}
-              {visibleCols.title && (<TableCell sx={{ width: '200px', minWidth: '200px', maxWidth: '320px', fontWeight: 'bold', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>{t('documents.columns.title')}</TableCell>)}
-              {visibleCols.file && (<TableCell sx={{ width: '200px', minWidth: '200px', maxWidth: '320px', fontWeight: 'bold', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>{t('documents.columns.file')}</TableCell>)}
-              {visibleCols.size && (<TableCell sx={{ width: '83px', minWidth: '83px', maxWidth: '320px', fontWeight: 'bold', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>{t('documents.columns.size')}</TableCell>)}
-              {visibleCols.revision && (<TableCell sx={{ width: '83px', minWidth: '83px', maxWidth: '320px', fontWeight: 'bold', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>{t('documents.columns.revision')}</TableCell>)}
-              {visibleCols.status && (<TableCell sx={{ width: '103px', minWidth: '103px', maxWidth: '320px', fontWeight: 'bold', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>{t('documents.columns.status')}</TableCell>)}
-              {visibleCols.language && (<TableCell sx={{ width: '83px', minWidth: '83px', maxWidth: '320px', fontWeight: 'bold', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>{t('documents.columns.language')}</TableCell>)}
-              {visibleCols.drs && (<TableCell sx={{ width: '83px', minWidth: '83px', maxWidth: '320px', fontWeight: 'bold', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>DRS</TableCell>)}
-              {visibleCols.discipline && (<TableCell sx={{ width: '103px', minWidth: '103px', maxWidth: '320px', fontWeight: 'bold', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>{t('documents.columns.discipline')}</TableCell>)}
-              {visibleCols.document_type && (<TableCell sx={{ width: '123px', minWidth: '123px', maxWidth: '320px', fontWeight: 'bold', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>{t('documents.columns.document_type')}</TableCell>)}
-              {visibleCols.date && (<TableCell sx={{ width: '140px', minWidth: '140px', maxWidth: '320px', fontWeight: 'bold', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>{t('documents.columns.created_at')}</TableCell>)}
-              {visibleCols.updated_at && (<TableCell sx={{ width: '140px', minWidth: '140px', maxWidth: '320px', fontWeight: 'bold', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>{t('documents.columns.updated_at')}</TableCell>)}
-              {visibleCols.created_by && (<TableCell sx={{ width: '123px', minWidth: '123px', maxWidth: '320px', fontWeight: 'bold', fontSize: '0.875rem', whiteSpace: 'nowrap' }}>{t('documents.columns.created_by')}</TableCell>)}
-              {visibleCols.actions && (<TableCell sx={{ width: '110px', minWidth: '110px', maxWidth: '110px', fontWeight: 'bold', fontSize: '0.875rem', whiteSpace: 'nowrap', position: 'sticky', right: 0, backgroundColor: '#f5f5f5', zIndex: 1 }}>{t('common.actions')}</TableCell>)}
-            </TableRow>
-          </TableHead>
-          <TableBody>
+          <Box sx={{ textAlign: 'center', py: 4 }}>
+            <Typography variant="h6" color="text.secondary">
+              {t('documents.no_documents')}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {t('documents.no_documents_hint')}
+            </Typography>
+          </Box>
+        </TableContainer>
+      </Box>
+    );
+  }
+
+  return (
+    <Box sx={{ 
+      display: 'flex', 
+      flexDirection: 'column', 
+      height: '100%',
+      minHeight: 0,
+      marginBottom: 0, // Убираем отступ снизу
+      paddingBottom: 0 // Убираем padding снизу
+    }}>
+        {/* Заголовок таблицы - зафиксирован */}
+        <Box sx={{ 
+          borderBottom: '1px solid #f0f0f0',
+          backgroundColor: '#f5f5f5',
+          boxShadow: 2, // Добавляем тень как у основной рабочей области
+        }}>
+          <Table sx={{ tableLayout: 'fixed', width: '100%', minWidth: '100%' }}>
+            <TableHead>
+              <TableRow sx={{ backgroundColor: '#f5f5f5', '& .MuiTableCell-root': { padding: '8px 16px' } }}>
+                {showSelectColumn && (<TableCell sx={{ 
+                  width: '50px', 
+                  minWidth: '50px', 
+                  maxWidth: '50px', 
+                  fontWeight: 'bold', 
+                  fontSize: '0.875rem', 
+                  whiteSpace: 'nowrap', 
+                  textAlign: 'center', 
+                  position: 'sticky', 
+                  left: 0, 
+                  backgroundColor: '#f5f5f5', 
+                  zIndex: 3 
+                }}></TableCell>)}
+                {/* Рендерим колонки в порядке из настроек */}
+                {getSortedColumns().map(columnKey => 
+                  visibleCols[columnKey as keyof typeof visibleCols] && renderColumnHeader(columnKey)
+                )}
+                {visibleCols.actions && (<TableCell sx={{ 
+                  width: '110px', 
+                  minWidth: '110px', 
+                  maxWidth: '110px', 
+                  fontWeight: 'bold', 
+                  fontSize: '0.875rem', 
+                  whiteSpace: 'nowrap', 
+                  position: 'sticky', 
+                  right: 0, 
+                  backgroundColor: '#f5f5f5', 
+                  zIndex: 3 
+                }}>{t('common.actions')}</TableCell>)}
+              </TableRow>
+            </TableHead>
+          </Table>
+        </Box>
+
+        {/* Тело таблицы - с прокруткой */}
+        <TableContainer component={Paper} sx={{ 
+          boxShadow: 2, 
+          width: '100%', 
+          minWidth: '100%', 
+          flex: 1, // Занимаем оставшуюся высоту
+          minHeight: 0, // Важно для flex
+          overflow: 'auto',
+          borderRadius: 0, // Убираем скругленные углы
+          '&::-webkit-scrollbar': {
+            width: '8px',
+          },
+          '&::-webkit-scrollbar-track': {
+            background: '#f1f1f1',
+            borderRadius: '4px',
+          },
+          '&::-webkit-scrollbar-thumb': {
+            background: '#c1c1c1',
+            borderRadius: '4px',
+            '&:hover': {
+              background: '#a8a8a8',
+            },
+          },
+        }}>
+          <Table sx={{ tableLayout: 'fixed', width: '100%', minWidth: '100%' }}>
+            <TableBody>
             {documents.map((document) => (
-              <TableRow key={document.id} hover sx={{ '& .MuiTableCell-root': { padding: '8px 16px' } }}>
+              <TableRow 
+                key={document.id} 
+                sx={{ 
+                  '& .MuiTableCell-root': { padding: '8px 16px' },
+                  '&:hover': {
+                    backgroundColor: 'rgba(0, 0, 0, 0.04) !important',
+                    '& .MuiTableCell-root': {
+                      backgroundColor: 'rgba(0, 0, 0, 0.04) !important'
+                    }
+                  }
+                }}
+              >
                 {showSelectColumn && (
-                  <TableCell sx={{ width: '50px', minWidth: '50px', maxWidth: '50px', textAlign: 'center', position: 'sticky', left: 0, backgroundColor: 'white', zIndex: 1 }}>
+                  <TableCell 
+                    data-sticky="left"
+                    sx={{ 
+                      width: '50px', 
+                      minWidth: '50px', 
+                      maxWidth: '50px', 
+                      textAlign: 'center', 
+                      position: 'sticky', 
+                      left: 0, 
+                      zIndex: 2 
+                    }}
+                  >
                     <Checkbox
                       checked={selectedDocuments.includes(document.id)}
                       onChange={(e) => onDocumentSelect?.(document.id, e.target.checked)}
@@ -256,110 +620,21 @@ export const DocumentTable: React.FC<DocumentTableProps> = observer(({
                     />
                   </TableCell>
                 )}
-                {visibleCols.number && (<TableCell sx={{ width: '123px', minWidth: '123px', maxWidth: '320px' }}>
-                  <Tooltip title={document.number || 'DOC-' + document.id} arrow>
-                    <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.875rem' }}>
-                      {document.number || 'DOC-' + document.id}
-                    </Typography>
-                  </Tooltip>
-                </TableCell>)}
-                {visibleCols.title && (<TableCell sx={{ width: '200px', minWidth: '200px', maxWidth: '320px' }}>
-                  <Tooltip title={document.title} arrow>
-                    <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.875rem' }}>
-                      {document.title}
-                    </Typography>
-                  </Tooltip>
-                </TableCell>)}
-                {visibleCols.file && (<TableCell sx={{ width: '200px', minWidth: '200px', maxWidth: '320px' }}>
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    {(() => {
-                      const fileTypeInfo = getFileTypeInfo(document.file_type || '', document.file_name);
-                      const IconComponent = fileTypeInfo.icon;
-                      return <IconComponent sx={{ fontSize: '1.25rem', color: `${fileTypeInfo.color}.main` }} />;
-                    })()}
-                    <Tooltip title={document.file_name} arrow>
-                      <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.875rem' }}>
-                        {document.file_name}
-                      </Typography>
-                    </Tooltip>
-                  </Box>
-                </TableCell>)}
-                {visibleCols.size && (<TableCell sx={{ width: '83px', minWidth: '83px', maxWidth: '320px' }}>
-                  <Typography variant="body2" sx={{ fontSize: '0.875rem' }}>
-                    {formatFileSize(document.file_size)}
-                  </Typography>
-                </TableCell>)}
-                {visibleCols.revision && (<TableCell sx={{ width: '83px', minWidth: '83px', maxWidth: '320px' }}>
-                  <Typography variant="body2" sx={{ fontSize: '0.875rem' }}>
-                    {documentStore.getFullRevisionNumber(document, referencesStore)}
-                  </Typography>
-                </TableCell>)}
-                {visibleCols.status && (<TableCell sx={{ width: '103px', minWidth: '103px', maxWidth: '320px' }}>
-                  <Chip
-                    label={documentStore.getDocumentStatusLabel(document, referencesStore, language)}
-                    color={documentStore.getDocumentStatusColor(document, referencesStore) as any}
-                    size="small"
-                    sx={{ fontSize: '0.75rem', height: '24px' }}
-                  />
-                </TableCell>)}
-                {visibleCols.language && (<TableCell sx={{ width: '83px', minWidth: '83px', maxWidth: '320px' }}>
-                  <Tooltip title={(() => {
-                    const languageItem = languageStore.languages.find(l => l.id === document.language_id);
-                    return languageItem ? languageItem.code : 'ru';
-                  })()} arrow>
-                    <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.875rem' }}>
-                      {(() => {
-                        const languageItem = languageStore.languages.find(l => l.id === document.language_id);
-                        return languageItem ? languageItem.code : 'ru';
-                      })()}
-                    </Typography>
-                  </Tooltip>
-                </TableCell>)}
-                {visibleCols.drs && (<TableCell sx={{ width: '83px', minWidth: '83px', maxWidth: '320px' }}>
-                  <Tooltip title={document.drs || '-'} arrow>
-                    <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.875rem' }}>
-                      {document.drs || '-'}
-                    </Typography>
-                  </Tooltip>
-                </TableCell>)}
-                {visibleCols.discipline && (<TableCell sx={{ width: '103px', minWidth: '103px', maxWidth: '320px' }}>
-                  <Tooltip title={document.discipline_code || '-'} arrow>
-                    <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.875rem' }}>
-                      {document.discipline_code || '-'}
-                    </Typography>
-                  </Tooltip>
-                </TableCell>)}
-                {visibleCols.document_type && (<TableCell sx={{ width: '123px', minWidth: '123px', maxWidth: '320px' }}>
-                  <Tooltip title={document.document_type_code || '-'} arrow>
-                    <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.875rem' }}>
-                      {document.document_type_code || '-'}
-                    </Typography>
-                  </Tooltip>
-                </TableCell>)}
-                {visibleCols.date && (<TableCell sx={{ width: '140px', minWidth: '140px', maxWidth: '320px' }}>
-                  <Typography variant="body2" sx={{ fontSize: '0.875rem' }}>
-                    {formatDate(document.created_at)}
-                  </Typography>
-                </TableCell>)}
-                {visibleCols.updated_at && (<TableCell sx={{ width: '140px', minWidth: '140px', maxWidth: '320px' }}>
-                  <Typography variant="body2" sx={{ fontSize: '0.875rem' }}>
-                    {formatDate(document.updated_at)}
-                  </Typography>
-                </TableCell>)}
-                {visibleCols.created_by && (<TableCell sx={{ width: '123px', minWidth: '123px', maxWidth: '320px' }}>
-                  <Tooltip title={(() => {
-                    const creator = userStore.users.find(user => user.id === document.created_by);
-                    return creator ? creator.full_name : `User ${document.created_by}`;
-                  })()} arrow>
-                    <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.875rem' }}>
-                      {(() => {
-                        const creator = userStore.users.find(user => user.id === document.created_by);
-                        return creator ? creator.full_name : `User ${document.created_by}`;
-                      })()}
-                    </Typography>
-                  </Tooltip>
-                </TableCell>)}
-                {visibleCols.actions && (<TableCell sx={{ width: '110px', minWidth: '110px', maxWidth: '110px', position: 'sticky', right: 0, backgroundColor: 'white', zIndex: 1 }}>
+                {/* Рендерим колонки в порядке из настроек */}
+                {getSortedColumns().map(columnKey => 
+                  visibleCols[columnKey as keyof typeof visibleCols] && renderDataCell(columnKey, document)
+                )}
+                {visibleCols.actions && (<TableCell 
+                  data-sticky="right"
+                  sx={{ 
+                    width: '110px', 
+                    minWidth: '110px', 
+                    maxWidth: '110px', 
+                    position: 'sticky', 
+                    right: 0, 
+                    zIndex: 2 
+                  }}
+                >
                   <Box sx={{ display: 'flex', gap: 1 }}>
                     <Tooltip title={t('documents.details')}>
                       <IconButton size="small" onClick={() => onShowDetails(document.id)} sx={{ padding: '4px' }}>
@@ -385,35 +660,6 @@ export const DocumentTable: React.FC<DocumentTableProps> = observer(({
           </TableBody>
         </Table>
       </TableContainer>
-      
-      {!isLoading && totalCount > 0 && (
-        <TablePagination
-          rowsPerPageOptions={rowsPerPageOptions}
-          component="div"
-          count={totalCount}
-          rowsPerPage={rowsPerPage}
-          page={page}
-          onPageChange={onPageChange}
-          onRowsPerPageChange={onRowsPerPageChange}
-          labelRowsPerPage={t('common.rows_per_page') || 'Строк на странице:'}
-          labelDisplayedRows={({ from, to, count }) => {
-            const ofText = t('common.of') || 'из';
-            const moreThanText = t('common.more_than') || 'больше чем';
-            const countText = count !== -1 ? count.toString() : `${moreThanText} ${to}`;
-            return `${from}-${to} ${ofText} ${countText}`;
-          }}
-          sx={{
-            '& .MuiTablePagination-toolbar': {
-              paddingLeft: 0,
-              paddingRight: 0,
-              flexWrap: 'wrap',
-            },
-            '& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows': {
-              fontSize: '0.875rem',
-            },
-          }}
-        />
-      )}
-    </>
+    </Box>
   );
 });

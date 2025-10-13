@@ -21,8 +21,8 @@ export const useDocumentDataLoading = (): UseDocumentDataLoadingReturn => {
     if (projectStore.hasSelectedProject && projectStore.selectedProject) {
       const projectId = projectStore.selectedProject.id;
       
-      // Загружаем документы (принудительно перезагружаем для получения обновленных данных)
-      documentStore.reloadDocuments(projectId);
+      // Загружаем документы
+      documentStore.loadDocuments(projectId);
       
       // Загружаем дисциплины проекта для боковой панели
       disciplineStore.loadDisciplines(projectId);

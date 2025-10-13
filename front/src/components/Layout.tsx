@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   AppBar,
   Toolbar,
@@ -60,6 +60,8 @@ const Layout: React.FC<LayoutProps> = observer(({
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 0 });
+  const menuRef = useRef<HTMLDivElement>(null);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const { t, i18n } = useTranslation();
@@ -68,6 +70,34 @@ const Layout: React.FC<LayoutProps> = observer(({
   const handleMenu = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
   };
+
+  // Функция для обновления позиции индикатора
+  const updateIndicator = () => {
+    if (!menuRef.current) return;
+    
+    const activeButton = menuRef.current.querySelector(`[data-page="${currentPage}"]`) as HTMLElement;
+    if (activeButton) {
+      const menuRect = menuRef.current.getBoundingClientRect();
+      const buttonRect = activeButton.getBoundingClientRect();
+      
+      setIndicatorStyle({
+        left: buttonRect.left - menuRect.left,
+        width: buttonRect.width,
+      });
+    }
+  };
+
+  // Обновляем позицию индикатора при изменении активной страницы
+  useEffect(() => {
+    updateIndicator();
+  }, [currentPage]);
+
+  // Обновляем позицию при изменении размера окна
+  useEffect(() => {
+    const handleResize = () => updateIndicator();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [currentPage]);
 
   const handleClose = () => {
     setAnchorEl(null);
@@ -112,6 +142,20 @@ const Layout: React.FC<LayoutProps> = observer(({
               setMobileOpen(false);
             }}
             selected={currentPage === item.id}
+            sx={{
+              backgroundColor: currentPage === item.id ? 'primary.main' : 'transparent',
+              color: currentPage === item.id ? 'white' : 'inherit',
+              '&:hover': {
+                backgroundColor: currentPage === item.id ? 'primary.dark' : 'action.hover',
+                color: currentPage === item.id ? 'white' : 'inherit',
+              },
+              '& .MuiListItemIcon-root': {
+                color: currentPage === item.id ? 'white' : 'inherit',
+              },
+              '& .MuiListItemText-primary': {
+                fontWeight: currentPage === item.id ? 600 : 400,
+              },
+            }}
           >
             <ListItemIcon>{item.icon}</ListItemIcon>
             <ListItemText primary={item.label} />
@@ -160,10 +204,30 @@ const Layout: React.FC<LayoutProps> = observer(({
 
           {/* Desktop Navigation */}
           {!isMobile && (
-            <Box sx={{ display: 'flex', gap: 1 }}>
+            <Box 
+              ref={menuRef}
+              sx={{ 
+                display: 'flex', 
+                gap: 1, 
+                position: 'relative',
+                '&::after': {
+                  content: '""',
+                  position: 'absolute',
+                  bottom: 0,
+                  left: indicatorStyle.left,
+                  width: indicatorStyle.width,
+                  height: '3px',
+                  backgroundColor: 'white',
+                  borderRadius: '2px 2px 0 0',
+                  transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                  zIndex: 1,
+                }
+              }}
+            >
                 {menuItems.map((item) => (
                   <Button
                     key={item.id}
+                    data-page={item.id}
                     color="inherit"
                     onClick={() => {
                       if (item.external) {
@@ -173,9 +237,13 @@ const Layout: React.FC<LayoutProps> = observer(({
                       }
                     }}
                     sx={{
-                      backgroundColor: currentPage === item.id ? 'rgba(255,255,255,0.1)' : 'transparent',
+                      backgroundColor: currentPage === item.id ? 'rgba(255,255,255,0.2)' : 'transparent',
+                      borderRadius: '4px 4px 0 0',
+                      fontWeight: currentPage === item.id ? 600 : 400,
+                      position: 'relative',
+                      zIndex: 2,
                       '&:hover': {
-                        backgroundColor: 'rgba(255,255,255,0.1)',
+                        backgroundColor: currentPage === item.id ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.1)',
                       },
                     }}
                   >

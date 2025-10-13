@@ -77,6 +77,19 @@ export const useDocumentViewerState = ({
         discipline_id: '',
         document_type_id: '',
       });
+    } else {
+      // Если документ закрыт (document === null и !isCreating), сбрасываем данные
+      setDocumentData({
+        title: '',
+        title_native: '',
+        description: '',
+        remarks: '',
+        number: '',
+        drs: '',
+        language_id: '',
+        discipline_id: '',
+        document_type_id: '',
+      });
     }
   }, [document, isCreating]);
 

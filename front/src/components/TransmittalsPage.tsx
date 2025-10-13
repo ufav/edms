@@ -260,10 +260,10 @@ const TransmittalsPage: React.FC = observer(() => {
         {!transmittalStore.isLoading && filteredTransmittals.length === 0 && (
           <Box sx={{ textAlign: 'center', py: 4 }}>
             <Typography variant="h6" color="text.secondary">
-              Трансмитталы не найдены
+              {t('transmittals.no_transmittals')}
             </Typography>
             <Typography variant="body2" color="text.secondary">
-              Попробуйте изменить фильтры или создать новые трансмитталы
+              {t('transmittals.no_transmittals_hint')}
             </Typography>
           </Box>
         )}

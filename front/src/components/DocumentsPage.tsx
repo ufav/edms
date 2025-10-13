@@ -7,6 +7,7 @@ import {
   useMediaQuery,
   IconButton,
   Badge,
+  TablePagination,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -52,7 +53,7 @@ const DocumentsPage: React.FC = observer(() => {
   
   // Состояние для выбранных документов в трансмиттал
   const [selectedDocuments, setSelectedDocuments] = useState<number[]>([]);
-  const [showSelectColumn, setShowSelectColumn] = useState(true); // Всегда показываем колонку с галочками
+  const [showSelectColumn, setShowSelectColumn] = useState(!isViewer); // Не показываем галочки для viewer
   const [cartModalOpen, setCartModalOpen] = useState(false); // Состояние модалки трансмитталов
   
   // Состояние для уведомлений трансмиттала
@@ -67,21 +68,15 @@ const DocumentsPage: React.FC = observer(() => {
   });
   
   // Хуки для работы с трансмитталами
-  const { activeRevisions, loadActiveRevisions } = useActiveRevisions();
+  const { activeRevisions, refreshActiveRevisions } = useActiveRevisions();
   
-  // Загружаем активные ревизии при монтировании компонента
+  // Активные ревизии автоматически загружаются в useActiveRevisions хуке
+  
+  // Обновляем showSelectColumn при изменении роли пользователя
   useEffect(() => {
-    if (projectStore.selectedProject?.id) {
-      loadActiveRevisions(projectStore.selectedProject.id);
-    }
-  }, [projectStore.selectedProject?.id, loadActiveRevisions]);
+    setShowSelectColumn(!isViewer);
+  }, [isViewer]);
 
-  // Перезагружаем активные ревизии при изменении документов
-  useEffect(() => {
-    if (projectStore.selectedProject?.id) {
-      loadActiveRevisions(projectStore.selectedProject.id);
-    }
-  }, [documentStore.documents, projectStore.selectedProject?.id, loadActiveRevisions]);
   
   // Обработчик выбора документа
   const handleDocumentSelect = (documentId: number, selected: boolean) => {
@@ -144,8 +139,10 @@ const DocumentsPage: React.FC = observer(() => {
   const {
     settingsOpen,
     visibleCols,
+    columnOrder,
     setSettingsOpen,
     handleColumnVisibilityChange,
+    handleColumnOrderChange,
     handleSettingsClose,
   } = useDocumentSettings();
 
@@ -190,9 +187,7 @@ const DocumentsPage: React.FC = observer(() => {
     t, 
     onCloseDialog: handleCloseDocumentDetails,
     onRefreshActiveRevisions: () => {
-      if (projectStore.selectedProject?.id) {
-        loadActiveRevisions(projectStore.selectedProject.id);
-      }
+      refreshActiveRevisions();
     }
   });
 
@@ -210,13 +205,12 @@ const DocumentsPage: React.FC = observer(() => {
   useDocumentDataLoading();
 
   const deleteDialog = useDeleteDialog();
-  
-  const { refreshDocuments: refreshDocumentsList } = useRefreshStore();
+
 
   const handleDeleteDocument = async (document: any) => {
     try {
       await documentsApi.softDelete(document.id);
-      await refreshDocumentsList();
+      await refreshDocuments();
     } catch (error) {
       throw error;
     }
@@ -270,18 +264,21 @@ const DocumentsPage: React.FC = observer(() => {
     <Box sx={{ 
       width: '100%', 
       minWidth: 0, 
-      p: 3, 
-      flex: 1, 
+      pt: 3, // padding только сверху
+      px: 3, // padding только по бокам
+      pb: 0, // убираем padding снизу
+      height: !isMobile ? 'calc(100vh - 117px)' : '100vh', // Всегда вычитаем высоту пагинации для десктопа
       display: 'flex', 
-      flexDirection: 'column'
+      flexDirection: 'column',
+      overflow: 'hidden', // Убираем прокрутку страницы
     }}>
         <Box sx={{ 
           display: 'flex', 
           justifyContent: 'space-between', 
           alignItems: isMobile ? 'flex-start' : 'center', 
-          mb: 3,
+          mb: 3, // Возвращаем отступ снизу
           flexDirection: isMobile ? 'column' : 'row',
-          gap: isMobile ? 2 : 0
+          gap: isMobile ? 2 : 0,
         }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             <Typography variant={isMobile ? "h5" : "h4"} component="h1">
@@ -310,7 +307,7 @@ const DocumentsPage: React.FC = observer(() => {
             >
               {t('documents.import_by_paths') || 'Импорт по путям (Excel)'}
             </Button>
-            {selectedDocuments.length > 0 && (
+            {selectedDocuments.length > 0 && !isViewer && (
               <Button
                 variant="contained"
                 onClick={handleAddToTransmittal}
@@ -321,7 +318,7 @@ const DocumentsPage: React.FC = observer(() => {
             )}
             
             {/* Кнопка корзины для мобильной версии */}
-            {isMobile && transmittalCartStore.selectedCount > 0 && (
+            {isMobile && transmittalCartStore.selectedCount > 0 && !isViewer && (
               <Badge badgeContent={transmittalCartStore.selectedCount} color="primary">
                 <IconButton
                   onClick={() => setCartModalOpen(true)}
@@ -355,14 +352,20 @@ const DocumentsPage: React.FC = observer(() => {
         <Box sx={{ 
           width: '100%', 
           minWidth: 0, 
-          flex: 1
+          display: 'flex',
+          flexDirection: 'column',
+          flex: 1, // Занимаем оставшееся место
+          minHeight: 0, // Важно! Позволяет flex-элементу сжиматься
+          marginBottom: 0, // Убираем отступ снизу
+          paddingBottom: 0, // Убираем padding снизу
+          pt: 0, // Убираем отступ сверху
         }}>
 
           {isMobile ? (
             <Box sx={{ 
               width: '100%', 
               minWidth: 0, 
-              flex: 1
+              flex: 1,
             }}>
               <DocumentCards
               documents={paginatedDocuments}
@@ -391,7 +394,12 @@ const DocumentsPage: React.FC = observer(() => {
             <Box sx={{ 
               width: '100%', 
               minWidth: 0, 
-              flex: 1
+              flex: 1, // Занимаем всю высоту зеленого контейнера
+              minHeight: 0, // Важно! Позволяет flex-элементу сжиматься
+              display: 'flex',
+              flexDirection: 'column',
+              marginBottom: 0, // Убираем отступ снизу
+              paddingBottom: 0, // Убираем padding снизу
             }}>
               <DocumentTable
                 documents={paginatedDocuments}
@@ -399,11 +407,7 @@ const DocumentsPage: React.FC = observer(() => {
                 isLoading={documentStore.isLoading}
                 error={documentStore.error}
                 visibleCols={visibleCols}
-                  page={page}
-                rowsPerPage={rowsPerPage}
-                rowsPerPageOptions={rowsPerPageOptions}
-                  onPageChange={handleChangePage}
-                  onRowsPerPageChange={handleChangeRowsPerPage}
+                columnOrder={columnOrder}
                 onShowDetails={(documentId) => {
                   handleShowDocumentDetails(documentId);
                   handleOpenDocumentDetails();
@@ -423,6 +427,52 @@ const DocumentsPage: React.FC = observer(() => {
           )}
         </Box>
 
+        {/* Фиксированная пагинация внизу экрана */}
+        {!isMobile && !documentStore.isLoading && (
+          <Box sx={{
+            position: 'fixed',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            borderTop: '1px solid #e0e0e0',
+            boxShadow: '0 -2px 8px rgba(0,0,0,0.1)',
+            zIndex: 1000,
+            paddingLeft: '240px', // Отступ для бокового меню
+            '@media (max-width: 900px)': {
+              paddingLeft: 0, // На мобильных устройствах без отступа
+            },
+            backgroundColor: 'white',
+          }}>
+            <TablePagination
+              rowsPerPageOptions={rowsPerPageOptions}
+              component="div"
+              count={totalCount}
+              rowsPerPage={rowsPerPage}
+              page={page}
+              onPageChange={handleChangePage}
+              onRowsPerPageChange={handleChangeRowsPerPage}
+              labelRowsPerPage={t('common.rows_per_page') || 'Строк на странице:'}
+              labelDisplayedRows={({ from, to, count }) => {
+                const ofText = t('common.of') || 'из';
+                const moreThanText = t('common.more_than') || 'больше чем';
+                const countText = count !== -1 ? count.toString() : `${moreThanText} ${to}`;
+                return `${from}-${to} ${ofText} ${countText}`;
+              }}
+              sx={{
+                '& .MuiTablePagination-toolbar': {
+                  paddingLeft: 2,
+                  paddingRight: 2,
+                  flexWrap: 'wrap',
+                  justifyContent: 'flex-end', // Выравниваем пагинацию справа
+                },
+                '& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows': {
+                  fontSize: '0.875rem',
+                },
+              }}
+            />
+          </Box>
+        )}
+
         {/* Модалка трансмитталов */}
         <TransmittalCartModal
           open={cartModalOpen}
@@ -434,8 +484,10 @@ const DocumentsPage: React.FC = observer(() => {
           onRemoveRevision={transmittalCartStore.removeRevision}
           onClearAll={transmittalCartStore.clearAll}
           onCreateTransmittal={async (transmittalData) => {
-            await transmittalCartStore.createTransmittal(transmittalData, projectStore.selectedProject.id);
-            setCartModalOpen(false);
+            if (projectStore.selectedProject) {
+              await transmittalCartStore.createTransmittal(transmittalData, projectStore.selectedProject.id);
+              setCartModalOpen(false);
+            }
           }}
           onShowNotification={handleShowTransmittalNotification}
           formatFileSize={formatFileSize}
@@ -443,7 +495,7 @@ const DocumentsPage: React.FC = observer(() => {
         />
 
         {/* Кнопка открытия корзины трансмитталов в правом нижнем углу */}
-        {!cartModalOpen && transmittalCartStore.selectedCount > 0 && (
+        {!cartModalOpen && transmittalCartStore.selectedCount > 0 && !isViewer && (
           <Box
             sx={{
               position: 'fixed',
@@ -477,8 +529,10 @@ const DocumentsPage: React.FC = observer(() => {
         <DocumentSettingsDialog
           open={settingsOpen}
           visibleCols={visibleCols}
+          columnOrder={columnOrder}
           onClose={handleSettingsClose}
           onColumnVisibilityChange={handleColumnVisibilityChange}
+          onColumnOrderChange={handleColumnOrderChange}
         />
 
         <DocumentBatchUploadDialog

@@ -47,7 +47,7 @@ export const DocumentFilters: React.FC<DocumentFiltersProps> = ({
       alignItems: 'center', 
       flexWrap: 'wrap',
       flexDirection: isMobile ? 'column' : 'row',
-      mb: 3
+      mb: 3 // Возвращаем отступ снизу
     }}>
       <TextField
         placeholder={t('documents.search_placeholder')}

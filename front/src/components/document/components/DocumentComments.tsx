@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Drawer,
   Box,
@@ -61,6 +61,25 @@ const DocumentComments: React.FC<DocumentCommentsProps> = observer(({
   const [editingComment, setEditingComment] = useState<number | null>(null);
   const [editText, setEditText] = useState('');
   const [menuAnchor, setMenuAnchor] = useState<{ element: HTMLElement; commentId: number } | null>(null);
+  const commentRefs = useRef<{ [key: number]: HTMLDivElement | null }>({});
+
+  // Функция для прокрутки к комментарию
+  const scrollToComment = (commentId: number) => {
+    setTimeout(() => {
+      const element = commentRefs.current[commentId];
+      if (element) {
+        element.scrollIntoView({ 
+          behavior: 'smooth', 
+          block: 'center' 
+        });
+        // Добавляем визуальное выделение
+        element.style.backgroundColor = 'rgba(25, 118, 210, 0.1)';
+        setTimeout(() => {
+          element.style.backgroundColor = '';
+        }, 2000);
+      }
+    }, 100);
+  };
 
   // Загружаем комментарии при открытии
   useEffect(() => {
@@ -89,9 +108,13 @@ const DocumentComments: React.FC<DocumentCommentsProps> = observer(({
 
     setSubmitting(true);
     try {
-      await documentCommentsApi.createComment(documentId, newComment.trim());
+      const newCommentData = await documentCommentsApi.createComment(documentId, newComment.trim());
       setNewComment('');
       await loadComments(); // Перезагружаем комментарии
+      // Прокручиваем к новому комментарию
+      if (newCommentData && newCommentData.id) {
+        scrollToComment(newCommentData.id);
+      }
     } catch (err) {
       setError(t('comments.create_error'));
     } finally {
@@ -104,10 +127,14 @@ const DocumentComments: React.FC<DocumentCommentsProps> = observer(({
 
     setSubmitting(true);
     try {
-      await documentCommentsApi.createComment(documentId, replyText.trim(), parentCommentId);
+      const newReplyData = await documentCommentsApi.createComment(documentId, replyText.trim(), parentCommentId);
       setReplyText('');
       setReplyingTo(null);
       await loadComments(); // Перезагружаем комментарии
+      // Прокручиваем к новому ответу
+      if (newReplyData && newReplyData.id) {
+        scrollToComment(newReplyData.id);
+      }
     } catch (err) {
       setError(t('comments.reply_error'));
     } finally {
@@ -236,7 +263,8 @@ const DocumentComments: React.FC<DocumentCommentsProps> = observer(({
 
   const renderComment = (comment: DocumentComment, isReply = false, level = 0) => (
     <Box 
-      key={comment.id} 
+      key={comment.id}
+      ref={(el) => { commentRefs.current[comment.id] = el; }}
       sx={{ 
         mb: 1,
         ml: isReply ? level * 4 : 0,
@@ -410,7 +438,21 @@ const DocumentComments: React.FC<DocumentCommentsProps> = observer(({
         flex: 1, 
         overflow: 'auto', 
         p: 2,
-        bgcolor: 'grey.50'
+        bgcolor: 'grey.50',
+        '&::-webkit-scrollbar': {
+          width: '8px',
+        },
+        '&::-webkit-scrollbar-track': {
+          background: '#f1f1f1',
+          borderRadius: '4px',
+        },
+        '&::-webkit-scrollbar-thumb': {
+          background: '#c1c1c1',
+          borderRadius: '4px',
+          '&:hover': {
+            background: '#a8a8a8',
+          },
+        },
       }}>
         {error && (
           <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>

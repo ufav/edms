@@ -120,40 +120,55 @@ async def get_documents(
     current_user: User = Depends(get_current_active_user)
 ):
     """Получение списка документов"""
-    query = db.query(Document).filter(Document.is_deleted == 0)
+    from sqlalchemy import func, and_
+    
+    # Создаем подзапрос для получения последней ревизии каждого документа
+    latest_revision_subquery = db.query(
+        DocumentRevision.document_id,
+        func.max(DocumentRevision.created_at).label('max_created_at')
+    ).group_by(DocumentRevision.document_id).subquery()
+    
+    # Основной запрос с JOIN'ами для получения всех данных за один раз
+    query = db.query(
+        Document,
+        DocumentRevision,
+        Discipline,
+        DocumentType,
+        ProjectDisciplineDocumentType
+    ).outerjoin(
+        latest_revision_subquery,
+        Document.id == latest_revision_subquery.c.document_id
+    ).outerjoin(
+        DocumentRevision,
+        and_(
+            DocumentRevision.document_id == Document.id,
+            DocumentRevision.created_at == latest_revision_subquery.c.max_created_at
+        )
+    ).outerjoin(
+        Discipline,
+        Discipline.id == Document.discipline_id
+    ).outerjoin(
+        DocumentType,
+        DocumentType.id == Document.document_type_id
+    ).outerjoin(
+        ProjectDisciplineDocumentType,
+        and_(
+            ProjectDisciplineDocumentType.project_id == Document.project_id,
+            ProjectDisciplineDocumentType.discipline_id == Document.discipline_id,
+            ProjectDisciplineDocumentType.document_type_id == Document.document_type_id
+        )
+    ).filter(Document.is_deleted == 0)
     
     if project_id:
         query = query.filter(Document.project_id == project_id)
     
-    documents = query.order_by(Document.updated_at.desc()).offset(skip).limit(limit).all()
+    # Выполняем запрос с пагинацией
+    results = query.order_by(Document.updated_at.desc()).offset(skip).limit(limit).all()
     
+    # Формируем результат
     result = []
-    for doc in documents:
-        # Получаем последнюю ревизию документа
-        latest_revision = db.query(DocumentRevision).filter(
-            DocumentRevision.document_id == doc.id
-        ).order_by(DocumentRevision.created_at.desc()).first()
-        
-        # Получаем данные дисциплины
-        discipline = None
-        if doc.discipline_id:
-            discipline = db.query(Discipline).filter(Discipline.id == doc.discipline_id).first()
-        
-        # Получаем данные типа документа
-        document_type = None
-        if doc.document_type_id:
-            document_type = db.query(DocumentType).filter(DocumentType.id == doc.document_type_id).first()
-        
-        # Получаем DRS из project_discipline_document_types
-        drs = None
-        if doc.project_id and doc.discipline_id and doc.document_type_id:
-            project_discipline_doc_type = db.query(ProjectDisciplineDocumentType).filter(
-                ProjectDisciplineDocumentType.project_id == doc.project_id,
-                ProjectDisciplineDocumentType.discipline_id == doc.discipline_id,
-                ProjectDisciplineDocumentType.document_type_id == doc.document_type_id
-            ).first()
-            if project_discipline_doc_type:
-                drs = project_discipline_doc_type.drs
+    for row in results:
+        doc, latest_revision, discipline, document_type, project_discipline_doc_type = row
         
         result.append({
             "id": doc.id,
@@ -169,7 +184,7 @@ async def get_documents(
             "revision_description_id": latest_revision.revision_description_id if latest_revision else None,
             "revision_status_id": latest_revision.revision_status_id if latest_revision else None,
             "is_deleted": doc.is_deleted if doc.is_deleted is not None else 0,
-            "drs": drs,  # DRS из project_discipline_document_types
+            "drs": project_discipline_doc_type.drs if project_discipline_doc_type else None,
             "project_id": doc.project_id,
             "language_id": doc.language_id,
             "discipline_id": doc.discipline_id,
