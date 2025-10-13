@@ -24,36 +24,26 @@ def add_test_companies():
             {
                 "name": "ООО СтройИнвест",
                 "name_native": "ООО СтройИнвест",
-                "code": "SI001",
-                "role": "contractor",
                 "is_active": True
             },
             {
                 "name": "ЗАО ПроектСервис",
                 "name_native": "ЗАО ПроектСервис", 
-                "code": "PS002",
-                "role": "consultant",
                 "is_active": True
             },
             {
                 "name": "ИП Иванов И.И.",
                 "name_native": "ИП Иванов И.И.",
-                "code": "II003",
-                "role": "supplier",
                 "is_active": True
             },
             {
                 "name": "ООО Заказчик",
                 "name_native": "ООО Заказчик",
-                "code": "ZC004", 
-                "role": "client",
                 "is_active": True
             },
             {
                 "name": "АО СтройМатериалы",
                 "name_native": "АО СтройМатериалы",
-                "code": "SM005",
-                "role": "supplier", 
                 "is_active": True
             }
         ]

@@ -1,5 +1,6 @@
 import { makeAutoObservable, runInAction } from 'mobx';
 import { transmittalsApi } from '../api/client';
+import { transmittalStore } from './TransmittalStore';
 
 export interface SelectedRevision {
   id: number;
@@ -82,6 +83,9 @@ class TransmittalCartStore {
 
       // Создаем трансмиттал через API
       await transmittalsApi.create(transmittalCreateData);
+
+      // Обновляем данные в transmittalStore после успешного создания
+      await transmittalStore.loadTransmittals(projectId, true); // forceReload = true
 
       // Очищаем корзину после успешного создания
       this.clearAll();

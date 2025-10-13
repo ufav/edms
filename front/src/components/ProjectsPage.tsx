@@ -5,6 +5,7 @@ import {
   Button,
   useTheme,
   useMediaQuery,
+  TablePagination,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -94,7 +95,17 @@ const ProjectsPage: React.FC = observer(() => {
   };
 
   return (
-    <Box sx={{ width: '100%', p: 3 }}>
+    <Box sx={{ 
+      width: '100%', 
+      minWidth: 0, 
+      pt: 3, // padding только сверху
+      px: 3, // padding только по бокам
+      pb: 0, // убираем padding снизу
+      height: !isMobile ? 'calc(100vh - 117px)' : '100vh', // Всегда вычитаем высоту пагинации для десктопа
+      display: 'flex', 
+      flexDirection: 'column',
+      overflow: 'hidden', // Убираем прокрутку страницы
+    }}>
       <Box sx={{ 
         display: 'flex', 
         justifyContent: 'space-between', 
@@ -125,37 +136,77 @@ const ProjectsPage: React.FC = observer(() => {
         onStatusChange={setFilterStatus}
       />
 
-      {isMobile ? (
-        <ProjectCards
-          projects={paginatedProjects}
-          totalCount={totalCount}
-          isLoading={projectStore.isLoading}
-          error={projectStore.error}
-          isViewer={isViewer}
-          canEditProject={canEditProject}
-          canDeleteProject={canDeleteProject}
-          onEdit={handleEdit}
-          onDelete={handleDelete}
-          formatDate={formatDate}
-        />
-      ) : (
-        <ProjectTable
-          projects={paginatedProjects}
-          totalCount={totalCount}
-          isLoading={projectStore.isLoading}
-          error={projectStore.error}
-          isViewer={isViewer}
-          canEditProject={canEditProject}
-          canDeleteProject={canDeleteProject}
-          onEdit={handleEdit}
-          onDelete={handleDelete}
-          formatDate={formatDate}
-          page={page}
-          rowsPerPage={rowsPerPage}
-          rowsPerPageOptions={rowsPerPageOptions}
-          onPageChange={handleChangePage}
-          onRowsPerPageChange={handleChangeRowsPerPage}
-        />
+      <Box sx={{ flex: 1, minHeight: 0 }}>
+        {isMobile ? (
+          <ProjectCards
+            projects={paginatedProjects}
+            totalCount={totalCount}
+            isLoading={projectStore.isLoading}
+            error={projectStore.error}
+            isViewer={isViewer}
+            canEditProject={canEditProject}
+            canDeleteProject={canDeleteProject}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+            formatDate={formatDate}
+          />
+        ) : (
+          <ProjectTable
+            projects={paginatedProjects}
+            totalCount={totalCount}
+            isLoading={projectStore.isLoading}
+            error={projectStore.error}
+            isViewer={isViewer}
+            canEditProject={canEditProject}
+            canDeleteProject={canDeleteProject}
+            onEdit={handleEdit}
+            onDelete={handleDelete}
+            formatDate={formatDate}
+          />
+        )}
+      </Box>
+
+      {/* Фиксированная пагинация внизу экрана */}
+      {!isMobile && !projectStore.isLoading && (
+        <Box sx={{
+          position: 'fixed',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          borderTop: '1px solid #e0e0e0',
+          boxShadow: '0 -2px 8px rgba(0,0,0,0.1)',
+          zIndex: 1000,
+          paddingLeft: '240px', // Отступ для бокового меню
+          '@media (max-width: 900px)': {
+            paddingLeft: 0, // На мобильных устройствах без отступа
+          },
+          backgroundColor: 'white',
+        }}>
+          <TablePagination
+            rowsPerPageOptions={rowsPerPageOptions}
+            component="div"
+            count={totalCount}
+            rowsPerPage={rowsPerPage}
+            page={page}
+            onPageChange={handleChangePage}
+            onRowsPerPageChange={handleChangeRowsPerPage}
+            labelRowsPerPage={t('common.rows_per_page')}
+            labelDisplayedRows={({ from, to, count }) => 
+              `${from}-${to} ${t('common.of')} ${count !== -1 ? count : `${t('common.more_than')} ${to}`}`
+            }
+            sx={{
+              '& .MuiTablePagination-toolbar': {
+                paddingLeft: 2,
+                paddingRight: 2,
+                flexWrap: 'wrap',
+                justifyContent: 'flex-end', // Выравниваем пагинацию справа
+              },
+              '& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows': {
+                fontSize: '0.875rem',
+              },
+            }}
+          />
+        </Box>
       )}
 
 

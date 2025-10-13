@@ -7,8 +7,9 @@ export interface Transmittal {
   title: string;
   description: string;
   project_id: number;
-  sender_id: number;
+  sender_id: number | null;
   recipient_id: number;
+  created_by: number;
   status: string;
   sent_date: string | null;
   received_date: string | null;
@@ -27,9 +28,9 @@ class TransmittalStore {
   }
 
   // Загрузка трансмитталов из API
-  async loadTransmittals(projectId?: number) {
-    // Если данные уже загружены для этого проекта, не загружаем повторно
-    if (projectId && this.loadedProjectId === projectId && this.transmittals.length > 0) {
+  async loadTransmittals(projectId?: number, forceReload = false) {
+    // Если данные уже загружены для этого проекта, не загружаем повторно (если не принудительная перезагрузка)
+    if (!forceReload && projectId && this.loadedProjectId === projectId && this.transmittals.length > 0) {
       return;
     }
 
@@ -40,6 +41,7 @@ class TransmittalStore {
     
     try {
       const apiTransmittals = await transmittalsApi.getAll(projectId);
+      
       runInAction(() => {
         this.transmittals = apiTransmittals.map(apiTransmittal => ({
           id: apiTransmittal.id,
@@ -49,6 +51,7 @@ class TransmittalStore {
           project_id: apiTransmittal.project_id,
           sender_id: apiTransmittal.sender_id,
           recipient_id: apiTransmittal.recipient_id,
+          created_by: apiTransmittal.created_by,
           status: apiTransmittal.status,
           sent_date: apiTransmittal.sent_date,
           received_date: apiTransmittal.received_date,
@@ -80,7 +83,12 @@ class TransmittalStore {
   }
 
   // Получение статуса трансмиттала
-  getTransmittalStatusLabel(status: string): string {
+  getTransmittalStatusLabel(status: string, t?: (key: string) => string): string {
+    if (t) {
+      return t(`transmittals.status.${status}`) || status;
+    }
+    
+    // Fallback для случаев, когда t не передана
     const statusMap: { [key: string]: string } = {
       'draft': 'Черновик',
       'sent': 'Отправлен',
@@ -102,6 +110,8 @@ class TransmittalStore {
     };
     return colorMap[status] || 'default';
   }
+
+
 
   // Форматирование даты
   formatDate(dateString: string | null): string {

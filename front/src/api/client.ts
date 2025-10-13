@@ -323,8 +323,9 @@ export interface Transmittal {
   title: string;
   description: string;
   project_id: number;
-  sender_id: number;
+  sender_id: number | null;
   recipient_id: number;
+  created_by: number;
   status: string;
   sent_date: string | null;
   received_date: string | null;

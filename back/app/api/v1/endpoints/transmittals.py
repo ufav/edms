@@ -43,7 +43,9 @@ async def get_transmittals(
     current_user: User = Depends(get_current_active_user)
 ):
     """Получение списка трансмитталов"""
-    query = db.query(Transmittal)
+    from sqlalchemy.orm import joinedload
+    
+    query = db.query(Transmittal).options(joinedload(Transmittal.status))
     
     if project_id:
         query = query.filter(Transmittal.project_id == project_id)
@@ -57,9 +59,15 @@ async def get_transmittals(
             "title": transmittal.title,
             "description": transmittal.description,
             "project_id": transmittal.project_id,
-            "status": transmittal.status,
+            "sender_id": transmittal.sender_id,
+            "recipient_id": transmittal.recipient_id,
+            "created_by": transmittal.created_by,
+            "status": transmittal.status.name if transmittal.status else "draft",
+            "status_id": transmittal.status_id,
             "sent_date": transmittal.sent_date,
-            "created_at": transmittal.created_at
+            "received_date": transmittal.received_date,
+            "created_at": transmittal.created_at,
+            "updated_at": transmittal.updated_at
         }
         for transmittal in transmittals
     ]
@@ -78,9 +86,10 @@ async def create_transmittal(
         title=transmittal_data.title,
         description=None,  # Убираем description
         project_id=transmittal_data.project_id,
-        sender_id=current_user.id,
+        sender_id=None,  # sender_id заполняется только при отправке
         recipient_id=transmittal_data.recipient_id,  # Используем переданный recipient_id
-        status="draft"  # Статус draft по умолчанию
+        created_by=current_user.id,  # Кто создал трансмиттал
+        status_id=1  # Статус draft (ID=1) по умолчанию
     )
     
     db.add(db_transmittal)
@@ -121,7 +130,9 @@ async def get_transmittal(
     current_user: User = Depends(get_current_active_user)
 ):
     """Получение трансмиттала по ID с ревизиями"""
-    transmittal = db.query(Transmittal).filter(Transmittal.id == transmittal_id).first()
+    from sqlalchemy.orm import joinedload
+    
+    transmittal = db.query(Transmittal).options(joinedload(Transmittal.status)).filter(Transmittal.id == transmittal_id).first()
     if not transmittal:
         raise HTTPException(status_code=404, detail="Трансмиттал не найден")
     
@@ -162,7 +173,8 @@ async def get_transmittal(
         "project_id": transmittal.project_id,
         "sender_id": transmittal.sender_id,
         "recipient_id": transmittal.recipient_id,
-        "status": transmittal.status,
+        "status": transmittal.status.name if transmittal.status else "draft",
+        "status_id": transmittal.status_id,
         "sent_date": transmittal.sent_date,
         "received_date": transmittal.received_date,
         "created_at": transmittal.created_at,
@@ -352,3 +364,68 @@ async def get_active_revisions(
         })
     
     return revisions_data
+
+
+@router.put("/{transmittal_id}/send")
+async def send_transmittal(
+    transmittal_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Отправка исходящего трансмиттала"""
+    transmittal = db.query(Transmittal).filter(Transmittal.id == transmittal_id).first()
+    if not transmittal:
+        raise HTTPException(status_code=404, detail="Трансмиттал не найден")
+    
+    # Проверяем права доступа
+    if transmittal.created_by != current_user.id and not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Нет прав для отправки трансмиттала")
+    
+    # Обновляем трансмиттал
+    from datetime import datetime
+    from app.models.references import TransmittalStatus
+    
+    # Получаем статус "sent"
+    sent_status = db.query(TransmittalStatus).filter(TransmittalStatus.name == "sent").first()
+    if not sent_status:
+        raise HTTPException(status_code=500, detail="Статус 'sent' не найден")
+    
+    transmittal.status_id = sent_status.id
+    transmittal.sent_date = datetime.utcnow()
+    transmittal.sender_id = current_user.id  # Кто отправил
+    # received_date остается пустой для исходящих трансмитталов
+    
+    db.commit()
+    db.refresh(transmittal)
+    
+    return {"message": "Трансмиттал успешно отправлен", "transmittal_id": transmittal.id}
+
+
+@router.put("/{transmittal_id}/receive")
+async def receive_transmittal(
+    transmittal_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Получение входящего трансмиттала"""
+    transmittal = db.query(Transmittal).filter(Transmittal.id == transmittal_id).first()
+    if not transmittal:
+        raise HTTPException(status_code=404, detail="Трансмиттал не найден")
+    
+    # Обновляем трансмиттал
+    from datetime import datetime
+    from app.models.references import TransmittalStatus
+    
+    # Получаем статус "received"
+    received_status = db.query(TransmittalStatus).filter(TransmittalStatus.name == "received").first()
+    if not received_status:
+        raise HTTPException(status_code=500, detail="Статус 'received' не найден")
+    
+    transmittal.status_id = received_status.id
+    transmittal.received_date = datetime.utcnow()
+    # sent_date остается пустой для входящих трансмитталов
+    
+    db.commit()
+    db.refresh(transmittal)
+    
+    return {"message": "Трансмиттал успешно получен", "transmittal_id": transmittal.id}

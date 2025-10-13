@@ -31,6 +31,9 @@ import {
   StepContent,
   Divider,
   Tooltip,
+  useTheme,
+  useMediaQuery,
+  TablePagination,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -47,6 +50,8 @@ import { useTranslation } from 'react-i18next';
 
 const WorkflowTemplatesPage = observer(() => {
   const { t } = useTranslation();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [templates, setTemplates] = useState<WorkflowTemplate[]>([]);
   const [loading, setLoading] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -327,95 +332,336 @@ const WorkflowTemplatesPage = observer(() => {
   ];
 
   return (
-    <Box sx={{ p: 3 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4">Шаблоны согласования</Typography>
+    <Box sx={{ 
+      width: '100%', 
+      minWidth: 0, 
+      pt: 3, // padding только сверху
+      px: 3, // padding только по бокам
+      pb: 0, // убираем padding снизу
+      height: !isMobile ? 'calc(100vh - 117px)' : '100vh', // Всегда вычитаем высоту пагинации для десктопа
+      display: 'flex', 
+      flexDirection: 'column',
+      overflow: 'hidden', // Убираем прокрутку страницы
+    }}>
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: isMobile ? 'flex-start' : 'center', 
+        mb: 3,
+        flexDirection: isMobile ? 'column' : 'row',
+        gap: isMobile ? 2 : 0
+      }}>
+        <Typography variant={isMobile ? "h5" : "h4"}>Шаблоны согласования</Typography>
         <Button
           startIcon={<AddIcon />}
           onClick={handleCreateTemplate}
           variant="contained"
+          sx={{ width: isMobile ? '100%' : 'auto' }}
         >
           Создать шаблон
         </Button>
       </Box>
 
-      {loading ? (
-        <Typography>Загрузка...</Typography>
-      ) : (
-        <TableContainer component={Paper}>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Название</TableCell>
-                <TableCell>Описание</TableCell>
-                <TableCell>Дисциплина</TableCell>
-                <TableCell>Тип документа</TableCell>
-                <TableCell>Шагов</TableCell>
-                <TableCell>Статус</TableCell>
-                <TableCell>Действия</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {templates.map((template) => (
-                <TableRow key={template.id}>
-                  <TableCell>
-                    <Typography variant="body2" fontWeight="bold">
-                      {template.name}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2" color="text.secondary">
-                      {template.description || '-'}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2">
-                      {template.discipline_id ? `ID: ${template.discipline_id}` : 'Любая'}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Typography variant="body2">
-                      {template.document_type_id ? `ID: ${template.document_type_id}` : 'Любой'}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>
-                    <Chip 
-                      label={`${template.steps?.length || 0} шагов`}
-                      color="primary"
-                      size="small"
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Chip 
-                      label={template.is_active ? 'Активен' : 'Неактивен'}
-                      color={template.is_active ? 'success' : 'default'}
-                      size="small"
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <Box sx={{ display: 'flex', gap: 1 }}>
-                      <Tooltip title="Просмотр">
-                        <IconButton size="small">
-                          <ViewIcon />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Редактировать">
-                        <IconButton size="small" onClick={() => handleEditTemplate(template)}>
-                          <EditIcon />
-                        </IconButton>
-                      </Tooltip>
-                      <Tooltip title="Удалить">
-                        <IconButton size="small" color="error">
-                          <DeleteIcon />
-                        </IconButton>
-                      </Tooltip>
-                    </Box>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
+      {/* Контейнер таблицы */}
+      <Box sx={{ flex: 1, minHeight: 0 }}>
+        {loading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+            <Typography>Загрузка...</Typography>
+          </Box>
+        ) : templates.length === 0 ? (
+          <TableContainer component={Paper} sx={{ 
+            boxShadow: 2, 
+            width: '100%', 
+            minWidth: '100%', 
+            flex: 1,
+            minHeight: 0,
+            height: '100%',
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center',
+            borderRadius: 0,
+          }}>
+            <Box sx={{ textAlign: 'center', py: 4 }}>
+              <Typography variant="h6" color="text.secondary">
+                {t('workflows.no_templates')}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {t('workflows.no_templates_hint')}
+              </Typography>
+            </Box>
+          </TableContainer>
+        ) : (
+          <Box sx={{ 
+            display: 'flex', 
+            flexDirection: 'column', 
+            height: '100%',
+            minHeight: 0,
+            marginBottom: 0,
+            paddingBottom: 0
+          }}>
+            {/* Заголовок таблицы - зафиксирован */}
+            <Box sx={{ 
+              borderBottom: '1px solid #f0f0f0',
+              backgroundColor: '#f5f5f5',
+              boxShadow: 2,
+            }}>
+              <Table sx={{ tableLayout: 'fixed', width: '100%', minWidth: '100%' }}>
+                <TableHead>
+                  <TableRow sx={{ backgroundColor: '#f5f5f5', '& .MuiTableCell-root': { padding: '8px 16px' } }}>
+                    <TableCell sx={{ 
+                      fontWeight: 'bold',
+                      fontSize: '0.875rem',
+                      whiteSpace: 'nowrap',
+                      width: '20%',
+                      minWidth: '200px'
+                    }}>Название</TableCell>
+                    <TableCell sx={{ 
+                      fontWeight: 'bold',
+                      fontSize: '0.875rem',
+                      whiteSpace: 'nowrap',
+                      width: '20%',
+                      minWidth: '200px'
+                    }}>Описание</TableCell>
+                    <TableCell sx={{ 
+                      fontWeight: 'bold',
+                      fontSize: '0.875rem',
+                      whiteSpace: 'nowrap',
+                      width: '12%',
+                      minWidth: '120px'
+                    }}>Дисциплина</TableCell>
+                    <TableCell sx={{ 
+                      fontWeight: 'bold',
+                      fontSize: '0.875rem',
+                      whiteSpace: 'nowrap',
+                      width: '12%',
+                      minWidth: '120px'
+                    }}>Тип документа</TableCell>
+                    <TableCell sx={{ 
+                      fontWeight: 'bold',
+                      fontSize: '0.875rem',
+                      whiteSpace: 'nowrap',
+                      width: '10%',
+                      minWidth: '100px'
+                    }}>Шагов</TableCell>
+                    <TableCell sx={{ 
+                      fontWeight: 'bold',
+                      fontSize: '0.875rem',
+                      whiteSpace: 'nowrap',
+                      width: '10%',
+                      minWidth: '100px'
+                    }}>Статус</TableCell>
+                    <TableCell sx={{ 
+                      fontWeight: 'bold',
+                      fontSize: '0.875rem',
+                      whiteSpace: 'nowrap',
+                      width: '16%',
+                      minWidth: '160px'
+                    }}>Действия</TableCell>
+                  </TableRow>
+                </TableHead>
+              </Table>
+            </Box>
+            
+            {/* Тело таблицы - скроллируемое */}
+            <TableContainer component={Paper} sx={{ 
+              flex: 1,
+              minHeight: 0,
+              maxHeight: 'calc(48px + 13 * 48px)', // Ограничиваем высоту 13 строками (заголовок + 13 строк)
+              overflow: 'auto',
+              borderRadius: 0,
+              '&::-webkit-scrollbar': {
+                width: '8px',
+              },
+              '&::-webkit-scrollbar-track': {
+                background: '#f1f1f1',
+                borderRadius: '4px',
+              },
+              '&::-webkit-scrollbar-thumb': {
+                background: '#c1c1c1',
+                borderRadius: '4px',
+                '&:hover': {
+                  background: '#a8a8a8',
+                },
+              },
+            }}>
+              <Table sx={{ tableLayout: 'fixed', width: '100%', minWidth: '100%' }}>
+                <TableBody>
+                  {templates.map((template) => (
+                    <TableRow 
+                      key={template.id} 
+                      sx={{ 
+                        '& .MuiTableCell-root': { padding: '8px 16px' },
+                        '&:hover': {
+                          backgroundColor: '#f5f5f5',
+                        },
+                      }}
+                    >
+                      <TableCell sx={{ 
+                        fontSize: '0.875rem',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        width: '20%',
+                        minWidth: '200px'
+                      }}>
+                        <Typography variant="body2" sx={{ 
+                          fontWeight: 'bold',
+                          fontSize: '0.875rem',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {template.name}
+                        </Typography>
+                      </TableCell>
+                      <TableCell sx={{ 
+                        fontSize: '0.875rem',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        width: '20%',
+                        minWidth: '200px'
+                      }}>
+                        <Typography variant="body2" sx={{ 
+                          fontSize: '0.875rem',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {template.description || '-'}
+                        </Typography>
+                      </TableCell>
+                      <TableCell sx={{ 
+                        fontSize: '0.875rem',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        width: '12%',
+                        minWidth: '120px'
+                      }}>
+                        <Typography variant="body2" sx={{ 
+                          fontSize: '0.875rem',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {template.discipline_id ? `ID: ${template.discipline_id}` : 'Любая'}
+                        </Typography>
+                      </TableCell>
+                      <TableCell sx={{ 
+                        fontSize: '0.875rem',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        width: '12%',
+                        minWidth: '120px'
+                      }}>
+                        <Typography variant="body2" sx={{ 
+                          fontSize: '0.875rem',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {template.document_type_id ? `ID: ${template.document_type_id}` : 'Любой'}
+                        </Typography>
+                      </TableCell>
+                      <TableCell sx={{ 
+                        fontSize: '0.875rem',
+                        width: '10%',
+                        minWidth: '100px'
+                      }}>
+                        <Chip 
+                          label={`${template.steps?.length || 0} шагов`}
+                          color="primary"
+                          size="small"
+                          sx={{ fontSize: '0.75rem', height: '24px' }}
+                        />
+                      </TableCell>
+                      <TableCell sx={{ 
+                        fontSize: '0.875rem',
+                        width: '10%',
+                        minWidth: '100px'
+                      }}>
+                        <Chip 
+                          label={template.is_active ? 'Активен' : 'Неактивен'}
+                          color={template.is_active ? 'success' : 'default'}
+                          size="small"
+                          sx={{ fontSize: '0.75rem', height: '24px' }}
+                        />
+                      </TableCell>
+                      <TableCell sx={{ 
+                        fontSize: '0.875rem',
+                        width: '16%',
+                        minWidth: '160px'
+                      }}>
+                        <Box sx={{ display: 'flex', gap: 1 }}>
+                          <Tooltip title="Просмотр">
+                            <IconButton size="small" sx={{ padding: '4px' }}>
+                              <ViewIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Редактировать">
+                            <IconButton size="small" onClick={() => handleEditTemplate(template)} sx={{ padding: '4px' }}>
+                              <EditIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Удалить">
+                            <IconButton size="small" color="error" sx={{ padding: '4px' }}>
+                              <DeleteIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        </Box>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Box>
+        )}
+      </Box>
+
+      {/* Фиксированная пагинация внизу экрана */}
+      {!isMobile && !loading && (
+        <Box sx={{
+          position: 'fixed',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          borderTop: '1px solid #e0e0e0',
+          boxShadow: '0 -2px 8px rgba(0,0,0,0.1)',
+          zIndex: 1000,
+          paddingLeft: '240px', // Отступ для бокового меню
+          '@media (max-width: 900px)': {
+            paddingLeft: 0, // На мобильных устройствах без отступа
+          },
+          backgroundColor: 'white',
+        }}>
+          <TablePagination
+            rowsPerPageOptions={[10, 25, 50]}
+            component="div"
+            count={templates.length}
+            rowsPerPage={25}
+            page={0}
+            onPageChange={() => {}}
+            onRowsPerPageChange={() => {}}
+            labelRowsPerPage="Строк на странице:"
+            labelDisplayedRows={({ from, to, count }) => 
+              `${from}-${to} из ${count !== -1 ? count : `больше чем ${to}`}`
+            }
+            sx={{
+              '& .MuiTablePagination-toolbar': {
+                paddingLeft: 2,
+                paddingRight: 2,
+                flexWrap: 'wrap',
+                justifyContent: 'flex-end', // Выравниваем пагинацию справа
+              },
+              '& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows': {
+                fontSize: '0.875rem',
+              },
+            }}
+          />
+        </Box>
       )}
 
       {/* Диалог создания/редактирования шаблона */}

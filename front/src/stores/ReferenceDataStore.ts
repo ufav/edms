@@ -53,6 +53,7 @@ class ReferenceDataStore {
         this.isCompanyRolesLoaded = true;
         this.isUsersLoaded = true;
       });
+      
     } catch (error) {
       console.error('Error loading reference data:', error);
       runInAction(() => {

@@ -17,7 +17,8 @@ class Transmittal(Base):
     project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"))
     sender_id = Column(Integer, ForeignKey("users.id"))
     recipient_id = Column(Integer, ForeignKey("companies.id"))
-    status = Column(String(20), default="draft")
+    created_by = Column(Integer, ForeignKey("users.id"))
+    status_id = Column(Integer, ForeignKey("transmittal_statuses.id"), default=1)  # 1 = draft
     sent_date = Column(DateTime(timezone=True))
     received_date = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
@@ -27,6 +28,7 @@ class Transmittal(Base):
     # project = relationship("Project", back_populates="transmittals")
     # sender = relationship("User", foreign_keys=[sender_id])
     # recipient = relationship("User", foreign_keys=[recipient_id])
+    status = relationship("TransmittalStatus")
     revisions = relationship("TransmittalRevision", back_populates="transmittal")
     
     def __repr__(self):

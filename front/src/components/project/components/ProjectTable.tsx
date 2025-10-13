@@ -14,7 +14,6 @@ import {
   Typography,
   CircularProgress,
   Alert,
-  TablePagination,
 } from '@mui/material';
 import {
   Edit as EditIcon,
@@ -34,13 +33,6 @@ interface ProjectTableProps {
   onEdit: (projectId: number) => void;
   onDelete: (projectId: number) => void;
   formatDate: (dateString: string) => string;
-  
-  // Пагинация
-  page: number;
-  rowsPerPage: number;
-  rowsPerPageOptions: number[];
-  onPageChange: (event: unknown, newPage: number) => void;
-  onRowsPerPageChange: (event: React.ChangeEvent<HTMLInputElement>) => void;
 }
 
 export const ProjectTable: React.FC<ProjectTableProps> = ({
@@ -54,11 +46,6 @@ export const ProjectTable: React.FC<ProjectTableProps> = ({
   onEdit,
   onDelete,
   formatDate,
-  page,
-  rowsPerPage,
-  rowsPerPageOptions,
-  onPageChange,
-  onRowsPerPageChange,
 }) => {
   const { t } = useTranslation();
 
@@ -76,271 +63,305 @@ export const ProjectTable: React.FC<ProjectTableProps> = ({
 
   if (totalCount === 0) {
     return (
-      <TableContainer component={Paper} sx={{ 
-        boxShadow: 2, 
-        width: '100%', 
-        minWidth: '100%', 
-        minHeight: '400px', 
+      <Box sx={{ 
         display: 'flex', 
-        alignItems: 'center', 
-        justifyContent: 'center'
+        flexDirection: 'column', 
+        height: '100%',
+        minHeight: 0,
+        marginBottom: 0,
+        paddingBottom: 0
       }}>
-        <Box sx={{ textAlign: 'center', py: 4 }}>
-          <Typography variant="h6" color="text.secondary">
-            {t('projects.no_projects')}
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            {t('projects.no_projects_hint')}
-          </Typography>
-        </Box>
-      </TableContainer>
+        <TableContainer component={Paper} sx={{ 
+          boxShadow: 2, 
+          width: '100%', 
+          minWidth: '100%', 
+          flex: 1,
+          minHeight: 0,
+          display: 'flex', 
+          alignItems: 'center', 
+          justifyContent: 'center',
+          borderRadius: 0,
+        }}>
+          <Box sx={{ textAlign: 'center', py: 4 }}>
+            <Typography variant="h6" color="text.secondary">
+              {t('projects.no_projects')}
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {t('projects.no_projects_hint')}
+            </Typography>
+          </Box>
+        </TableContainer>
+      </Box>
     );
   }
 
   return (
-    <>
-      <TableContainer component={Paper} sx={{ boxShadow: 2, border: '1px solid #e0e0e0', width: '100%' }}>
-        <Table sx={{ tableLayout: 'fixed', width: '100%' }}>
-        <TableHead>
-          <TableRow sx={{ backgroundColor: '#f5f5f5' }}>
-            <TableCell sx={{ 
-              fontWeight: 'bold',
-              width: '20%',
-              maxWidth: '300px',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap'
-            }}>{t('projects.columns.name')}</TableCell>
-            <TableCell sx={{ 
-              fontWeight: 'bold',
-              width: '25%',
-              maxWidth: '300px',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap'
-            }}>{t('projects.columns.description')}</TableCell>
-            <TableCell sx={{ 
-              fontWeight: 'bold',
-              width: '12%',
-              maxWidth: '300px',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap'
-            }}>{t('projects.columns.code')}</TableCell>
-            <TableCell sx={{ 
-              fontWeight: 'bold',
-              width: '10%',
-              maxWidth: '300px',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap'
-            }}>{t('projects.columns.status')}</TableCell>
-            <TableCell sx={{ 
-              fontWeight: 'bold',
-              width: '10%',
-              maxWidth: '300px',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap'
-            }}>{t('projects.columns.start_date')}</TableCell>
-            <TableCell sx={{ 
-              fontWeight: 'bold',
-              width: '10%',
-              maxWidth: '300px',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap'
-            }}>{t('projects.columns.end_date')}</TableCell>
-            <TableCell sx={{ 
-              fontWeight: 'bold',
-              width: '11%',
-              maxWidth: '300px',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap'
-            }}>{t('projects.columns.owner')}</TableCell>
-            {!isViewer && (
+    <Box sx={{ 
+      display: 'flex', 
+      flexDirection: 'column', 
+      height: '100%',
+      minHeight: 0,
+      marginBottom: 0,
+      paddingBottom: 0
+    }}>
+      {/* Заголовок таблицы - зафиксирован */}
+      <Box sx={{ 
+        borderBottom: '1px solid #f0f0f0',
+        backgroundColor: '#f5f5f5',
+        boxShadow: 2,
+      }}>
+        <Table sx={{ tableLayout: 'fixed', width: '100%', minWidth: '100%' }}>
+          <TableHead>
+            <TableRow sx={{ backgroundColor: '#f5f5f5', '& .MuiTableCell-root': { padding: '8px 16px' } }}>
               <TableCell sx={{ 
                 fontWeight: 'bold',
+                fontSize: '0.875rem',
+                whiteSpace: 'nowrap',
+                width: '20%',
+                minWidth: '200px'
+              }}>{t('projects.columns.name')}</TableCell>
+              <TableCell sx={{ 
+                fontWeight: 'bold',
+                fontSize: '0.875rem',
+                whiteSpace: 'nowrap',
+                width: '25%',
+                minWidth: '250px'
+              }}>{t('projects.columns.description')}</TableCell>
+              <TableCell sx={{ 
+                fontWeight: 'bold',
+                fontSize: '0.875rem',
+                whiteSpace: 'nowrap',
                 width: '12%',
-                maxWidth: '300px',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap'
-              }}>{t('common.actions')}</TableCell>
-            )}
-          </TableRow>
-        </TableHead>
-        <TableBody>
-          {projects.map((project) => (
-            <TableRow key={project.id} hover>
+                minWidth: '120px'
+              }}>{t('projects.columns.code')}</TableCell>
               <TableCell sx={{ 
-                maxWidth: '300px',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap'
-              }}>
-                <Tooltip title={project.name} placement="top">
-                  <Typography variant="body2" sx={{ 
-                    fontWeight: 'bold',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    display: 'block'
-                  }}>
-                    {project.name}
-                  </Typography>
-                </Tooltip>
-              </TableCell>
+                fontWeight: 'bold',
+                fontSize: '0.875rem',
+                whiteSpace: 'nowrap',
+                width: '10%',
+                minWidth: '100px'
+              }}>{t('projects.columns.status')}</TableCell>
               <TableCell sx={{ 
-                maxWidth: '300px',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap'
-              }}>
-                <Tooltip title={project.description || '-'} placement="top">
-                  <Typography variant="body2" sx={{ 
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    display: 'block'
-                  }}>
-                    {project.description}
-                  </Typography>
-                </Tooltip>
-              </TableCell>
+                fontWeight: 'bold',
+                fontSize: '0.875rem',
+                whiteSpace: 'nowrap',
+                width: '10%',
+                minWidth: '100px'
+              }}>{t('projects.columns.start_date')}</TableCell>
               <TableCell sx={{ 
-                maxWidth: '300px',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap'
-              }}>
-                <Tooltip title={project.project_code || '-'} placement="top">
-                  <Typography variant="body2" sx={{ 
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    display: 'block'
-                  }}>
-                    {project.project_code || '-'}
-                  </Typography>
-                </Tooltip>
-              </TableCell>
+                fontWeight: 'bold',
+                fontSize: '0.875rem',
+                whiteSpace: 'nowrap',
+                width: '10%',
+                minWidth: '100px'
+              }}>{t('projects.columns.end_date')}</TableCell>
               <TableCell sx={{ 
-                maxWidth: '300px',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap'
-              }}>
-                <Chip
-                  label={project.status}
-                  color={project.status === 'active' ? 'success' : 'default'}
-                  size="small"
-                />
-              </TableCell>
-              <TableCell sx={{ 
-                maxWidth: '300px',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap'
-              }}>
-                <Typography variant="body2" sx={{ 
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                  display: 'block'
-                }}>
-                  {project.start_date ? formatDate(project.start_date) : '-'}
-                </Typography>
-              </TableCell>
-              <TableCell sx={{ 
-                maxWidth: '300px',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap'
-              }}>
-                <Typography variant="body2" sx={{ 
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                  display: 'block'
-                }}>
-                  {project.end_date ? formatDate(project.end_date) : '-'}
-                </Typography>
-              </TableCell>
-              <TableCell sx={{ 
-                maxWidth: '300px',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap'
-              }}>
-                <Tooltip title={project.owner_name || '-'} placement="top">
-                  <Typography variant="body2" sx={{ 
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    display: 'block'
-                  }}>
-                    {project.owner_name || '-'}
-                  </Typography>
-                </Tooltip>
-              </TableCell>
+                fontWeight: 'bold',
+                fontSize: '0.875rem',
+                whiteSpace: 'nowrap',
+                width: '11%',
+                minWidth: '110px'
+              }}>{t('projects.columns.owner')}</TableCell>
               {!isViewer && (
                 <TableCell sx={{ 
-                  maxWidth: '300px',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap'
-                }}>
-                  <Box sx={{ display: 'flex', gap: 1 }}>
-                    {canEditProject(project) && (
-                      <Tooltip title={t('common.edit')}>
-                        <IconButton size="small" onClick={() => onEdit(project.id)}>
-                          <EditIcon />
-                        </IconButton>
-                      </Tooltip>
-                    )}
-                    {canDeleteProject(project) && (
-                      <Tooltip title={t('common.delete')}>
-                        <IconButton size="small" onClick={() => onDelete(project.id)} sx={{ color: 'grey.600' }}>
-                          <DeleteIcon />
-                        </IconButton>
-                      </Tooltip>
-                    )}
-                  </Box>
-                </TableCell>
+                  fontWeight: 'bold',
+                  fontSize: '0.875rem',
+                  whiteSpace: 'nowrap',
+                  width: '12%',
+                  minWidth: '120px'
+                }}>{t('common.actions')}</TableCell>
               )}
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
-    </TableContainer>
-    
-    {!isLoading && totalCount > 0 && (
-      <TablePagination
-        rowsPerPageOptions={rowsPerPageOptions}
-        component="div"
-        count={totalCount}
-        rowsPerPage={rowsPerPage}
-        page={page}
-        onPageChange={onPageChange}
-        onRowsPerPageChange={onRowsPerPageChange}
-        labelRowsPerPage={t('common.rows_per_page')}
-        labelDisplayedRows={({ from, to, count }) => 
-          `${from}-${to} ${t('common.of')} ${count !== -1 ? count : `${t('common.more_than')} ${to}`}`
-        }
-        sx={{
-          '& .MuiTablePagination-toolbar': {
-            paddingLeft: 0,
-            paddingRight: 0,
-            flexWrap: 'wrap',
+          </TableHead>
+        </Table>
+      </Box>
+      
+      {/* Тело таблицы - скроллируемое */}
+      <TableContainer component={Paper} sx={{ 
+        flex: 1,
+        minHeight: 0,
+        maxHeight: 'calc(48px + 13 * 48px)', // Ограничиваем высоту 13 строками (заголовок + 13 строк)
+        overflow: 'auto',
+        borderRadius: 0,
+        '&::-webkit-scrollbar': {
+          width: '8px',
+        },
+        '&::-webkit-scrollbar-track': {
+          background: '#f1f1f1',
+          borderRadius: '4px',
+        },
+        '&::-webkit-scrollbar-thumb': {
+          background: '#c1c1c1',
+          borderRadius: '4px',
+          '&:hover': {
+            background: '#a8a8a8',
           },
-          '& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows': {
-            fontSize: '0.875rem',
-          },
-        }}
-      />
-    )}
-  </>
+        },
+      }}>
+        <Table sx={{ tableLayout: 'fixed', width: '100%', minWidth: '100%' }}>
+          <TableBody>
+            {projects.map((project) => (
+              <TableRow 
+                key={project.id} 
+                sx={{ 
+                  '& .MuiTableCell-root': { padding: '8px 16px' },
+                  '&:hover': {
+                    backgroundColor: '#f5f5f5',
+                  },
+                }}
+              >
+                <TableCell sx={{ 
+                  fontSize: '0.875rem',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  width: '20%',
+                  minWidth: '200px'
+                }}>
+                  <Tooltip title={project.name} arrow>
+                    <Typography variant="body2" sx={{ 
+                      fontWeight: 'bold',
+                      fontSize: '0.875rem',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap'
+                    }}>
+                      {project.name}
+                    </Typography>
+                  </Tooltip>
+                </TableCell>
+                <TableCell sx={{ 
+                  fontSize: '0.875rem',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  width: '25%',
+                  minWidth: '250px'
+                }}>
+                  <Tooltip title={project.description || '-'} arrow>
+                    <Typography variant="body2" sx={{ 
+                      fontSize: '0.875rem',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap'
+                    }}>
+                      {project.description || '-'}
+                    </Typography>
+                  </Tooltip>
+                </TableCell>
+                <TableCell sx={{ 
+                  fontSize: '0.875rem',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  width: '12%',
+                  minWidth: '120px'
+                }}>
+                  <Tooltip title={project.project_code || '-'} arrow>
+                    <Typography variant="body2" sx={{ 
+                      fontSize: '0.875rem',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap'
+                    }}>
+                      {project.project_code || '-'}
+                    </Typography>
+                  </Tooltip>
+                </TableCell>
+                <TableCell sx={{ 
+                  fontSize: '0.875rem',
+                  width: '10%',
+                  minWidth: '100px'
+                }}>
+                  <Chip
+                    label={project.status}
+                    color={project.status === 'active' ? 'success' : 'default'}
+                    size="small"
+                    sx={{ fontSize: '0.75rem', height: '24px' }}
+                  />
+                </TableCell>
+                <TableCell sx={{ 
+                  fontSize: '0.875rem',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  width: '10%',
+                  minWidth: '100px'
+                }}>
+                  <Typography variant="body2" sx={{ 
+                    fontSize: '0.875rem',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap'
+                  }}>
+                    {project.start_date ? formatDate(project.start_date) : '-'}
+                  </Typography>
+                </TableCell>
+                <TableCell sx={{ 
+                  fontSize: '0.875rem',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  width: '10%',
+                  minWidth: '100px'
+                }}>
+                  <Typography variant="body2" sx={{ 
+                    fontSize: '0.875rem',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap'
+                  }}>
+                    {project.end_date ? formatDate(project.end_date) : '-'}
+                  </Typography>
+                </TableCell>
+                <TableCell sx={{ 
+                  fontSize: '0.875rem',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  width: '11%',
+                  minWidth: '110px'
+                }}>
+                  <Tooltip title={project.owner_name || '-'} arrow>
+                    <Typography variant="body2" sx={{ 
+                      fontSize: '0.875rem',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap'
+                    }}>
+                      {project.owner_name || '-'}
+                    </Typography>
+                  </Tooltip>
+                </TableCell>
+                {!isViewer && (
+                  <TableCell sx={{ 
+                    fontSize: '0.875rem',
+                    width: '12%',
+                    minWidth: '120px'
+                  }}>
+                    <Box sx={{ display: 'flex', gap: 1 }}>
+                      {canEditProject(project) && (
+                        <Tooltip title={t('common.edit')}>
+                          <IconButton size="small" onClick={() => onEdit(project.id)} sx={{ padding: '4px' }}>
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                      {canDeleteProject(project) && (
+                        <Tooltip title={t('common.delete')}>
+                          <IconButton size="small" onClick={() => onDelete(project.id)} sx={{ padding: '4px' }}>
+                            <DeleteIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                    </Box>
+                  </TableCell>
+                )}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </Box>
   );
 };

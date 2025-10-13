@@ -32,7 +32,10 @@ import {
   Step,
   StepLabel,
   StepContent,
-  Autocomplete
+  Autocomplete,
+  useTheme,
+  useMediaQuery,
+  TablePagination,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -52,6 +55,8 @@ import { useWorkflowPresetsFilters } from '../components/workflow/hooks/useWorkf
 
 const WorkflowPresetsPage: React.FC = observer(() => {
   const { t } = useTranslation();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   
   // Фильтры
@@ -416,16 +421,33 @@ const WorkflowPresetsPage: React.FC = observer(() => {
   }, [successMessage]);
 
   return (
-    <Box sx={{ width: '100%', p: 3 }}>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4" component="h1">
+    <Box sx={{ 
+      width: '100%', 
+      minWidth: 0, 
+      pt: 3, // padding только сверху
+      px: 3, // padding только по бокам
+      pb: 0, // убираем padding снизу
+      height: !isMobile ? 'calc(100vh - 117px)' : '100vh', // Всегда вычитаем высоту пагинации для десктопа
+      display: 'flex', 
+      flexDirection: 'column',
+      overflow: 'hidden', // Убираем прокрутку страницы
+    }}>
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: isMobile ? 'flex-start' : 'center', 
+        mb: 3,
+        flexDirection: isMobile ? 'column' : 'row',
+        gap: isMobile ? 2 : 0
+      }}>
+        <Typography variant={isMobile ? "h5" : "h4"} component="h1">
           {t('workflows.title')}
         </Typography>
         <Button
           variant="contained"
           startIcon={<AddIcon />}
           onClick={handleCreateOpen}
-          sx={{ backgroundColor: '#1976d2' }}
+          sx={{ backgroundColor: '#1976d2', width: isMobile ? '100%' : 'auto' }}
         >
           {t('workflows.create_preset')}
         </Button>
@@ -439,88 +461,269 @@ const WorkflowPresetsPage: React.FC = observer(() => {
         onTypeChange={setFilterType}
       />
 
-      {/* Presets Table */}
-      {workflowStore.isLoading ? (
-        <WorkflowPresetsTableSkeleton />
-      ) : (
-        <TableContainer component={Paper} sx={{ boxShadow: 2, border: '1px solid #e0e0e0' }}>
-          <Table sx={{ tableLayout: 'fixed', width: '100%', minWidth: '100%' }}>
-            <TableHead>
-              <TableRow sx={{ backgroundColor: '#f5f5f5' }}>
-                <TableCell sx={{ width: '25%', fontWeight: 'bold' }}>{t('workflows.table.name')}</TableCell>
-                <TableCell sx={{ width: '35%', fontWeight: 'bold' }}>{t('workflows.table.description')}</TableCell>
-                <TableCell sx={{ width: '15%', fontWeight: 'bold' }}>{t('workflows.table.type')}</TableCell>
-                <TableCell sx={{ width: '15%', fontWeight: 'bold' }}>{t('workflows.table.created')}</TableCell>
-                <TableCell sx={{ width: '10%', fontWeight: 'bold' }}>{t('workflows.table.actions')}</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {filteredPresets.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={5} sx={{ textAlign: 'center', py: 4 }}>
-                  <Typography variant="body2" color="text.secondary">
-                    {t('workflows.table.no_presets')}
-                  </Typography>
-                </TableCell>
-              </TableRow>
-            ) : (
-              filteredPresets.map((preset) => (
-              <TableRow key={preset.id} hover>
-                <TableCell>
-                  <Typography variant="body2" sx={{ fontWeight: 'bold', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {preset.name}
-                  </Typography>
-                </TableCell>
-                <TableCell>
-                  <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {preset.description || '—'}
-                  </Typography>
-                </TableCell>
-                <TableCell>
-                  <Chip 
-                    label={preset.is_global ? t('workflows.types.global') : t('workflows.types.user')} 
-                    color={preset.is_global ? 'primary' : 'secondary'}
-                    size="small"
-                  />
-                </TableCell>
-                <TableCell>
-                  <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {new Date(preset.created_at).toLocaleDateString('ru-RU')}
-                  </Typography>
-                </TableCell>
-                <TableCell sx={{ minWidth: '120px' }}>
-                  <Box sx={{ display: 'flex', gap: 0.5 }}>
-                    <Tooltip title={t('workflows.actions.view')}>
-                      <IconButton size="small" onClick={() => handleViewOpen(preset)} sx={{ p: 0.5 }}>
-                        <ViewIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title={t('workflows.actions.edit')}>
-                      <IconButton size="small" onClick={() => handleEditOpen(preset)} sx={{ p: 0.5 }}>
-                        <EditIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                    <Tooltip title={t('workflows.actions.delete')}>
-                      <span>
-                        <IconButton 
-                          size="small" 
-                          color="error" 
-                          onClick={() => handleDeleteOpen(preset)}
-                          disabled={preset.is_global}
-                          sx={{ p: 0.5 }}
-                        >
-                          <DeleteIcon fontSize="small" />
-                        </IconButton>
-                      </span>
-                    </Tooltip>
-                  </Box>
-                </TableCell>
-              </TableRow>
-              ))
-            )}
-          </TableBody>
-        </Table>
-      </TableContainer>
+      {/* Контейнер таблицы */}
+      <Box sx={{ flex: 1, minHeight: 0 }}>
+        {workflowStore.isLoading ? (
+          <WorkflowPresetsTableSkeleton />
+        ) : filteredPresets.length === 0 ? (
+          <TableContainer component={Paper} sx={{ 
+            boxShadow: 2, 
+            width: '100%', 
+            minWidth: '100%', 
+            flex: 1,
+            minHeight: 0,
+            height: '100%',
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center',
+            borderRadius: 0,
+          }}>
+            <Box sx={{ textAlign: 'center', py: 4 }}>
+              <Typography variant="h6" color="text.secondary">
+                {t('workflows.table.no_presets')}
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                {t('workflows.no_presets_hint')}
+              </Typography>
+            </Box>
+          </TableContainer>
+        ) : (
+          <Box sx={{ 
+            display: 'flex', 
+            flexDirection: 'column', 
+            height: '100%',
+            minHeight: 0,
+            marginBottom: 0,
+            paddingBottom: 0
+          }}>
+            {/* Заголовок таблицы - зафиксирован */}
+            <Box sx={{ 
+              borderBottom: '1px solid #f0f0f0',
+              backgroundColor: '#f5f5f5',
+              boxShadow: 2,
+            }}>
+              <Table sx={{ tableLayout: 'fixed', width: '100%', minWidth: '100%' }}>
+                <TableHead>
+                  <TableRow sx={{ backgroundColor: '#f5f5f5', '& .MuiTableCell-root': { padding: '8px 16px' } }}>
+                    <TableCell sx={{ 
+                      fontWeight: 'bold',
+                      fontSize: '0.875rem',
+                      whiteSpace: 'nowrap',
+                      width: '25%',
+                      minWidth: '250px'
+                    }}>{t('workflows.table.name')}</TableCell>
+                    <TableCell sx={{ 
+                      fontWeight: 'bold',
+                      fontSize: '0.875rem',
+                      whiteSpace: 'nowrap',
+                      width: '35%',
+                      minWidth: '350px'
+                    }}>{t('workflows.table.description')}</TableCell>
+                    <TableCell sx={{ 
+                      fontWeight: 'bold',
+                      fontSize: '0.875rem',
+                      whiteSpace: 'nowrap',
+                      width: '15%',
+                      minWidth: '150px'
+                    }}>{t('workflows.table.type')}</TableCell>
+                    <TableCell sx={{ 
+                      fontWeight: 'bold',
+                      fontSize: '0.875rem',
+                      whiteSpace: 'nowrap',
+                      width: '15%',
+                      minWidth: '150px'
+                    }}>{t('workflows.table.created')}</TableCell>
+                    <TableCell sx={{ 
+                      fontWeight: 'bold',
+                      fontSize: '0.875rem',
+                      whiteSpace: 'nowrap',
+                      width: '10%',
+                      minWidth: '120px'
+                    }}>{t('workflows.table.actions')}</TableCell>
+                  </TableRow>
+                </TableHead>
+              </Table>
+            </Box>
+            
+            {/* Тело таблицы - скроллируемое */}
+            <TableContainer component={Paper} sx={{ 
+              flex: 1,
+              minHeight: 0,
+              maxHeight: 'calc(48px + 13 * 48px)', // Ограничиваем высоту 13 строками (заголовок + 13 строк)
+              overflow: 'auto',
+              borderRadius: 0,
+              '&::-webkit-scrollbar': {
+                width: '8px',
+              },
+              '&::-webkit-scrollbar-track': {
+                background: '#f1f1f1',
+                borderRadius: '4px',
+              },
+              '&::-webkit-scrollbar-thumb': {
+                background: '#c1c1c1',
+                borderRadius: '4px',
+                '&:hover': {
+                  background: '#a8a8a8',
+                },
+              },
+            }}>
+              <Table sx={{ tableLayout: 'fixed', width: '100%', minWidth: '100%' }}>
+                <TableBody>
+                  {filteredPresets.map((preset) => (
+                    <TableRow 
+                      key={preset.id} 
+                      sx={{ 
+                        '& .MuiTableCell-root': { padding: '8px 16px' },
+                        '&:hover': {
+                          backgroundColor: '#f5f5f5',
+                        },
+                      }}
+                    >
+                      <TableCell sx={{ 
+                        fontSize: '0.875rem',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        width: '25%',
+                        minWidth: '250px'
+                      }}>
+                        <Typography variant="body2" sx={{ 
+                          fontWeight: 'bold',
+                          fontSize: '0.875rem',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {preset.name}
+                        </Typography>
+                      </TableCell>
+                      <TableCell sx={{ 
+                        fontSize: '0.875rem',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        width: '35%',
+                        minWidth: '350px'
+                      }}>
+                        <Typography variant="body2" sx={{ 
+                          fontSize: '0.875rem',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {preset.description || '—'}
+                        </Typography>
+                      </TableCell>
+                      <TableCell sx={{ 
+                        fontSize: '0.875rem',
+                        width: '15%',
+                        minWidth: '150px'
+                      }}>
+                        <Chip 
+                          label={preset.is_global ? t('workflows.types.global') : t('workflows.types.user')} 
+                          color={preset.is_global ? 'primary' : 'secondary'}
+                          size="small"
+                          sx={{ fontSize: '0.75rem', height: '24px' }}
+                        />
+                      </TableCell>
+                      <TableCell sx={{ 
+                        fontSize: '0.875rem',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        width: '15%',
+                        minWidth: '150px'
+                      }}>
+                        <Typography variant="body2" sx={{ 
+                          fontSize: '0.875rem',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap'
+                        }}>
+                          {new Date(preset.created_at).toLocaleDateString('ru-RU')}
+                        </Typography>
+                      </TableCell>
+                      <TableCell sx={{ 
+                        fontSize: '0.875rem',
+                        width: '10%',
+                        minWidth: '120px'
+                      }}>
+                        <Box sx={{ display: 'flex', gap: 0.5 }}>
+                          <Tooltip title={t('workflows.actions.view')}>
+                            <IconButton size="small" onClick={() => handleViewOpen(preset)} sx={{ padding: '4px' }}>
+                              <ViewIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title={t('workflows.actions.edit')}>
+                            <IconButton size="small" onClick={() => handleEditOpen(preset)} sx={{ padding: '4px' }}>
+                              <EditIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title={t('workflows.actions.delete')}>
+                            <span>
+                              <IconButton 
+                                size="small" 
+                                color="error" 
+                                onClick={() => handleDeleteOpen(preset)}
+                                disabled={preset.is_global}
+                                sx={{ padding: '4px' }}
+                              >
+                                <DeleteIcon fontSize="small" />
+                              </IconButton>
+                            </span>
+                          </Tooltip>
+                        </Box>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Box>
+        )}
+      </Box>
+
+      {/* Фиксированная пагинация внизу экрана */}
+      {!isMobile && !workflowStore.isLoading && (
+        <Box sx={{
+          position: 'fixed',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          borderTop: '1px solid #e0e0e0',
+          boxShadow: '0 -2px 8px rgba(0,0,0,0.1)',
+          zIndex: 1000,
+          paddingLeft: '240px', // Отступ для бокового меню
+          '@media (max-width: 900px)': {
+            paddingLeft: 0, // На мобильных устройствах без отступа
+          },
+          backgroundColor: 'white',
+        }}>
+          <TablePagination
+            rowsPerPageOptions={[10, 25, 50]}
+            component="div"
+            count={filteredPresets.length}
+            rowsPerPage={25}
+            page={0}
+            onPageChange={() => {}}
+            onRowsPerPageChange={() => {}}
+            labelRowsPerPage="Строк на странице:"
+            labelDisplayedRows={({ from, to, count }) => 
+              `${from}-${to} из ${count !== -1 ? count : `больше чем ${to}`}`
+            }
+            sx={{
+              '& .MuiTablePagination-toolbar': {
+                paddingLeft: 2,
+                paddingRight: 2,
+                flexWrap: 'wrap',
+                justifyContent: 'flex-end', // Выравниваем пагинацию справа
+              },
+              '& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows': {
+                fontSize: '0.875rem',
+              },
+            }}
+          />
+        </Box>
       )}
 
       {/* Create/Edit Dialog */}

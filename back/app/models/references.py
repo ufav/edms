@@ -172,3 +172,18 @@ class UserRole(Base):
     
     def __repr__(self):
         return f"<UserRole(id={self.id}, name='{self.name}')>"
+
+
+class TransmittalStatus(Base):
+    """Статусы трансмитталов"""
+    __tablename__ = "transmittal_statuses"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(32), nullable=False, unique=True)
+    name_native = Column(String(32))
+    description = Column(String(255))
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    def __repr__(self):
+        return f"<TransmittalStatus(id={self.id}, name='{self.name}')>"
