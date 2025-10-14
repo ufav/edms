@@ -33,6 +33,21 @@ class TransmittalRevisionAdd(BaseModel):
 
 class TransmittalRevisionRemove(BaseModel):
     revision_id: int
+@router.delete("/{transmittal_id}", response_model=dict)
+async def delete_transmittal(
+    transmittal_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Мягкое удаление трансмиттала (is_deleted=1)"""
+    transmittal = db.query(Transmittal).filter(Transmittal.id == transmittal_id).first()
+    if not transmittal or transmittal.is_deleted == 1:
+        raise HTTPException(status_code=404, detail="Трансмиттал не найден")
+
+    transmittal.is_deleted = 1
+    db.commit()
+
+    return {"message": "Трансмиттал удален", "id": transmittal_id}
 
 @router.get("/", response_model=List[dict])
 async def get_transmittals(
@@ -45,7 +60,7 @@ async def get_transmittals(
     """Получение списка трансмитталов"""
     from sqlalchemy.orm import joinedload
     
-    query = db.query(Transmittal).options(joinedload(Transmittal.status))
+    query = db.query(Transmittal).options(joinedload(Transmittal.status)).filter(Transmittal.is_deleted == 0)
     
     if project_id:
         query = query.filter(Transmittal.project_id == project_id)
@@ -119,7 +134,8 @@ async def create_transmittal(
         "project_id": db_transmittal.project_id,
         "sender_id": db_transmittal.sender_id,
         "recipient_id": db_transmittal.recipient_id,
-        "status": db_transmittal.status,
+        "status": "draft",  # имя статуса, так как только что создано со status_id=1
+        "status_id": db_transmittal.status_id,
         "created_at": db_transmittal.created_at
     }
 
@@ -132,35 +148,42 @@ async def get_transmittal(
     """Получение трансмиттала по ID с ревизиями"""
     from sqlalchemy.orm import joinedload
     
-    transmittal = db.query(Transmittal).options(joinedload(Transmittal.status)).filter(Transmittal.id == transmittal_id).first()
+    transmittal = db.query(Transmittal).options(joinedload(Transmittal.status)).filter(Transmittal.id == transmittal_id, Transmittal.is_deleted == 0).first()
     if not transmittal:
         raise HTTPException(status_code=404, detail="Трансмиттал не найден")
     
     # Получаем ревизии трансмиттала
     # Используем JOIN'ы вместо N+1 запросов
+    from app.models.references import RevisionDescription
     revisions_data = db.query(
         DocumentRevision,
         Document,
-        TransmittalRevision
+        TransmittalRevision,
+        RevisionDescription
     ).join(
         TransmittalRevision,
         TransmittalRevision.revision_id == DocumentRevision.id
     ).join(
         Document,
         Document.id == DocumentRevision.document_id
+    ).outerjoin(
+        RevisionDescription,
+        RevisionDescription.id == DocumentRevision.revision_description_id
     ).filter(
         TransmittalRevision.transmittal_id == transmittal_id
     ).all()
     
     result = []
-    for revision, document, tr in revisions_data:
+    for revision, document, tr, rev_descr in revisions_data:
         result.append({
             "id": revision.id,
             "document_id": document.id,
             "document_title": document.title,
             "document_number": document.number,
             "revision_number": revision.number,
+            "revision_description_code": rev_descr.code if rev_descr else None,
             "file_name": revision.file_name,
+            "file_type": revision.file_type,
             "file_size": revision.file_size,
             "created_at": revision.created_at
         })
@@ -178,7 +201,7 @@ async def get_transmittal(
         "sent_date": transmittal.sent_date,
         "received_date": transmittal.received_date,
         "created_at": transmittal.created_at,
-        "revisions": revisions_data
+        "revisions": result
     }
 
 @router.get("/{transmittal_id}/revisions", response_model=List[dict])
@@ -193,16 +216,21 @@ async def get_transmittal_revisions(
         raise HTTPException(status_code=404, detail="Трансмиттал не найден")
     
     # Используем JOIN'ы вместо N+1 запросов
+    from app.models.references import RevisionDescription
     revisions_data = db.query(
         DocumentRevision,
         Document,
-        TransmittalRevision
+        TransmittalRevision,
+        RevisionDescription
     ).join(
         TransmittalRevision,
         TransmittalRevision.revision_id == DocumentRevision.id
     ).join(
         Document,
         Document.id == DocumentRevision.document_id
+    ).outerjoin(
+        RevisionDescription,
+        RevisionDescription.id == DocumentRevision.revision_description_id
     ).filter(
         TransmittalRevision.transmittal_id == transmittal_id
     ).all()

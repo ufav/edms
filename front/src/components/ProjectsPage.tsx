@@ -5,7 +5,6 @@ import {
   Button,
   useTheme,
   useMediaQuery,
-  TablePagination,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -23,6 +22,7 @@ import { useTranslation } from 'react-i18next';
 import NotificationSnackbar from './NotificationSnackbar';
 import { useProjectFilters, useProjectPagination, useProjectActions, useProjectDialogs } from './project/hooks';
 import { ProjectFilters, ProjectCards, ProjectTable } from './project/components';
+import AppPagination from './AppPagination';
 
 const ProjectsPage: React.FC = observer(() => {
   const { canEditProject, canDeleteProject, isAdmin, isOperator, isViewer } = useCurrentUser();
@@ -166,47 +166,16 @@ const ProjectsPage: React.FC = observer(() => {
         )}
       </Box>
 
-      {/* Фиксированная пагинация внизу экрана */}
       {!isMobile && !projectStore.isLoading && (
-        <Box sx={{
-          position: 'fixed',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          borderTop: '1px solid #e0e0e0',
-          boxShadow: '0 -2px 8px rgba(0,0,0,0.1)',
-          zIndex: 1000,
-          paddingLeft: '240px', // Отступ для бокового меню
-          '@media (max-width: 900px)': {
-            paddingLeft: 0, // На мобильных устройствах без отступа
-          },
-          backgroundColor: 'white',
-        }}>
-          <TablePagination
-            rowsPerPageOptions={rowsPerPageOptions}
-            component="div"
-            count={totalCount}
-            rowsPerPage={rowsPerPage}
-            page={page}
-            onPageChange={handleChangePage}
-            onRowsPerPageChange={handleChangeRowsPerPage}
-            labelRowsPerPage={t('common.rows_per_page')}
-            labelDisplayedRows={({ from, to, count }) => 
-              `${from}-${to} ${t('common.of')} ${count !== -1 ? count : `${t('common.more_than')} ${to}`}`
-            }
-            sx={{
-              '& .MuiTablePagination-toolbar': {
-                paddingLeft: 2,
-                paddingRight: 2,
-                flexWrap: 'wrap',
-                justifyContent: 'flex-end', // Выравниваем пагинацию справа
-              },
-              '& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows': {
-                fontSize: '0.875rem',
-              },
-            }}
-          />
-        </Box>
+        <AppPagination
+          count={totalCount}
+          page={page + 1}
+          onPageChange={(_, p) => handleChangePage(_, p - 1)}
+          simple
+          rowsPerPage={rowsPerPage}
+          insetLeft={240}
+          align="right"
+        />
       )}
 
 

@@ -23,7 +23,7 @@ import {
   Tooltip,
   useTheme,
   useMediaQuery,
-  TablePagination,
+  Pagination,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -39,6 +39,7 @@ import { projectStore } from '../stores/ProjectStore';
 import { reviewStore } from '../stores/ReviewStore';
 import ProjectRequired from './ProjectRequired';
 import { useTranslation } from 'react-i18next';
+import AppPagination from './AppPagination';
 
 const ReviewsPage: React.FC = observer(() => {
   const { t } = useTranslation();
@@ -47,6 +48,8 @@ const ReviewsPage: React.FC = observer(() => {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterProject, setFilterProject] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [page, setPage] = useState<number>(1);
+  const rowsPerPage = 25;
 
   // Загружаем ревью при монтировании компонента
   useEffect(() => {
@@ -66,6 +69,14 @@ const ReviewsPage: React.FC = observer(() => {
     
     return statusMatch && projectMatch && selectedProjectMatch && searchMatch;
   });
+
+  // Reset page on filters/project change
+  useEffect(() => {
+    setPage(1);
+  }, [filterStatus, filterProject, searchTerm, projectStore.selectedProject]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredReviews.length / rowsPerPage));
+  const displayedReviews = filteredReviews.slice((page - 1) * rowsPerPage, (page - 1) * rowsPerPage + rowsPerPage);
 
   const handleCreate = () => {
     // TODO: Реализовать создание ревью
@@ -296,7 +307,7 @@ const ReviewsPage: React.FC = observer(() => {
               }}>
                 <Table sx={{ tableLayout: 'fixed', width: '100%', minWidth: '100%' }}>
                   <TableBody>
-                    {filteredReviews.map((review, index) => (
+                    {displayedReviews.map((review, index) => (
                       <TableRow 
                         key={review.id} 
                         sx={{ 
@@ -426,47 +437,16 @@ const ReviewsPage: React.FC = observer(() => {
           )}
         </Box>
 
-        {/* Фиксированная пагинация внизу экрана */}
-        {!isMobile && !reviewStore.isLoading && (
-          <Box sx={{
-            position: 'fixed',
-            bottom: 0,
-            left: 0,
-            right: 0,
-            borderTop: '1px solid #e0e0e0',
-            boxShadow: '0 -2px 8px rgba(0,0,0,0.1)',
-            zIndex: 1000,
-            paddingLeft: '240px', // Отступ для бокового меню
-            '@media (max-width: 900px)': {
-              paddingLeft: 0, // На мобильных устройствах без отступа
-            },
-            backgroundColor: 'white',
-          }}>
-            <TablePagination
-              rowsPerPageOptions={[10, 25, 50]}
-              component="div"
-              count={filteredReviews.length}
-              rowsPerPage={25}
-              page={0}
-              onPageChange={() => {}}
-              onRowsPerPageChange={() => {}}
-              labelRowsPerPage={t('common.rows_per_page')}
-              labelDisplayedRows={({ from, to, count }) => 
-                `${from}-${to} ${t('common.of')} ${count !== -1 ? count : `${t('common.more_than')} ${to}`}`
-              }
-              sx={{
-                '& .MuiTablePagination-toolbar': {
-                  paddingLeft: 2,
-                  paddingRight: 2,
-                  flexWrap: 'wrap',
-                  justifyContent: 'flex-end', // Выравниваем пагинацию справа
-                },
-                '& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows': {
-                  fontSize: '0.875rem',
-                },
-              }}
-            />
-          </Box>
+        {!reviewStore.isLoading && (
+          <AppPagination
+            count={filteredReviews.length}
+            page={Math.min(page, totalPages)}
+            onPageChange={(_, value) => setPage(value)}
+            simple
+            rowsPerPage={rowsPerPage}
+            insetLeft={isMobile ? 0 : 240}
+            align="right"
+          />
         )}
       </Box>
     </ProjectRequired>

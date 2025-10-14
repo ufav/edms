@@ -92,6 +92,11 @@ const Layout: React.FC<LayoutProps> = observer(({
     updateIndicator();
   }, [currentPage]);
 
+  // Обновляем позицию индикатора при смене языка (меняется ширина пунктов меню)
+  useEffect(() => {
+    updateIndicator();
+  }, [i18n.language]);
+
   // Обновляем позицию при изменении размера окна
   useEffect(() => {
     const handleResize = () => updateIndicator();

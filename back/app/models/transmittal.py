@@ -23,6 +23,7 @@ class Transmittal(Base):
     received_date = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    is_deleted = Column(Integer, default=0, nullable=False)  # 0 - не удален, 1 - удален
     
     # Relationships (temporarily commented out)
     # project = relationship("Project", back_populates="transmittals")

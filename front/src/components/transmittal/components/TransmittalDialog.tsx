@@ -54,9 +54,17 @@ export interface TransmittalData {
 export interface TransmittalDialogProps {
   open: boolean;
   onClose: () => void;
-  onCreateTransmittal: (transmittalData: TransmittalData) => Promise<void>;
-  selectedRevisions: any[];
-  onRemoveRevision: (revisionId: number) => void;
+  // Создание
+  onCreateTransmittal?: (transmittalData: TransmittalData) => Promise<void>;
+  selectedRevisions?: any[];
+  onRemoveRevision?: (revisionId: number) => void;
+  onOpenDocument?: (documentId: number) => void;
+  // Просмотр (readOnly)
+  readOnly?: boolean;
+  revisions?: any[];
+  initialData?: Partial<TransmittalData> & { recipient_id?: number; status?: string };
+  titleOverride?: string;
+  // Утилиты
   formatFileSize: (bytes: number) => string;
   formatDate: (date: string) => string;
   isLoading?: boolean;
@@ -68,8 +76,13 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
   open,
   onClose,
   onCreateTransmittal,
-  selectedRevisions,
+  selectedRevisions = [],
   onRemoveRevision,
+  onOpenDocument,
+  readOnly = false,
+  revisions,
+  initialData,
+  titleOverride,
   formatFileSize,
   isLoading = false,
   error = null,
@@ -161,13 +174,21 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
   // Сброс формы при открытии/закрытии диалога
   useEffect(() => {
     if (open) {
-      setFormData({
-        transmittal_number: '',
-        title: '',
-        recipient_id: undefined,
-      });
+      if (readOnly && initialData) {
+        setFormData({
+          transmittal_number: initialData.transmittal_number || '',
+          title: initialData.title || '',
+          recipient_id: initialData.recipient_id,
+        });
+      } else {
+        setFormData({
+          transmittal_number: '',
+          title: '',
+          recipient_id: undefined,
+        });
+      }
     }
-  }, [open]);
+  }, [open, readOnly, initialData?.transmittal_number, initialData?.title, initialData?.recipient_id]);
 
   // Функция валидации
   const validateForm = () => {
@@ -211,7 +232,9 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
 
     try {
       console.log('Calling onCreateTransmittal with:', formData);
-      await onCreateTransmittal(formData);
+      if (onCreateTransmittal) {
+        await onCreateTransmittal(formData);
+      }
       console.log('onCreateTransmittal succeeded, showing success notification');
       if (onShowNotification) {
         onShowNotification(t('transmittals.create_success'), 'success');
@@ -247,9 +270,9 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
       >
       <DialogTitle>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <SendIcon color="primary" />
+          {!readOnly && <SendIcon color="primary" />}
           <Typography variant="h6">
-            {t('transmittals.create')}
+            {titleOverride || (readOnly ? t('transmittals.view_title', { defaultValue: 'Просмотр трансмиттала' }) : t('transmittals.create'))}
           </Typography>
         </Box>
       </DialogTitle>
@@ -257,7 +280,7 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
       <DialogContent sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
         {/* Общая информация */}
         <Box sx={{ mb: 3 }}>
-          <Grid container spacing={2}>
+            <Grid container spacing={2}>
             <Grid item xs={3}>
               <TextField
                 label={t('transmittals.transmittal_number')}
@@ -266,13 +289,24 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
                 variant="standard"
                 fullWidth
                 required
-                disabled={isLoading}
+                disabled={isLoading || readOnly}
                 error={validationErrors.transmittal_number}
                 helperText={validationErrors.transmittal_number ? t('transmittals.transmittal_number_required') : ''}
               />
             </Grid>
-            
-            <Grid item xs={9}>
+            {readOnly && (
+              <Grid item xs={1.5 as any}>
+                <TextField
+                  label={t('common.status')}
+                  value={(initialData as any)?.status ? t(`transStatus.${(initialData as any).status}`) : t('transStatus.draft')}
+                  variant="standard"
+                  fullWidth
+                  disabled
+                />
+              </Grid>
+            )}
+
+            <Grid item xs={readOnly ? (7.5 as any) : 9}>
               {/* Пустое место */}
             </Grid>
             
@@ -287,7 +321,7 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
                       recipient_id: e.target.value as number
                     }));
                   }}
-                  disabled={isLoading}
+                  disabled={isLoading || readOnly}
                 >
                   {projectStore.selectedProject?.participants?.map((participant) => (
                     <MenuItem key={participant.id} value={participant.company_id}>
@@ -314,7 +348,7 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
                 onChange={handleInputChange('title')}
                 variant="standard"
                 fullWidth
-                disabled={isLoading}
+                disabled={isLoading || readOnly}
               />
             </Grid>
             
@@ -341,7 +375,7 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
             </Alert>
           )}
 
-          {selectedRevisions.length === 0 ? (
+          {(readOnly ? (revisions?.length || 0) === 0 : selectedRevisions.length === 0) ? (
             <Box sx={{ 
               flex: 1,
               display: 'flex', 
@@ -370,7 +404,7 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
                     <TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>
                       {t('transmittals.columns.file_size')}
                     </TableCell>
-                    <TableCell 
+                     <TableCell 
                       sx={{ 
                         position: 'sticky', 
                         right: 0, 
@@ -387,18 +421,27 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {selectedRevisions.map((revision) => {
+                  {(readOnly ? (revisions || []) : selectedRevisions).map((revision: any) => {
                     const fileTypeInfo = getFileTypeInfo(revision.file_type || '', revision.file_name);
                     return (
                       <TableRow key={revision.id} sx={{ '& .MuiTableCell-root': { padding: '6px 16px' } }}>
                         <TableCell>
-                          <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                          <Typography 
+                            variant="body2" 
+                            sx={{ 
+                              fontWeight: 'bold', 
+                              cursor: 'pointer', 
+                              color: 'primary.main',
+                              '&:hover': { textDecoration: 'underline' }
+                            }}
+                            onClick={() => onOpenDocument && onOpenDocument(revision.document_id)}
+                          >
                             {revision.document_number || `DOC-${revision.document_id}`}
                           </Typography>
                         </TableCell>
                         <TableCell>
                           <Chip 
-                            label={`${revision.revision_description_code || 'N/A'}${revision.revision_number}`}
+                            label={revision.revision_number ? `${revision.revision_description_code || ''}${revision.revision_number}` : (revision.revision_description_code || 'N/A')}
                             size="small"
                             sx={{ backgroundColor: 'grey.200', color: 'text.primary' }}
                           />
@@ -418,23 +461,32 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
                             {formatFileSize(revision.file_size)}
                           </Typography>
                         </TableCell>
-                        <TableCell 
+                         <TableCell 
                           sx={{ 
                             position: 'sticky', 
                             right: 0, 
                             backgroundColor: 'background.paper',
                             zIndex: 1,
                             width: '80px',
-                            minWidth: '80px'
+                            minWidth: '80px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'flex-start'
                           }}
                         >
-                          <IconButton
-                            onClick={() => onRemoveRevision(revision.id)}
-                            disabled={isLoading}
-                            size="small"
-                          >
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
+                          {readOnly ? (
+                            <IconButton disabled size="small">
+                              <DeleteIcon fontSize="small" />
+                            </IconButton>
+                          ) : (
+                            <IconButton
+                              onClick={() => onRemoveRevision && onRemoveRevision(revision.id)}
+                              disabled={isLoading}
+                              size="small"
+                            >
+                              <DeleteIcon fontSize="small" />
+                            </IconButton>
+                          )}
                         </TableCell>
                       </TableRow>
                     );
@@ -451,16 +503,18 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
           onClick={handleClose} 
           disabled={isLoading}
         >
-          {t('common.cancel')}
+          {readOnly ? t('common.close') : t('common.cancel')}
         </Button>
-        <Button
-          onClick={handleCreate}
-          variant="contained"
-          startIcon={isLoading ? <CircularProgress size={16} /> : <SendIcon />}
-          disabled={isLoading || selectedRevisions.length === 0}
-        >
-          {isLoading ? t('common.creating') : t('transmittals.create')}
-        </Button>
+        {!readOnly && (
+          <Button
+            onClick={handleCreate}
+            variant="contained"
+            startIcon={isLoading ? <CircularProgress size={16} /> : <SendIcon />}
+            disabled={isLoading || selectedRevisions.length === 0}
+          >
+            {isLoading ? t('common.creating') : t('transmittals.create')}
+          </Button>
+        )}
       </DialogActions>
       </Dialog>
     </>

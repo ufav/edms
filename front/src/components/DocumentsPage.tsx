@@ -37,6 +37,7 @@ import { useDocumentBatchUpload } from './document/hooks/useDocumentBatchUpload'
 import { useDocumentDataLoading } from './document/hooks/useDocumentDataLoading';
 import { DocumentFilters } from './document/components/DocumentFilters';
 import { DocumentCards } from './document/components/DocumentCards';
+import AppPagination from './AppPagination';
 import { DocumentTable } from './document/components/DocumentTable';
 import { DocumentBatchUploadDialog } from './document/components/DocumentBatchUploadDialog';
 import { DocumentSettingsDialog } from './document/components/DocumentSettingsDialog';
@@ -429,48 +430,15 @@ const DocumentsPage: React.FC = observer(() => {
 
         {/* Фиксированная пагинация внизу экрана */}
         {!isMobile && !documentStore.isLoading && (
-          <Box sx={{
-            position: 'fixed',
-            bottom: 0,
-            left: 0,
-            right: 0,
-            borderTop: '1px solid #e0e0e0',
-            boxShadow: '0 -2px 8px rgba(0,0,0,0.1)',
-            zIndex: 1000,
-            paddingLeft: '240px', // Отступ для бокового меню
-            '@media (max-width: 900px)': {
-              paddingLeft: 0, // На мобильных устройствах без отступа
-            },
-            backgroundColor: 'white',
-          }}>
-            <TablePagination
-              rowsPerPageOptions={rowsPerPageOptions}
-              component="div"
-              count={totalCount}
-              rowsPerPage={rowsPerPage}
-              page={page}
-              onPageChange={handleChangePage}
-              onRowsPerPageChange={handleChangeRowsPerPage}
-              labelRowsPerPage={t('common.rows_per_page') || 'Строк на странице:'}
-              labelDisplayedRows={({ from, to, count }) => {
-                const ofText = t('common.of') || 'из';
-                const moreThanText = t('common.more_than') || 'больше чем';
-                const countText = count !== -1 ? count.toString() : `${moreThanText} ${to}`;
-                return `${from}-${to} ${ofText} ${countText}`;
-              }}
-              sx={{
-                '& .MuiTablePagination-toolbar': {
-                  paddingLeft: 2,
-                  paddingRight: 2,
-                  flexWrap: 'wrap',
-                  justifyContent: 'flex-end', // Выравниваем пагинацию справа
-                },
-                '& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows': {
-                  fontSize: '0.875rem',
-                },
-              }}
-            />
-          </Box>
+          <AppPagination
+            count={totalCount}
+            page={page + 1}
+            onPageChange={(_, p) => handleChangePage(_, p - 1)}
+            simple
+            rowsPerPage={rowsPerPage}
+            insetLeft={240}
+            align="right"
+          />
         )}
 
         {/* Модалка трансмитталов */}

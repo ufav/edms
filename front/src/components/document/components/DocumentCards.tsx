@@ -11,7 +11,6 @@ import {
   Tooltip,
   CircularProgress,
   Alert,
-  TablePagination,
 } from '@mui/material';
 import {
   Description as DescriptionIcon,
@@ -32,6 +31,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { observer } from 'mobx-react-lite';
 import { documentStore } from '../../../stores/DocumentStore';
+import AppPagination from '../../AppPagination';
 import { referencesStore } from '../../../stores/ReferencesStore';
 import { canDeleteDocument } from '../../../hooks/usePermissions';
 import { userStore } from '../../../stores/UserStore';
@@ -256,13 +256,13 @@ export const DocumentCards: React.FC<DocumentCardsProps> = observer(({
       
       {!isLoading && totalCount > 0 && (
         <Box sx={{ p: 2 }}>
-          <TablePagination
-            rowsPerPageOptions={rowsPerPageOptions}
-            component="div"
+          <AppPagination
             count={totalCount}
-            rowsPerPage={rowsPerPage}
             page={page}
             onPageChange={onPageChange}
+            showRowsPerPage
+            rowsPerPage={rowsPerPage}
+            rowsPerPageOptions={rowsPerPageOptions}
             onRowsPerPageChange={onRowsPerPageChange}
             labelRowsPerPage={t('common.rows_per_page') || 'Строк на странице:'}
             labelDisplayedRows={({ from, to, count }) => {
@@ -271,16 +271,8 @@ export const DocumentCards: React.FC<DocumentCardsProps> = observer(({
               const countText = count !== -1 ? count.toString() : `${moreThanText} ${to}`;
               return `${from}-${to} ${ofText} ${countText}`;
             }}
-            sx={{
-              '& .MuiTablePagination-toolbar': {
-                paddingLeft: 0,
-                paddingRight: 0,
-                flexWrap: 'wrap',
-              },
-              '& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows': {
-                fontSize: '0.875rem',
-              },
-            }}
+            fixedBottom={false}
+            align="right"
           />
         </Box>
       )}

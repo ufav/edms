@@ -206,11 +206,13 @@ const DocumentForm: React.FC<DocumentFormProps> = ({
                         {loadingProjectData ? t('document.loading') : t('document.no_disciplines')}
                       </MenuItem>
                     ) : (
-                      disciplineStore.disciplines.map((discipline) => (
+                      [...disciplineStore.disciplines]
+                        .sort((a, b) => (a.code || '').localeCompare(b.code || '', undefined, { numeric: true, sensitivity: 'base' }))
+                        .map((discipline) => (
                         <MenuItem key={discipline.id} value={discipline.id}>
                           {discipline.code} - {discipline.name}
                         </MenuItem>
-                      ))
+                        ))
                     );
                   })()}
                 </Select>

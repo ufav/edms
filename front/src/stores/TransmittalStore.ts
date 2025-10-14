@@ -21,6 +21,11 @@ class TransmittalStore {
   transmittals: Transmittal[] = [];
   isLoading = false;
   error: string | null = null;
+  // Details state
+  detailsLoading = false;
+  detailsError: string | null = null;
+  selectedTransmittal: Transmittal | null = null;
+  selectedRevisions: any[] = [];
   loadedProjectId: number | null = null; // Отслеживаем для какого проекта загружены данные
 
   constructor() {
@@ -75,6 +80,48 @@ class TransmittalStore {
   // Получение трансмиттала по ID
   getTransmittalById(id: number): Transmittal | undefined {
     return this.transmittals.find(transmittal => transmittal.id === id);
+  }
+
+  async loadTransmittalDetails(id: number) {
+    runInAction(() => {
+      this.detailsLoading = true;
+      this.detailsError = null;
+      // Сбрасываем предыдущие данные, чтобы не мигал старый список
+      this.selectedTransmittal = null;
+      this.selectedRevisions = [];
+    });
+    try {
+      const details = await transmittalsApi.getById(id);
+      runInAction(() => {
+        // Нормализуем в Transmittal (части могут отсутствовать в ответе)
+        this.selectedTransmittal = {
+          id: details.id,
+          transmittal_number: (details as any).transmittal_number,
+          title: (details as any).title,
+          description: (details as any).description,
+          project_id: (details as any).project_id,
+          sender_id: (details as any).sender_id,
+          recipient_id: (details as any).recipient_id,
+          created_by: (details as any).created_by ?? 0,
+          status: (details as any).status ?? 'draft',
+          sent_date: (details as any).sent_date ?? null,
+          received_date: (details as any).received_date ?? null,
+          created_at: (details as any).created_at ?? '',
+          updated_at: (details as any).updated_at ?? '',
+        } as any;
+        this.selectedRevisions = (details as any).revisions || [];
+      });
+    } catch (e) {
+      runInAction(() => {
+        this.detailsError = 'Ошибка загрузки трансмиттала';
+        this.selectedTransmittal = null;
+        this.selectedRevisions = [];
+      });
+    } finally {
+      runInAction(() => {
+        this.detailsLoading = false;
+      });
+    }
   }
 
   // Получение трансмитталов по проекту

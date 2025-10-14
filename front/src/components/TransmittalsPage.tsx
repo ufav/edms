@@ -23,14 +23,14 @@ import {
   Tooltip,
   useTheme,
   useMediaQuery,
-  TablePagination,
+  Pagination,
 } from '@mui/material';
 import {
   Search as SearchIcon,
   FilterList as FilterIcon,
   Add as AddIcon,
   Send as SendIcon,
-  Visibility as ViewIcon,
+  Description as DetailsIcon,
   Delete as DeleteIcon,
   CheckCircle as CheckCircleIcon,
 } from '@mui/icons-material';
@@ -39,8 +39,13 @@ import { projectStore } from '../stores/ProjectStore';
 import { transmittalStore } from '../stores/TransmittalStore';
 import referenceDataStore from '../stores/ReferenceDataStore';
 import ProjectRequired from './ProjectRequired';
+import TransmittalViewDialog from './transmittal/components/TransmittalViewDialog';
 import { useTranslation } from 'react-i18next';
 import { useCurrentUser } from '../hooks/useCurrentUser';
+import ConfirmDialog from './ConfirmDialog';
+import AppPagination from './AppPagination';
+import { useDeleteDialog } from '../hooks/useDeleteDialog';
+import { transmittalsApi } from '../api/client';
 
 const TransmittalsPage: React.FC = observer(() => {
   const { t } = useTranslation();
@@ -50,6 +55,12 @@ const TransmittalsPage: React.FC = observer(() => {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterProject, setFilterProject] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [selectedTransmittalId, setSelectedTransmittalId] = useState<number | null>(null);
+  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const deleteDialog = useDeleteDialog();
+  const [page, setPage] = useState<number>(1); // 1-based for MUI Pagination
+  const rowsPerPage = 25; // фиксированное количество на страницу
 
   // Загружаем трансмитталы при монтировании компонента
   useEffect(() => {
@@ -77,13 +88,24 @@ const TransmittalsPage: React.FC = observer(() => {
     return statusMatch && projectMatch && selectedProjectMatch && searchMatch;
   });
 
+  // Сбрасываем на первую страницу при изменении фильтров/проекта/поиска
+  useEffect(() => {
+    setPage(1);
+  }, [filterStatus, filterProject, searchTerm, projectStore.selectedProject]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredTransmittals.length / rowsPerPage));
+  const startIndex = (page - 1) * rowsPerPage;
+  const endIndex = startIndex + rowsPerPage;
+  const displayedTransmittals = filteredTransmittals.slice(startIndex, endIndex);
+
 
   const handleCreate = () => {
     // TODO: Реализовать создание трансмиттала
   };
 
   const handleView = (transmittalId: number) => {
-    // TODO: Реализовать просмотр трансмиттала
+    setSelectedTransmittalId(transmittalId);
+    setViewerOpen(true);
   };
 
   const handleSend = (transmittalId: number) => {
@@ -95,7 +117,21 @@ const TransmittalsPage: React.FC = observer(() => {
   };
 
   const handleDelete = (transmittalId: number) => {
-    // TODO: Реализовать удаление трансмиттала
+    deleteDialog.openDeleteDialog({ id: transmittalId });
+  };
+
+  const handleConfirmDelete = async (item: { id: number }) => {
+    try {
+      setDeletingId(item.id);
+      await transmittalsApi.delete(item.id);
+      if (projectStore.hasSelectedProject) {
+        await transmittalStore.loadTransmittals(projectStore.selectedProject!.id, true);
+      } else {
+        await transmittalStore.loadTransmittals(undefined, true);
+      }
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   return (
@@ -252,111 +288,85 @@ const TransmittalsPage: React.FC = observer(() => {
                   },
                 },
               }}>
-                <Table sx={{ 
-                  tableLayout: 'fixed', 
-                  width: '100%', 
-                  minWidth: '100%',
-                  '& .MuiTableCell-root[data-sticky="true"]': {
-                    width: '130px !important',
-                    minWidth: '130px !important',
-                    maxWidth: '130px !important',
-                  }
-                }}>
-                  <TableHead sx={{ position: 'sticky', top: 0, zIndex: 2, backgroundColor: '#f5f5f5' }}>
-                    <TableRow sx={{ backgroundColor: '#f5f5f5', '& .MuiTableCell-root:not([data-sticky="true"])': { padding: '8px 16px' } }}>
+                <Table sx={{ tableLayout: 'fixed', width: '100%', minWidth: '100%' }}>
+                  <TableHead>
+                    <TableRow sx={{ backgroundColor: '#f5f5f5', '& .MuiTableCell-root': { padding: '8px 16px' } }}>
                       <TableCell sx={{ 
                         fontWeight: 'bold',
                         fontSize: '0.875rem',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',
-                        width: '12.5%'
+                        width: '12.5%',
+                        minWidth: '120px'
                       }}>{t('transmittals.columns.number')}</TableCell>
                       <TableCell sx={{ 
                         fontWeight: 'bold',
                         fontSize: '0.875rem',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',
-                        width: '12.5%'
+                        width: '12.5%',
+                        minWidth: '120px'
                       }}>{t('transmittals.columns.title')}</TableCell>
                       <TableCell sx={{ 
                         fontWeight: 'bold',
                         fontSize: '0.875rem',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',
-                        width: '12.5%'
+                        width: '12.5%',
+                        minWidth: '120px'
                       }}>{t('transmittals.columns.sender')}</TableCell>
                       <TableCell sx={{ 
                         fontWeight: 'bold',
                         fontSize: '0.875rem',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',
-                        width: '12.5%'
+                        width: '12.5%',
+                        minWidth: '120px'
                       }}>{t('transmittals.columns.recipient')}</TableCell>
                       <TableCell sx={{ 
                         fontWeight: 'bold',
                         fontSize: '0.875rem',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',
-                        width: '12.5%'
+                        width: '12.5%',
+                        minWidth: '100px'
                       }}>{t('transmittals.columns.status')}</TableCell>
                       <TableCell sx={{ 
                         fontWeight: 'bold',
                         fontSize: '0.875rem',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',
-                        width: '12.5%'
+                        width: '12.5%',
+                        minWidth: '100px'
                       }}>{t('transmittals.columns.sent')}</TableCell>
                       <TableCell sx={{ 
                         fontWeight: 'bold',
                         fontSize: '0.875rem',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',
-                        width: '12.5%'
+                        width: '12.5%',
+                        minWidth: '100px'
                       }}>{t('transmittals.columns.received')}</TableCell>
                       <TableCell sx={{ 
                         fontWeight: 'bold',
                         fontSize: '0.875rem',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',
-                        width: '12.5%'
+                        width: '12.5%',
+                        minWidth: '120px'
                       }}>{t('transmittals.columns.created_by')}</TableCell>
                       <TableCell sx={{ 
                         fontWeight: 'bold',
                         fontSize: '0.875rem',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',
-                        width: '130px',
-                        minWidth: '130px',
-                        maxWidth: '130px',
-                        position: 'sticky',
-                        right: 0,
-                        backgroundColor: '#f5f5f5',
-                        zIndex: 3,
-                        borderRight: 'none',
-                        padding: '8px 4px'
+                        width: '12.5%',
+                        minWidth: '120px'
                       }}>{t('common.actions')}</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
-                    {filteredTransmittals.map((transmittal, index) => (
+                    {displayedTransmittals.map((transmittal, index) => (
                       <TableRow 
                         key={transmittal.id} 
                         sx={{ 
-                          '& .MuiTableCell-root:not([data-sticky="true"])': { padding: '8px 16px' },
+                          '& .MuiTableCell-root': { padding: '8px 16px' },
                           '&:hover': {
-                            backgroundColor: '#f5f5f5',
-                            '& .MuiTableCell-root[data-sticky="true"]': {
-                              backgroundColor: '#f5f5f5',
-                            },
+                            backgroundColor: 'rgba(0, 0, 0, 0.04) !important',
+                            '& .MuiTableCell-root': {
+                              backgroundColor: 'rgba(0, 0, 0, 0.04) !important'
+                            }
                           },
                         }}
                       >
@@ -491,43 +501,29 @@ const TransmittalsPage: React.FC = observer(() => {
                             {referenceDataStore.getUserName(transmittal.created_by)}
                           </Typography>
                         </TableCell>
-                        <TableCell 
-                          data-sticky="true"
-                          sx={{ 
-                            fontSize: '0.875rem',
-                            overflow: 'hidden',
-                            width: '130px',
-                            minWidth: '130px',
-                            maxWidth: '130px',
-                            position: 'sticky',
-                            right: 0,
-                            backgroundColor: 'white',
-                            zIndex: 3,
-                            borderRight: 'none',
-                            padding: '8px 4px'
-                          }}>
-                          <Box sx={{ display: 'flex', justifyContent: 'center', gap: 1 }}>
-                            <Tooltip title={t('common.view')}>
-                              <IconButton size="small" onClick={() => handleView(transmittal.id)} sx={{ padding: '2px', minWidth: 'auto', color: 'grey' }}>
-                                <ViewIcon fontSize="small" />
+                        <TableCell>
+                          <Box sx={{ display: 'flex', gap: 1 }}>
+                            <Tooltip title="Transmittal Details">
+                              <IconButton size="small" onClick={() => handleView(transmittal.id)} sx={{ padding: '4px' }}>
+                                <DetailsIcon fontSize="small" />
                               </IconButton>
                             </Tooltip>
                             {transmittal.status === 'draft' && (
                               <Tooltip title={t('transmittals.send')}>
-                                <IconButton size="small" onClick={() => handleSend(transmittal.id)} sx={{ padding: '2px', minWidth: 'auto', color: 'grey' }}>
+                                <IconButton size="small" onClick={() => handleSend(transmittal.id)} sx={{ padding: '4px' }}>
                                   <SendIcon fontSize="small" />
                                 </IconButton>
                               </Tooltip>
                             )}
                             {transmittal.status === 'sent' && (
                               <Tooltip title={t('transmittals.acknowledge')}>
-                                <IconButton size="small" onClick={() => handleReceive(transmittal.id)} sx={{ padding: '2px', minWidth: 'auto', color: 'grey' }}>
+                                <IconButton size="small" onClick={() => handleReceive(transmittal.id)} sx={{ padding: '4px' }}>
                                   <CheckCircleIcon fontSize="small" />
                                 </IconButton>
                               </Tooltip>
                             )}
                             <Tooltip title={t('common.delete')}>
-                              <IconButton size="small" onClick={() => handleDelete(transmittal.id)} sx={{ padding: '2px', minWidth: 'auto', color: 'grey' }}>
+                              <IconButton size="small" onClick={() => handleDelete(transmittal.id)} disabled={deletingId === transmittal.id} sx={{ padding: '4px' }}>
                                 <DeleteIcon fontSize="small" />
                               </IconButton>
                             </Tooltip>
@@ -542,49 +538,38 @@ const TransmittalsPage: React.FC = observer(() => {
           )}
         </Box>
 
-        {/* Фиксированная пагинация внизу экрана */}
-        {!isMobile && !transmittalStore.isLoading && (
-          <Box sx={{
-            position: 'fixed',
-            bottom: 0,
-            left: 0,
-            right: 0,
-            borderTop: '1px solid #e0e0e0',
-            boxShadow: '0 -2px 8px rgba(0,0,0,0.1)',
-            zIndex: 1000,
-            paddingLeft: '240px', // Отступ для бокового меню
-            '@media (max-width: 900px)': {
-              paddingLeft: 0, // На мобильных устройствах без отступа
-            },
-            backgroundColor: 'white',
-          }}>
-            <TablePagination
-              rowsPerPageOptions={[10, 25, 50]}
-              component="div"
-              count={filteredTransmittals.length}
-              rowsPerPage={25}
-              page={0}
-              onPageChange={() => {}}
-              onRowsPerPageChange={() => {}}
-              labelRowsPerPage={t('common.rows_per_page')}
-              labelDisplayedRows={({ from, to, count }) => 
-                `${from}-${to} ${t('common.of')} ${count !== -1 ? count : `${t('common.more_than')} ${to}`}`
-              }
-              sx={{
-                '& .MuiTablePagination-toolbar': {
-                  paddingLeft: 2,
-                  paddingRight: 2,
-                  flexWrap: 'wrap',
-                  justifyContent: 'flex-end', // Выравниваем пагинацию справа
-                },
-                '& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows': {
-                  fontSize: '0.875rem',
-                },
-              }}
-            />
-          </Box>
+        {/* Фиксированная пагинация без выбора кол-ва строк */}
+        {!transmittalStore.isLoading && (
+          <AppPagination
+            count={filteredTransmittals.length}
+            page={Math.min(page, totalPages)}
+            onPageChange={(_, value) => setPage(value)}
+            simple
+            rowsPerPage={rowsPerPage}
+            insetLeft={isMobile ? 0 : 240}
+            align="right"
+          />
         )}
       </Box>
+      <TransmittalViewDialog
+        open={viewerOpen}
+        transmittalId={selectedTransmittalId}
+        onClose={() => {
+          setViewerOpen(false);
+          setSelectedTransmittalId(null);
+        }}
+      />
+
+      <ConfirmDialog
+        open={deleteDialog.isOpen}
+        title={t('transmittals.delete_confirm_title') || 'Подтверждение удаления'}
+        content={t('transmittals.delete_confirm_content') || 'Удалить трансмиттал? Это действие можно отменить позже, так как используется мягкое удаление.'}
+        confirmText={t('transmittals.delete_confirm') || 'Удалить'}
+        cancelText={t('common.cancel')}
+        onConfirm={() => deleteDialog.confirmDelete(handleConfirmDelete)}
+        onClose={deleteDialog.closeDeleteDialog}
+        loading={deleteDialog.isLoading}
+      />
     </ProjectRequired>
   );
 });

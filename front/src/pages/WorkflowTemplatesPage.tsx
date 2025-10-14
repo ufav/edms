@@ -33,7 +33,7 @@ import {
   Tooltip,
   useTheme,
   useMediaQuery,
-  TablePagination,
+  Pagination,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -47,6 +47,7 @@ import {
 import { observer } from 'mobx-react-lite';
 import { workflowApi, type WorkflowTemplate, type WorkflowStep } from '../api/client';
 import { useTranslation } from 'react-i18next';
+import AppPagination from '../components/AppPagination';
 
 const WorkflowTemplatesPage = observer(() => {
   const { t } = useTranslation();
@@ -621,47 +622,16 @@ const WorkflowTemplatesPage = observer(() => {
         )}
       </Box>
 
-      {/* Фиксированная пагинация внизу экрана */}
-      {!isMobile && !loading && (
-        <Box sx={{
-          position: 'fixed',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          borderTop: '1px solid #e0e0e0',
-          boxShadow: '0 -2px 8px rgba(0,0,0,0.1)',
-          zIndex: 1000,
-          paddingLeft: '240px', // Отступ для бокового меню
-          '@media (max-width: 900px)': {
-            paddingLeft: 0, // На мобильных устройствах без отступа
-          },
-          backgroundColor: 'white',
-        }}>
-          <TablePagination
-            rowsPerPageOptions={[10, 25, 50]}
-            component="div"
-            count={templates.length}
-            rowsPerPage={25}
-            page={0}
-            onPageChange={() => {}}
-            onRowsPerPageChange={() => {}}
-            labelRowsPerPage="Строк на странице:"
-            labelDisplayedRows={({ from, to, count }) => 
-              `${from}-${to} из ${count !== -1 ? count : `больше чем ${to}`}`
-            }
-            sx={{
-              '& .MuiTablePagination-toolbar': {
-                paddingLeft: 2,
-                paddingRight: 2,
-                flexWrap: 'wrap',
-                justifyContent: 'flex-end', // Выравниваем пагинацию справа
-              },
-              '& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows': {
-                fontSize: '0.875rem',
-              },
-            }}
-          />
-        </Box>
+      {!loading && (
+        <AppPagination
+          count={templates.length}
+          page={1}
+          onPageChange={() => {}}
+          simple
+          rowsPerPage={25}
+          insetLeft={isMobile ? 0 : 240}
+          align="right"
+        />
       )}
 
       {/* Диалог создания/редактирования шаблона */}

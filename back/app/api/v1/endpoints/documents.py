@@ -20,6 +20,7 @@ from app.core.config import settings
 from app.models.user import User
 from app.models.document import Document, DocumentRevision
 from app.models.discipline import Discipline, DocumentType
+from app.models.discipline import Discipline, DocumentType
 from app.models.references import Language
 from app.models.project import ProjectDisciplineDocumentType, ProjectMember
 from app.services.auth import get_current_active_user
@@ -262,6 +263,17 @@ async def upload_document(
     db.commit()
     db.refresh(revision_row)
     
+    # Попытаемся получить DRS из project_discipline_document_types
+    drs_value = None
+    if document.project_id and document.discipline_id and document.document_type_id:
+        pddt = db.query(ProjectDisciplineDocumentType).filter(
+            ProjectDisciplineDocumentType.project_id == document.project_id,
+            ProjectDisciplineDocumentType.discipline_id == document.discipline_id,
+            ProjectDisciplineDocumentType.document_type_id == document.document_type_id,
+        ).first()
+        if pddt:
+            drs_value = pddt.drs
+
     return {
         "id": db_document.id,
         "title": db_document.title,
@@ -381,11 +393,30 @@ async def get_document(
     latest_revision = db.query(DocumentRevision).filter(
         DocumentRevision.document_id == document_id
     ).order_by(DocumentRevision.created_at.desc()).first()
+
+    # Получим связанные названия дисциплины и типа документа (если заданы)
+    discipline = None
+    doc_type = None
+    if document.discipline_id:
+        discipline = db.query(Discipline).filter(Discipline.id == document.discipline_id).first()
+    if document.document_type_id:
+        doc_type = db.query(DocumentType).filter(DocumentType.id == document.document_type_id).first()
+    
+    # Попытаемся получить DRS из project_discipline_document_types
+    drs_value = None
+    if document.project_id and document.discipline_id and document.document_type_id:
+        pddt = db.query(ProjectDisciplineDocumentType).filter(
+            ProjectDisciplineDocumentType.project_id == document.project_id,
+            ProjectDisciplineDocumentType.discipline_id == document.discipline_id,
+            ProjectDisciplineDocumentType.document_type_id == document.document_type_id,
+        ).first()
+        if pddt:
+            drs_value = pddt.drs
     
     return {
         "id": document.id,
         "title": document.title,
-        "description": document.description,
+        "title_native": document.title_native,
         "number": document.number,
         "file_name": latest_revision.file_name if latest_revision else None,
         "file_size": latest_revision.file_size if latest_revision else None,
@@ -393,15 +424,17 @@ async def get_document(
         "revision": latest_revision.number if latest_revision else "01",
         "revision_status_id": latest_revision.revision_status_id if latest_revision else None,
         "is_deleted": document.is_deleted,
-        "drs": None,  # DRS moved to project_discipline_document_types
+        "drs": drs_value,
         "project_id": document.project_id,
         "discipline_id": document.discipline_id,
+        "discipline_code": discipline.code if discipline else None,
+        "discipline_name": discipline.name if discipline else None,
         "document_type_id": document.document_type_id,
+        "document_type_code": doc_type.code if doc_type else None,
+        "document_type_name": doc_type.name if doc_type else None,
         "language_id": document.language_id,
-        "document_code": document.document_code,
-        "author": document.author,
+        # fields below may not exist in the current model; keep only existing ones
         "creation_date": document.creation_date,
-        "revision": latest_revision.number if latest_revision else "01",
         "sheet_number": document.sheet_number,
         "total_sheets": document.total_sheets,
         "scale": document.scale,
@@ -1106,7 +1139,6 @@ async def update_document(
     # 4. Участник проекта может редактировать только свои документы
     if not current_user.is_admin and document.created_by != current_user.id:
         # Проверяем, является ли пользователь создателем проекта
-        from app.models.project import Project
         project = db.query(Project).filter(Project.id == document.project_id).first()
         if not project or project.created_by != current_user.id:
             # Если пользователь не создатель проекта, проверяем права участника
