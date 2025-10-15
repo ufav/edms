@@ -20,13 +20,15 @@ class TransmittalCreate(BaseModel):
     transmittal_number: str
     title: str
     project_id: int
-    recipient_id: int
+    # New unified fields
+    direction: str | None = None  # 'out' | 'in'
+    counterparty_id: int | None = None
     revision_ids: List[int] = []  # Список ID ревизий для добавления в трансмиттал
 
 class TransmittalUpdate(BaseModel):
+    transmittal_number: str = None
     title: str = None
-    description: str = None
-    status: str = None
+    counterparty_id: int = None
 
 class TransmittalRevisionAdd(BaseModel):
     revision_ids: List[int]
@@ -65,7 +67,7 @@ async def get_transmittals(
     if project_id:
         query = query.filter(Transmittal.project_id == project_id)
     
-    transmittals = query.offset(skip).limit(limit).all()
+    transmittals = query.order_by(Transmittal.updated_at.desc()).offset(skip).limit(limit).all()
     
     return [
         {
@@ -75,12 +77,13 @@ async def get_transmittals(
             "description": transmittal.description,
             "project_id": transmittal.project_id,
             "sender_id": transmittal.sender_id,
-            "recipient_id": transmittal.recipient_id,
+            # New unified fields
+            "direction": transmittal.direction,
+            "counterparty_id": transmittal.counterparty_id,
+            "transmittal_date": transmittal.transmittal_date,
             "created_by": transmittal.created_by,
             "status": transmittal.status.name if transmittal.status else "draft",
             "status_id": transmittal.status_id,
-            "sent_date": transmittal.sent_date,
-            "received_date": transmittal.received_date,
             "created_at": transmittal.created_at,
             "updated_at": transmittal.updated_at
         }
@@ -102,7 +105,10 @@ async def create_transmittal(
         description=None,  # Убираем description
         project_id=transmittal_data.project_id,
         sender_id=None,  # sender_id заполняется только при отправке
-        recipient_id=transmittal_data.recipient_id,  # Используем переданный recipient_id
+        # Новые поля
+        direction=transmittal_data.direction,
+        counterparty_id=transmittal_data.counterparty_id,
+        transmittal_date=None,
         created_by=current_user.id,  # Кто создал трансмиттал
         status_id=1  # Статус draft (ID=1) по умолчанию
     )
@@ -133,10 +139,44 @@ async def create_transmittal(
         "description": db_transmittal.description,
         "project_id": db_transmittal.project_id,
         "sender_id": db_transmittal.sender_id,
-        "recipient_id": db_transmittal.recipient_id,
+        "direction": db_transmittal.direction,
+        "counterparty_id": db_transmittal.counterparty_id,
+        "transmittal_date": db_transmittal.transmittal_date,
+        "created_by": db_transmittal.created_by,
         "status": "draft",  # имя статуса, так как только что создано со status_id=1
         "status_id": db_transmittal.status_id,
         "created_at": db_transmittal.created_at
+    }
+
+@router.put("/{transmittal_id}", response_model=dict)
+async def update_transmittal(
+    transmittal_id: int,
+    transmittal_data: TransmittalUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Обновление трансмиттала"""
+    transmittal = db.query(Transmittal).filter(Transmittal.id == transmittal_id, Transmittal.is_deleted == 0).first()
+    if not transmittal:
+        raise HTTPException(status_code=404, detail="Трансмиттал не найден")
+    
+    # Обновляем только переданные поля
+    if transmittal_data.transmittal_number is not None:
+        transmittal.transmittal_number = transmittal_data.transmittal_number
+    if transmittal_data.title is not None:
+        transmittal.title = transmittal_data.title
+    if transmittal_data.counterparty_id is not None:
+        transmittal.counterparty_id = transmittal_data.counterparty_id
+    
+    db.commit()
+    db.refresh(transmittal)
+    
+    return {
+        "id": transmittal.id,
+        "transmittal_number": transmittal.transmittal_number,
+        "title": transmittal.title,
+        "counterparty_id": transmittal.counterparty_id,
+        "message": "Трансмиттал успешно обновлен"
     }
 
 @router.get("/{transmittal_id}", response_model=dict)
@@ -195,11 +235,12 @@ async def get_transmittal(
         "description": transmittal.description,
         "project_id": transmittal.project_id,
         "sender_id": transmittal.sender_id,
-        "recipient_id": transmittal.recipient_id,
+        "direction": transmittal.direction,
+        "counterparty_id": transmittal.counterparty_id,
+        "transmittal_date": transmittal.transmittal_date,
+        "created_by": transmittal.created_by,
         "status": transmittal.status.name if transmittal.status else "draft",
         "status_id": transmittal.status_id,
-        "sent_date": transmittal.sent_date,
-        "received_date": transmittal.received_date,
         "created_at": transmittal.created_at,
         "revisions": result
     }
@@ -419,9 +460,10 @@ async def send_transmittal(
         raise HTTPException(status_code=500, detail="Статус 'sent' не найден")
     
     transmittal.status_id = sent_status.id
-    transmittal.sent_date = datetime.utcnow()
+    # Новая модель дат/направления
+    transmittal.direction = "out"
+    transmittal.transmittal_date = datetime.utcnow()
     transmittal.sender_id = current_user.id  # Кто отправил
-    # received_date остается пустой для исходящих трансмитталов
     
     db.commit()
     db.refresh(transmittal)
@@ -450,8 +492,9 @@ async def receive_transmittal(
         raise HTTPException(status_code=500, detail="Статус 'received' не найден")
     
     transmittal.status_id = received_status.id
-    transmittal.received_date = datetime.utcnow()
-    # sent_date остается пустой для входящих трансмитталов
+    # Новая модель дат/направления
+    transmittal.direction = "in"
+    transmittal.transmittal_date = datetime.utcnow()
     
     db.commit()
     db.refresh(transmittal)

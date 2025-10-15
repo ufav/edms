@@ -108,7 +108,7 @@ export const TransmittalCartModal: React.FC<TransmittalCartModalProps> = observe
         }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
             <Typography variant="h6">
-              {t('transmittals.title')}
+              {t('transmittals.add_to_transmittal')}
             </Typography>
             <Chip 
               label={transmittalCartStore.selectedCount} 

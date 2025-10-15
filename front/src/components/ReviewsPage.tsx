@@ -49,7 +49,7 @@ const ReviewsPage: React.FC = observer(() => {
   const [filterProject, setFilterProject] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [page, setPage] = useState<number>(1);
-  const rowsPerPage = 25;
+  const rowsPerPage = 13;
 
   // Загружаем ревью при монтировании компонента
   useEffect(() => {

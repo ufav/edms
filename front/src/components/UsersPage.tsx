@@ -46,7 +46,7 @@ const UsersPage: React.FC = observer(() => {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [page, setPage] = useState<number>(1); // 1-based
-  const rowsPerPage = 25;
+  const rowsPerPage = 13;
 
   // Загружаем пользователей при монтировании компонента
   useEffect(() => {

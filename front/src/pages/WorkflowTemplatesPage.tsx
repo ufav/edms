@@ -628,7 +628,7 @@ const WorkflowTemplatesPage = observer(() => {
           page={1}
           onPageChange={() => {}}
           simple
-          rowsPerPage={25}
+          rowsPerPage={13}
           insetLeft={isMobile ? 0 : 240}
           align="right"
         />

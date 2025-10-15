@@ -1,13 +1,14 @@
 import React, { useEffect } from 'react';
-import { Dialog } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { observer } from 'mobx-react-lite';
+import { runInAction } from 'mobx';
 import { transmittalsApi, documentsApi } from '../../../api/client';
 import referenceDataStore from '../../../stores/ReferenceDataStore';
 import TransmittalDialog from './TransmittalDialog';
 import { transmittalStore } from '../../../stores/TransmittalStore';
-import { documentStore } from '../../../stores/DocumentStore';
 import { DocumentViewer } from '../../document';
+import { useTransmittalViewerState } from '../hooks/useTransmittalViewerState';
+import NotificationSnackbar from '../../NotificationSnackbar';
 
 interface TransmittalViewDialogProps {
   open: boolean;
@@ -20,7 +21,20 @@ const TransmittalViewDialog: React.FC<TransmittalViewDialogProps> = observer(({ 
   const [docViewerOpen, setDocViewerOpen] = React.useState(false);
   const [docViewerId, setDocViewerId] = React.useState<number | null>(null);
   const [docData, setDocData] = React.useState<any | null>(null);
-  const [docLoading, setDocLoading] = React.useState(false);
+
+  // Используем хук для редактирования
+  const transmittalState = useTransmittalViewerState({
+    transmittal: transmittalStore.selectedTransmittal,
+    transmittalId,
+    onSaveTransmittal: async (transmittalData) => {
+      if (transmittalId) {
+        await transmittalsApi.update(transmittalId, transmittalData);
+        // Перезагружаем данные трансмиттала
+        await transmittalStore.loadTransmittalDetails(transmittalId);
+      }
+    }
+  });
+
 
   useEffect(() => {
     const load = async () => {
@@ -35,33 +49,60 @@ const TransmittalViewDialog: React.FC<TransmittalViewDialogProps> = observer(({ 
   useEffect(() => {
     if (open) {
       // Если id поменялся — явно сбросим данные перед загрузкой (дублирует логику в сторе, но даёт мгновенный UI-эффект)
-      transmittalStore.selectedTransmittal = null as any;
-      transmittalStore.selectedRevisions = [] as any;
+      runInAction(() => {
+        transmittalStore.selectedTransmittal = null as any;
+        transmittalStore.selectedRevisions = [] as any;
+      });
     }
   }, [open, transmittalId]);
 
+  // Обработчики для редактирования
+  const handleEdit = () => {
+    transmittalState.startEditing();
+  };
+
+  const handleCancel = () => {
+    transmittalState.cancelEditing();
+  };
+
+  const handleSave = () => {
+    transmittalState.saveEditing();
+  };
+
+  const handleClose = () => {
+    transmittalState.cancelEditing();
+    transmittalState.hideNotification();
+    onClose();
+  };
+
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="xl" fullWidth PaperProps={{ sx: { height: '80vh', maxHeight: '800px' } }}>
+    <>
       <TransmittalDialog
         open={open}
-        onClose={onClose}
+        onClose={handleClose}
         readOnly
         initialData={{
-          transmittal_number: transmittalStore.selectedTransmittal?.transmittal_number,
-          title: transmittalStore.selectedTransmittal?.title,
-          recipient_id: transmittalStore.selectedTransmittal?.recipient_id,
-          status: transmittalStore.selectedTransmittal?.status,
+          transmittal_number: transmittalState.transmittalData.transmittal_number,
+          title: transmittalState.transmittalData.title,
+          direction: transmittalStore.selectedTransmittal?.direction || undefined,
+          counterparty_id: transmittalState.transmittalData.counterparty_id,
+          status: transmittalStore.selectedTransmittal?.status
         }}
+        isEditing={transmittalState.isEditing}
+        onUpdateTransmittalData={(field: string, value: any) => transmittalState.updateTransmittalData(field as keyof typeof transmittalState.transmittalData, value)}
+        onEdit={handleEdit}
+        onCancel={handleCancel}
+        onSave={handleSave}
+        hasChanges={transmittalState.hasChanges}
         revisions={transmittalStore.selectedRevisions}
+        isLoading={transmittalStore.detailsLoading}
         onOpenDocument={async (documentId) => {
           setDocViewerId(documentId);
-          setDocLoading(true);
           setDocData(null);
           try {
             const doc = await documentsApi.getById(documentId);
             setDocData(doc);
           } catch {}
-          setDocLoading(false);
           setDocViewerOpen(true);
         }}
         titleOverride={t('transmittals.view_title', { defaultValue: 'Просмотр трансмиттала' })}
@@ -78,10 +119,9 @@ const TransmittalViewDialog: React.FC<TransmittalViewDialogProps> = observer(({ 
           }
         }}
         formatDate={(date) => date}
-        isLoading={transmittalStore.detailsLoading}
-        error={transmittalStore.detailsError}
       />
-      <DocumentViewer
+    
+    <DocumentViewer
         open={docViewerOpen}
         document={docData}
         documentId={docViewerId}
@@ -97,7 +137,15 @@ const TransmittalViewDialog: React.FC<TransmittalViewDialogProps> = observer(({ 
         onSaveDocument={undefined}
         onOpenComments={undefined}
       />
-    </Dialog>
+      
+      {/* Уведомления */}
+      <NotificationSnackbar
+        open={transmittalState.notificationOpen}
+        message={transmittalState.notificationMessage}
+        severity={transmittalState.notificationSeverity}
+        onClose={transmittalState.hideNotification}
+      />
+    </>
   );
 });
 

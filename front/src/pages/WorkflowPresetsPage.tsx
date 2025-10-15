@@ -689,7 +689,7 @@ const WorkflowPresetsPage: React.FC = observer(() => {
           page={1}
           onPageChange={() => {}}
           simple
-          rowsPerPage={25}
+          rowsPerPage={13}
           insetLeft={240}
           align="right"
         />

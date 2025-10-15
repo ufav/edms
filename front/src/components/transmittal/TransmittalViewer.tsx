@@ -77,15 +77,15 @@ const TransmittalViewer: React.FC<TransmittalViewerProps> = observer(({ open, tr
       </Box>
       <Box>
         <Typography variant="subtitle2" color="text.secondary">{t('transmittals.columns.recipient')}</Typography>
-        <Typography variant="body1">{transmittal?.recipient_id ? referenceDataStore.getCompanyName(transmittal.recipient_id) : '-'}</Typography>
+        <Typography variant="body1">{transmittal?.counterparty_id ? referenceDataStore.getCompanyName(transmittal.counterparty_id) : '-'}</Typography>
       </Box>
       <Box>
         <Typography variant="subtitle2" color="text.secondary">{t('transmittals.columns.sent')}</Typography>
-        <Typography variant="body1">{transmittalStore.formatDate(transmittal?.sent_date || null)}</Typography>
+        <Typography variant="body1">{transmittalStore.formatDate(transmittal?.transmittal_date || null)}</Typography>
       </Box>
       <Box>
         <Typography variant="subtitle2" color="text.secondary">{t('transmittals.columns.received')}</Typography>
-        <Typography variant="body1">{transmittalStore.formatDate(transmittal?.received_date || null)}</Typography>
+        <Typography variant="body1">{transmittalStore.formatDate(transmittal?.transmittal_date || null)}</Typography>
       </Box>
       <Box>
         <Typography variant="subtitle2" color="text.secondary">{t('transmittals.columns.created_by')}</Typography>

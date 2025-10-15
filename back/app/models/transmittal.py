@@ -16,11 +16,12 @@ class Transmittal(Base):
     description = Column(Text)
     project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"))
     sender_id = Column(Integer, ForeignKey("users.id"))
-    recipient_id = Column(Integer, ForeignKey("companies.id"))
+    # New unified fields
+    direction = Column(String(10))  # 'out' | 'in'
+    counterparty_id = Column(Integer, ForeignKey("companies.id"))
+    transmittal_date = Column(DateTime(timezone=True))
     created_by = Column(Integer, ForeignKey("users.id"))
     status_id = Column(Integer, ForeignKey("transmittal_statuses.id"), default=1)  # 1 = draft
-    sent_date = Column(DateTime(timezone=True))
-    received_date = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     is_deleted = Column(Integer, default=0, nullable=False)  # 0 - не удален, 1 - удален

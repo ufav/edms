@@ -8,11 +8,12 @@ export interface Transmittal {
   description: string;
   project_id: number;
   sender_id: number | null;
-  recipient_id: number;
+  // New unified fields
+  direction?: 'out' | 'in' | null;
+  counterparty_id?: number | null;
+  transmittal_date?: string | null;
   created_by: number;
   status: string;
-  sent_date: string | null;
-  received_date: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -48,21 +49,23 @@ class TransmittalStore {
       const apiTransmittals = await transmittalsApi.getAll(projectId);
       
       runInAction(() => {
-        this.transmittals = apiTransmittals.map(apiTransmittal => ({
-          id: apiTransmittal.id,
-          transmittal_number: apiTransmittal.transmittal_number,
-          title: apiTransmittal.title,
-          description: apiTransmittal.description,
-          project_id: apiTransmittal.project_id,
-          sender_id: apiTransmittal.sender_id,
-          recipient_id: apiTransmittal.recipient_id,
-          created_by: apiTransmittal.created_by,
-          status: apiTransmittal.status,
-          sent_date: apiTransmittal.sent_date,
-          received_date: apiTransmittal.received_date,
-          created_at: apiTransmittal.created_at,
-          updated_at: apiTransmittal.updated_at
-        }));
+        this.transmittals = apiTransmittals
+          .map(apiTransmittal => ({
+            id: apiTransmittal.id,
+            transmittal_number: apiTransmittal.transmittal_number,
+            title: apiTransmittal.title,
+            description: apiTransmittal.description,
+            project_id: apiTransmittal.project_id,
+            sender_id: apiTransmittal.sender_id,
+            direction: apiTransmittal.direction ?? null,
+            counterparty_id: apiTransmittal.counterparty_id ?? null,
+            transmittal_date: apiTransmittal.transmittal_date ?? null,
+            created_by: apiTransmittal.created_by,
+            status: apiTransmittal.status,
+            created_at: apiTransmittal.created_at,
+            updated_at: apiTransmittal.updated_at
+          }))
+          .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
         this.loadedProjectId = projectId || null;
       });
     } catch (error) {
@@ -96,18 +99,18 @@ class TransmittalStore {
         // Нормализуем в Transmittal (части могут отсутствовать в ответе)
         this.selectedTransmittal = {
           id: details.id,
-          transmittal_number: (details as any).transmittal_number,
-          title: (details as any).title,
-          description: (details as any).description,
-          project_id: (details as any).project_id,
-          sender_id: (details as any).sender_id,
-          recipient_id: (details as any).recipient_id,
-          created_by: (details as any).created_by ?? 0,
-          status: (details as any).status ?? 'draft',
-          sent_date: (details as any).sent_date ?? null,
-          received_date: (details as any).received_date ?? null,
-          created_at: (details as any).created_at ?? '',
-          updated_at: (details as any).updated_at ?? '',
+          transmittal_number: details.transmittal_number,
+          title: details.title,
+          description: details.description,
+          project_id: details.project_id,
+          sender_id: details.sender_id,
+          direction: details.direction ?? null,
+          counterparty_id: details.counterparty_id ?? null,
+          transmittal_date: details.transmittal_date ?? null,
+          created_by: details.created_by ?? 0,
+          status: details.status ?? 'draft',
+          created_at: details.created_at ?? '',
+          updated_at: details.updated_at ?? '',
         } as any;
         this.selectedRevisions = (details as any).revisions || [];
       });

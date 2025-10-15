@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -12,7 +12,6 @@ import {
   Table,
   TableBody,
   TableCell,
-  TableContainer,
   TableHead,
   TableRow,
   Paper,
@@ -25,6 +24,7 @@ import {
   MenuItem,
   Grid,
   Chip,
+  Skeleton,
 } from '@mui/material';
 import {
   Delete as DeleteIcon,
@@ -44,11 +44,14 @@ import {
 import { useTranslation } from 'react-i18next';
 import { observer } from 'mobx-react-lite';
 import { projectStore } from '../../../stores/ProjectStore';
+import referenceDataStore from '../../../stores/ReferenceDataStore';
+import type { ProjectParticipant } from '../../../api/client';
 
 export interface TransmittalData {
   transmittal_number: string;
   title: string;
-  recipient_id?: number;
+  direction?: 'out' | 'in';
+  counterparty_id?: number;
 }
 
 export interface TransmittalDialogProps {
@@ -62,8 +65,15 @@ export interface TransmittalDialogProps {
   // Просмотр (readOnly)
   readOnly?: boolean;
   revisions?: any[];
-  initialData?: Partial<TransmittalData> & { recipient_id?: number; status?: string };
+  initialData?: Partial<TransmittalData> & { status?: string };
   titleOverride?: string;
+  // Редактирование
+  isEditing?: boolean;
+  onUpdateTransmittalData?: (field: string, value: any) => void;
+  onEdit?: () => void;
+  onCancel?: () => void;
+  onSave?: () => void;
+  hasChanges?: boolean;
   // Утилиты
   formatFileSize: (bytes: number) => string;
   formatDate: (date: string) => string;
@@ -83,6 +93,12 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
   revisions,
   initialData,
   titleOverride,
+  isEditing = false,
+  onUpdateTransmittalData,
+  onEdit,
+  onCancel,
+  onSave,
+  hasChanges = false,
   formatFileSize,
   isLoading = false,
   error = null,
@@ -161,14 +177,22 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
   const [formData, setFormData] = useState<TransmittalData>({
     transmittal_number: '',
     title: '',
-    recipient_id: undefined,
+    direction: undefined,
+    counterparty_id: undefined,
   });
 
   // Состояние валидации
   const [validationErrors, setValidationErrors] = useState<{
     transmittal_number?: boolean;
-    recipient_id?: boolean;
+    direction?: boolean;
+    counterparty_id?: boolean;
   }>({});
+
+  // Мемоизируем функцию для получения имени пользователя
+  const referenceCreatedByName = useCallback((userId?: number) => {
+    if (!userId) return '';
+    try { return referenceDataStore.getUserName(userId) || `User ${userId}`; } catch { return `User ${userId}`; }
+  }, []);
 
 
   // Сброс формы при открытии/закрытии диалога
@@ -178,50 +202,81 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
         setFormData({
           transmittal_number: initialData.transmittal_number || '',
           title: initialData.title || '',
-          recipient_id: initialData.recipient_id,
+          direction: initialData.direction,
+          counterparty_id: (initialData as any).counterparty_id,
         });
       } else {
         setFormData({
           transmittal_number: '',
           title: '',
-          recipient_id: undefined,
+          direction: undefined,
+          counterparty_id: undefined,
         });
       }
     }
-  }, [open, readOnly, initialData?.transmittal_number, initialData?.title, initialData?.recipient_id]);
+  }, [open, readOnly, initialData?.transmittal_number, initialData?.title, (initialData as any)?.direction, (initialData as any)?.counterparty_id]);
 
   // Функция валидации
   const validateForm = () => {
-    const errors: { transmittal_number?: boolean; recipient_id?: boolean } = {};
+    const errors: { transmittal_number?: boolean; direction?: boolean; counterparty_id?: boolean } = {};
     
     if (!formData.transmittal_number?.trim()) {
       errors.transmittal_number = true;
     }
-    if (!formData.recipient_id) {
-      errors.recipient_id = true;
+    if (!formData.direction) {
+      errors.direction = true;
+    }
+    if (!formData.counterparty_id) {
+      errors.counterparty_id = true;
     }
     
     setValidationErrors(errors);
     return Object.keys(errors).length === 0;
   };
 
+  // Загружаем справочные данные при открытии диалога
+  useEffect(() => {
+    if (open) {
+      // Загружаем справочные данные для отображения названий компаний и пользователей
+      referenceDataStore.loadAllReferenceData();
+    }
+  }, [open]);
+
   // Очищаем ошибки валидации при изменении полей
   useEffect(() => {
     if (Object.keys(validationErrors).length > 0) {
       setValidationErrors({});
     }
-  }, [formData.transmittal_number, formData.recipient_id]);
+  }, [formData.transmittal_number, formData.direction, formData.counterparty_id]);
+
 
 
   // Обработчики
-  const handleInputChange = (field: keyof TransmittalData) => (
+  const handleInputChange = useCallback((field: keyof TransmittalData) => (
     event: React.ChangeEvent<HTMLInputElement>
   ) => {
     setFormData(prev => ({
       ...prev,
       [field]: event.target.value
     }));
-  };
+  }, []);
+
+  // Простые обработчики без отслеживания каждого символа
+  const handleTransmittalNumberChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    handleInputChange('transmittal_number')(e);
+    // Просто отмечаем, что есть изменения - не отслеживаем каждый символ
+    if (isEditing && onUpdateTransmittalData) {
+      onUpdateTransmittalData('transmittal_number', e.target.value);
+    }
+  }, [handleInputChange, isEditing, onUpdateTransmittalData]);
+
+  const handleTitleChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    handleInputChange('title')(e);
+    // Просто отмечаем, что есть изменения - не отслеживаем каждый символ
+    if (isEditing && onUpdateTransmittalData) {
+      onUpdateTransmittalData('title', e.target.value);
+    }
+  }, [handleInputChange, isEditing, onUpdateTransmittalData]);
 
   const handleCreate = async () => {
     console.log('handleCreate called');
@@ -231,7 +286,6 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
     }
 
     try {
-      console.log('Calling onCreateTransmittal with:', formData);
       if (onCreateTransmittal) {
         await onCreateTransmittal(formData);
       }
@@ -269,11 +323,21 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
         }}
       >
       <DialogTitle>
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          {!readOnly && <SendIcon color="primary" />}
-          <Typography variant="h6">
-            {titleOverride || (readOnly ? t('transmittals.view_title', { defaultValue: 'Просмотр трансмиттала' }) : t('transmittals.create'))}
-          </Typography>
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            {!readOnly && <SendIcon color="primary" />}
+            <Typography variant="h6">
+              {readOnly
+                ? `${t('transmittals.view_title', { defaultValue: 'Transmittal Details' })}: ${formData.transmittal_number || initialData?.transmittal_number || ''}`
+                : (titleOverride || t('transmittals.create'))}
+            </Typography>
+          </Box>
+          {readOnly && (initialData as any)?.created_at && (
+            <Typography variant="body2" color="text.secondary">
+              {t('document.created')} {new Date((initialData as any).created_at).toLocaleDateString('ru-RU')}
+              {(initialData as any).created_by ? ` ${t('document.created_by')} ${referenceCreatedByName((initialData as any).created_by)}` : ''}
+            </Typography>
+          )}
         </Box>
       </DialogTitle>
 
@@ -281,75 +345,126 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
         {/* Общая информация */}
         <Box sx={{ mb: 3 }}>
             <Grid container spacing={2}>
+            {/* Первая строка */}
             <Grid item xs={3}>
-              <TextField
-                label={t('transmittals.transmittal_number')}
-                value={formData.transmittal_number}
-                onChange={handleInputChange('transmittal_number')}
-                variant="standard"
-                fullWidth
-                required
-                disabled={isLoading || readOnly}
-                error={validationErrors.transmittal_number}
-                helperText={validationErrors.transmittal_number ? t('transmittals.transmittal_number_required') : ''}
-              />
-            </Grid>
-            {readOnly && (
-              <Grid item xs={1.5 as any}>
+              {isLoading && readOnly ? (
+                <Skeleton variant="rectangular" height={56} />
+              ) : (
                 <TextField
-                  label={t('common.status')}
-                  value={(initialData as any)?.status ? t(`transStatus.${(initialData as any).status}`) : t('transStatus.draft')}
+                  label={t('transmittals.transmittal_number')}
+                  value={formData.transmittal_number}
+                  onChange={handleTransmittalNumberChange}
                   variant="standard"
                   fullWidth
-                  disabled
+                  required
+                  disabled={isLoading || (readOnly && !isEditing)}
+                  error={validationErrors.transmittal_number}
+                  helperText={validationErrors.transmittal_number ? t('transmittals.transmittal_number_required') : ''}
                 />
-              </Grid>
-            )}
+              )}
+            </Grid>
+            <Grid item xs={readOnly ? (1.5 as any) : 0} sx={{ display: readOnly ? 'block' : 'none' }}>
+              <TextField
+                label={t('common.status')}
+                value={(initialData as any)?.status ? t(`transStatus.${(initialData as any).status}`) : t('transStatus.draft')}
+                variant="standard"
+                fullWidth
+                disabled
+              />
+            </Grid>
 
             <Grid item xs={readOnly ? (7.5 as any) : 9}>
               {/* Пустое место */}
             </Grid>
             
             <Grid item xs={3}>
-              <FormControl variant="standard" fullWidth required error={validationErrors.recipient_id}>
-                <InputLabel>{t('transmittals.recipient_company')}</InputLabel>
-                <Select
-                  value={formData.recipient_id || ''}
-                  onChange={(e) => {
-                    setFormData(prev => ({ 
-                      ...prev, 
-                      recipient_id: e.target.value as number
-                    }));
-                  }}
-                  disabled={isLoading || readOnly}
-                >
-                  {projectStore.selectedProject?.participants?.map((participant) => (
-                    <MenuItem key={participant.id} value={participant.company_id}>
-                      {participant.company?.name || `Company ${participant.company_id}`}
-                    </MenuItem>
-                  ))}
-                </Select>
-                {validationErrors.recipient_id && (
-                  <Typography variant="caption" color="error" sx={{ fontSize: '0.75rem', mt: 0.5 }}>
-                    {t('transmittals.recipient_company_required')}
-                  </Typography>
-                )}
-              </FormControl>
+              {isLoading && readOnly ? (
+                <Skeleton variant="rectangular" height={56} />
+              ) : (
+                <TextField
+                  label={t('transmittals.columns.direction')}
+                  value={formData.direction === 'out' ? t('transmittals.direction.out') : 
+                         formData.direction === 'in' ? t('transmittals.direction.in') : ''}
+                  variant="standard"
+                  fullWidth
+                  required
+                  disabled={true}
+                  error={validationErrors.direction}
+                  helperText={validationErrors.direction ? t('common.required', { defaultValue: 'Обязательно' }) : ''}
+                />
+              )}
+            </Grid>
+            
+            {/* Вторая строка */}
+            <Grid item xs={3}>
+              {isLoading && readOnly ? (
+                <Skeleton variant="rectangular" height={56} />
+              ) : isEditing ? (
+                <FormControl variant="standard" fullWidth required error={validationErrors.counterparty_id}>
+                  <InputLabel>{t('transmittals.recipient_company')}</InputLabel>
+                  <Select
+                    value={formData.counterparty_id || ''}
+                    onChange={(e) => {
+                      setFormData(prev => ({ 
+                        ...prev, 
+                        counterparty_id: e.target.value as number
+                      }));
+                      if (onUpdateTransmittalData) {
+                        onUpdateTransmittalData('counterparty_id', e.target.value);
+                      }
+                    }}
+                    disabled={isLoading}
+                  >
+                    {projectStore.selectedProject?.participants?.length ? (
+                      projectStore.selectedProject.participants.map((participant: ProjectParticipant) => (
+                        <MenuItem key={participant.id} value={participant.company_id}>
+                          {referenceDataStore.getCompanyName(participant.company_id)}
+                        </MenuItem>
+                      ))
+                    ) : (
+                      <MenuItem disabled>
+                        {t('transmittals.no_participants')}
+                      </MenuItem>
+                    )}
+                  </Select>
+                  {validationErrors.counterparty_id && (
+                    <Typography variant="caption" color="error" sx={{ fontSize: '0.75rem', mt: 0.5 }}>
+                      {t('transmittals.recipient_company_required')}
+                    </Typography>
+                  )}
+                </FormControl>
+              ) : (
+                <TextField
+                  label={t('transmittals.recipient_company')}
+                  value={referenceDataStore.getCompanyName(formData.counterparty_id || 0)}
+                  variant="standard"
+                  fullWidth
+                  required
+                  disabled={true}
+                  error={validationErrors.counterparty_id}
+                  helperText={validationErrors.counterparty_id ? t('transmittals.recipient_company_required') : ''}
+                />
+              )}
             </Grid>
             
             <Grid item xs={9}>
               {/* Пустое место */}
             </Grid>
             
+            {/* Третья строка */}
             <Grid item xs={6}>
-              <TextField
-                label={t('transmittals.title')}
-                value={formData.title}
-                onChange={handleInputChange('title')}
-                variant="standard"
-                fullWidth
-                disabled={isLoading || readOnly}
-              />
+              {isLoading && readOnly ? (
+                <Skeleton variant="rectangular" height={56} />
+              ) : (
+                <TextField
+                  label={t('transmittals.title')}
+                  value={formData.title}
+                  onChange={handleTitleChange}
+                  variant="standard"
+                  fullWidth
+                  disabled={isLoading || (readOnly && !isEditing)}
+                />
+              )}
             </Grid>
             
             <Grid item xs={6}>
@@ -362,34 +477,42 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
         <Divider sx={{ my: 2 }} />
 
         {/* Таблица документов */}
-        <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
-            <Typography variant="h6">
-              {t('transmittals.documents')} ({selectedRevisions.length})
-            </Typography>
-          </Box>
-
+        <Box sx={{ flexGrow: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
           {error && (
             <Alert severity="error" sx={{ mb: 2 }}>
               {error}
             </Alert>
           )}
 
-          {(readOnly ? (revisions?.length || 0) === 0 : selectedRevisions.length === 0) ? (
+          {/* Заголовок таблицы */}
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+            <Typography variant="h6">
+              {t('transmittals.documents')} ({readOnly ? (revisions?.length || 0) : selectedRevisions.length})
+            </Typography>
+          </Box>
+
+          {/* Таблица с единой сеткой */}
+          <Paper sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
             <Box sx={{ 
-              flex: 1,
-              display: 'flex', 
-              alignItems: 'center', 
-              justifyContent: 'center',
-              color: 'text.secondary'
+              flexGrow: 1, 
+              maxHeight: '400px', 
+              overflow: 'auto',
+              '&::-webkit-scrollbar': {
+                width: '8px',
+              },
+              '&::-webkit-scrollbar-track': {
+                background: '#f1f1f1',
+                borderRadius: '4px',
+              },
+              '&::-webkit-scrollbar-thumb': {
+                background: '#c1c1c1',
+                borderRadius: '4px',
+                '&:hover': {
+                  background: '#a8a8a8',
+                },
+              },
             }}>
-              <Typography variant="body2">
-                {t('transmittals.no_documents_selected')}
-              </Typography>
-            </Box>
-          ) : (
-            <TableContainer component={Paper} sx={{ flex: 1, overflow: 'auto' }}>
-              <Table stickyHeader size="small">
+              <Table size="small" stickyHeader>
                 <TableHead>
                   <TableRow>
                     <TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>
@@ -404,14 +527,12 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
                     <TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>
                       {t('transmittals.columns.file_size')}
                     </TableCell>
-                     <TableCell 
+                    <TableCell 
                       sx={{ 
                         position: 'sticky', 
                         right: 0, 
                         backgroundColor: 'background.paper',
                         zIndex: 2,
-                        width: '80px',
-                        minWidth: '80px',
                         fontWeight: 'bold',
                         fontSize: '0.875rem'
                       }}
@@ -421,10 +542,46 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {(readOnly ? (revisions || []) : selectedRevisions).map((revision: any) => {
+                  {isLoading ? (
+                    // Скелетон для загрузки
+                    Array.from({ length: 3 }).map((_, index) => (
+                      <TableRow key={`skeleton-${index}`}>
+                        <TableCell><Skeleton variant="text" width="80%" /></TableCell>
+                        <TableCell><Skeleton variant="rectangular" width={60} height={24} /></TableCell>
+                        <TableCell>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Skeleton variant="circular" width={24} height={24} />
+                            <Skeleton variant="text" width="60%" />
+                          </Box>
+                        </TableCell>
+                        <TableCell><Skeleton variant="text" width="40%" /></TableCell>
+                        <TableCell><Skeleton variant="circular" width={32} height={32} /></TableCell>
+                      </TableRow>
+                    ))
+                  ) : (readOnly ? (revisions?.length || 0) === 0 : selectedRevisions.length === 0) ? (
+                    <TableRow>
+                      <TableCell colSpan={5} sx={{ textAlign: 'center', py: 4 }}>
+                        <Typography variant="body2" color="text.secondary">
+                          {t('transmittals.no_documents_selected')}
+                        </Typography>
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    (readOnly ? (revisions || []) : selectedRevisions).map((revision: any) => {
                     const fileTypeInfo = getFileTypeInfo(revision.file_type || '', revision.file_name);
                     return (
-                      <TableRow key={revision.id} sx={{ '& .MuiTableCell-root': { padding: '6px 16px' } }}>
+                      <TableRow 
+                        key={revision.id} 
+                        sx={{ 
+                          '& .MuiTableCell-root': { padding: '6px 16px' },
+                          '&:hover': {
+                            backgroundColor: 'rgba(0, 0, 0, 0.04) !important',
+                            '& .MuiTableCell-root': {
+                              backgroundColor: 'rgba(0, 0, 0, 0.04) !important'
+                            }
+                          }
+                        }}
+                      >
                         <TableCell>
                           <Typography 
                             variant="body2" 
@@ -467,8 +624,6 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
                             right: 0, 
                             backgroundColor: 'background.paper',
                             zIndex: 1,
-                            width: '80px',
-                            minWidth: '80px',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'flex-start'
@@ -490,22 +645,24 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
                         </TableCell>
                       </TableRow>
                     );
-                  })}
+                  })
+                  )}
                 </TableBody>
               </Table>
-            </TableContainer>
-          )}
+            </Box>
+          </Paper>
         </Box>
       </DialogContent>
 
-      <DialogActions sx={{ p: 2, borderTop: 1, borderColor: 'divider' }}>
-        <Button 
-          onClick={handleClose} 
-          disabled={isLoading}
-        >
-          {readOnly ? t('common.close') : t('common.cancel')}
-        </Button>
-        {!readOnly && (
+      {/* DialogActions для создания трансмитталов */}
+      {!readOnly && (
+        <DialogActions sx={{ p: 2, borderTop: 1, borderColor: 'divider' }}>
+          <Button 
+            onClick={handleClose} 
+            disabled={isLoading}
+          >
+            {t('common.cancel')}
+          </Button>
           <Button
             onClick={handleCreate}
             variant="contained"
@@ -514,8 +671,32 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
           >
             {isLoading ? t('common.creating') : t('transmittals.create')}
           </Button>
-        )}
-      </DialogActions>
+        </DialogActions>
+      )}
+      
+      {/* DialogActions для просмотра трансмитталов */}
+      {readOnly && (
+        <DialogActions sx={{ p: 2, borderTop: 1, borderColor: 'divider' }}>
+          <Button onClick={handleClose}>{t('common.close')}</Button>
+          {isEditing ? (
+            <>
+              <Button onClick={onCancel}>{t('common.cancel')}</Button>
+              <Button 
+                onClick={onSave} 
+                variant="contained"
+                disabled={!hasChanges}
+              >
+                {t('common.save')}
+              </Button>
+            </>
+          ) : (
+            <Button onClick={onEdit} variant="contained">
+              {t('common.edit')}
+            </Button>
+          )}
+        </DialogActions>
+      )}
+      
       </Dialog>
     </>
   );

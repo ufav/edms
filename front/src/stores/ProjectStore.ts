@@ -1,5 +1,6 @@
 import { makeAutoObservable, runInAction } from 'mobx';
 import { projectsApi } from '../api/client';
+import type { ProjectParticipant } from '../api/client';
 
 export interface Project {
   id: number;
@@ -16,20 +17,7 @@ export interface Project {
   participants?: ProjectParticipant[];
 }
 
-export interface ProjectParticipant {
-  id: number;
-  company_id: number;
-  company?: {
-    id: number;
-    name: string;
-    name_native?: string;
-  };
-  contact_id?: number;
-  company_role_id?: number;
-  is_primary: boolean;
-  notes?: string;
-  created_at: string;
-}
+// Используем интерфейс из API
 
 class ProjectStore {
   projects: Project[] = [];

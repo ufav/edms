@@ -324,13 +324,20 @@ export interface Transmittal {
   description: string;
   project_id: number;
   sender_id: number | null;
-  recipient_id: number;
+  // New unified fields
+  direction?: 'out' | 'in' | null;
+  counterparty_id?: number | null;
+  transmittal_date?: string | null;
   created_by: number;
   status: string;
-  sent_date: string | null;
-  received_date: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface TransmittalUpdate {
+  transmittal_number?: string;
+  title?: string;
+  counterparty_id?: number;
 }
 
 export interface User {
@@ -801,25 +808,20 @@ export const transmittalsApi = {
   },
 
   // Обновить трансмиттал
-  update: async (id: number, transmittalData: Partial<Transmittal>): Promise<Transmittal> => {
+  update: async (id: number, transmittalData: TransmittalUpdate): Promise<Transmittal> => {
     const response = await apiClient.put(`/transmittals/${id}`, transmittalData);
     return response.data;
   },
 
-  // Удалить трансмиттал
-  delete: async (id: number): Promise<void> => {
-    await apiClient.delete(`/transmittals/${id}`);
-  },
-
   // Отправить трансмиттал
   send: async (id: number): Promise<Transmittal> => {
-    const response = await apiClient.post(`/transmittals/${id}/send`);
+    const response = await apiClient.put(`/transmittals/${id}/send`);
     return response.data;
   },
 
   // Подтвердить получение трансмиттала
   receive: async (id: number): Promise<Transmittal> => {
-    const response = await apiClient.post(`/transmittals/${id}/receive`);
+    const response = await apiClient.put(`/transmittals/${id}/receive`);
     return response.data;
   },
 
