@@ -31,6 +31,7 @@ import {
   Description as DetailsIcon,
   Delete as DeleteIcon,
   CheckCircle as CheckCircleIcon,
+  UploadFile as UploadFileIcon,
 } from '@mui/icons-material';
 import { observer } from 'mobx-react-lite';
 import { projectStore } from '../stores/ProjectStore';
@@ -41,11 +42,13 @@ import TransmittalViewDialog from './transmittal/components/TransmittalViewDialo
 import { TransmittalSettingsDialog } from './transmittal/components/TransmittalSettingsDialog';
 import { TransmittalFilters } from './transmittal/components/TransmittalFilters';
 import { TransmittalTable } from './transmittal/components/TransmittalTable';
+import TransmittalImportDialog from './transmittal/components/TransmittalImportDialog';
 import { useTransmittalSettings } from './transmittal/hooks/useTransmittalSettings';
 import { useTranslation } from 'react-i18next';
 import { useCurrentUser } from '../hooks/useCurrentUser';
 import ConfirmDialog from './ConfirmDialog';
 import AppPagination from './AppPagination';
+import NotificationSnackbar from './NotificationSnackbar';
 import { useDeleteDialog } from '../hooks/useDeleteDialog';
 import { transmittalsApi } from '../api/client';
 
@@ -59,6 +62,16 @@ const TransmittalsPage: React.FC = observer(() => {
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [viewerOpen, setViewerOpen] = useState(false);
   const [selectedTransmittalId, setSelectedTransmittalId] = useState<number | null>(null);
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [notification, setNotification] = useState<{
+    open: boolean;
+    message: string;
+    severity: 'success' | 'error' | 'warning' | 'info';
+  }>({
+    open: false,
+    message: '',
+    severity: 'success'
+  });
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const deleteDialog = useDeleteDialog();
   const [page, setPage] = useState<number>(1); // 1-based for MUI Pagination
@@ -139,6 +152,153 @@ const TransmittalsPage: React.FC = observer(() => {
     }
   };
 
+  const handleImportSuccess = async (result: any) => {
+    // Обновляем список трансмитталов после успешного импорта
+    if (projectStore.hasSelectedProject) {
+      await transmittalStore.loadTransmittals(projectStore.selectedProject!.id, true);
+    } else {
+      await transmittalStore.loadTransmittals(undefined, true);
+    }
+    
+    // Формируем сообщение об успешном импорте
+    let message = t('transmittals.import_success', { number: result.transmittal_number });
+    
+    // Если есть несуществующие документы, добавляем информацию о них
+    if (result.missing_documents && result.missing_documents.length > 0) {
+      const missingDocs = result.missing_documents.join(', ');
+      message += `\n\n${t('transmittals.import_missing_documents', { documents: missingDocs })}`;
+    }
+    
+    // Показываем уведомление об успешном импорте
+    setNotification({
+      open: true,
+      message: message,
+      severity: result.missing_documents && result.missing_documents.length > 0 ? 'warning' : 'success'
+    });
+    
+    console.log('Трансмиттал успешно импортирован:', result);
+  };
+
+  const handleNotificationClose = () => {
+    setNotification(prev => ({ ...prev, open: false }));
+  };
+
+  const handleImportError = (error: string) => {
+    console.log('Import error received:', error); // Для отладки
+    console.log('Error starts with WORKSHEET_NOT_FOUND:', error.startsWith('WORKSHEET_NOT_FOUND:')); // Для отладки
+    
+    // Обрабатываем коды ошибок от бэкенда
+    if (error.startsWith('IMPORT_DUPLICATE:')) {
+      const transmittalNumber = error.split(':')[1];
+      setNotification({
+        open: true,
+        message: t('transmittals.import_duplicate', { number: transmittalNumber }),
+        severity: 'error'
+      });
+    }
+    else if (error.startsWith('IMPORT_SETTINGS_NOT_FOUND:')) {
+      const companyName = error.split(':')[1];
+      setNotification({
+        open: true,
+        message: t('transmittals.import_settings_not_found', { company: companyName }),
+        severity: 'error'
+      });
+    }
+    else if (error.startsWith('IMPORT_METADATA_NOT_FOUND:')) {
+      const fields = error.split(':')[1];
+      setNotification({
+        open: true,
+        message: t('transmittals.import_metadata_not_found', { fields: fields }),
+        severity: 'error'
+      });
+    }
+    else if (error.startsWith('IMPORT_TABLE_NOT_FOUND:')) {
+      const columns = error.split(':')[1];
+      setNotification({
+        open: true,
+        message: t('transmittals.import_table_not_found', { columns: columns }),
+        severity: 'error'
+      });
+    }
+    else if (error.startsWith('IMPORT_GENERAL_ERROR:')) {
+      const details = error.split(':')[1];
+      setNotification({
+        open: true,
+        message: t('transmittals.import_general_error', { details: details }),
+        severity: 'error'
+      });
+    }
+    else if (error.startsWith('WORKSHEET_NOT_FOUND:')) {
+      const sheet = error.split(':')[1];
+      setNotification({
+        open: true,
+        message: t('transmittals.import_worksheet_not_found', { sheet: sheet }),
+        severity: 'error'
+      });
+    }
+    else if (error.startsWith('EXCEL_READ_ERROR:')) {
+      const details = error.split(':')[1];
+      setNotification({
+        open: true,
+        message: t('transmittals.import_excel_read_error', { details: details }),
+        severity: 'error'
+      });
+    }
+    else if (error.startsWith('IMPORT_MISSING_DOCUMENTS:')) {
+      const documents = error.split(':')[1];
+      setNotification({
+        open: true,
+        message: t('transmittals.import_missing_documents', { documents: documents }),
+        severity: 'error'
+      });
+    }
+    else if (error.startsWith('IMPORT_TABLE_FIELDS_NOT_FOUND:')) {
+      const fields = error.split(':')[1];
+      setNotification({
+        open: true,
+        message: t('transmittals.import_table_fields_not_found', { fields: fields }),
+        severity: 'error'
+      });
+    }
+    else if (error === 'INVALID_SETTINGS_FORMAT') {
+      setNotification({
+        open: true,
+        message: t('transmittals.import_invalid_settings_format'),
+        severity: 'error'
+      });
+    }
+    else if (error === 'MISSING_SHEET_NAME') {
+      setNotification({
+        open: true,
+        message: t('transmittals.import_missing_sheet_name'),
+        severity: 'error'
+      });
+    }
+    else if (error === 'MISSING_METADATA_FIELDS') {
+      setNotification({
+        open: true,
+        message: t('transmittals.import_missing_metadata_fields'),
+        severity: 'error'
+      });
+    }
+    else if (error === 'MISSING_TABLE_FIELDS') {
+      setNotification({
+        open: true,
+        message: t('transmittals.import_missing_table_fields'),
+        severity: 'error'
+      });
+    }
+    else {
+      // Для других ошибок показываем оригинальное сообщение или общее
+      const displayMessage = error && error.trim() !== '' ? error : t('transmittals.import_error');
+      setNotification({
+        open: true,
+        message: displayMessage,
+        severity: 'error'
+      });
+    }
+  };
+
   return (
     <ProjectRequired>
       <Box sx={{ 
@@ -164,14 +324,24 @@ const TransmittalsPage: React.FC = observer(() => {
             {t('menu.transmittals')} {projectStore.selectedProject && `- ${projectStore.selectedProject.name}`}
           </Typography>
           {!isViewer && (
-            <Button
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={handleCreate}
-              sx={{ backgroundColor: '#1976d2', width: isMobile ? '100%' : 'auto' }}
-            >
-              {t('transmittals.create')}
-            </Button>
+            <Box sx={{ display: 'flex', gap: 1, width: isMobile ? '100%' : 'auto' }}>
+              <Button
+                variant="contained"
+                startIcon={<AddIcon />}
+                onClick={handleCreate}
+                sx={{ backgroundColor: '#1976d2', flex: isMobile ? 1 : 'none' }}
+              >
+                {t('transmittals.create')}
+              </Button>
+              <Button
+                variant="outlined"
+                startIcon={<UploadFileIcon />}
+                onClick={() => setImportDialogOpen(true)}
+                sx={{ flex: isMobile ? 1 : 'none' }}
+              >
+                {t('transmittals.import_incoming')}
+              </Button>
+            </Box>
           )}
         </Box>
 
@@ -239,6 +409,20 @@ const TransmittalsPage: React.FC = observer(() => {
         onClose={() => transmittalSettings.setSettingsOpen(false)}
         onColumnVisibilityChange={transmittalSettings.onColumnVisibilityChange}
         onColumnOrderChange={transmittalSettings.onColumnOrderChange}
+      />
+
+      <TransmittalImportDialog
+        open={importDialogOpen}
+        onClose={() => setImportDialogOpen(false)}
+        onSuccess={handleImportSuccess}
+        onError={handleImportError}
+      />
+
+      <NotificationSnackbar
+        open={notification.open}
+        message={notification.message}
+        severity={notification.severity}
+        onClose={handleNotificationClose}
       />
     </ProjectRequired>
   );

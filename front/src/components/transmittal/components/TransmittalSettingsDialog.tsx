@@ -42,6 +42,7 @@ import {
   useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { TransmittalImportSettings } from './TransmittalImportSettings';
 
 export interface TransmittalColumnVisibility {
   number: boolean;
@@ -220,25 +221,65 @@ export const TransmittalSettingsDialog: React.FC<TransmittalSettingsDialogProps>
   const sortableColumns = columnOrder.filter(col => col.column !== 'actions');
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+    <Dialog 
+      open={open} 
+      onClose={onClose} 
+      maxWidth="md" 
+      fullWidth
+      scroll="paper"
+    >
       <DialogTitle>{t('transmittals.settings.title')}</DialogTitle>
 
-      <Box sx={{ borderBottom: 1, borderColor: 'divider' }}>
-        <Tabs value={tabValue} onChange={handleTabChange}>
+      <Box sx={{ 
+        position: 'sticky',
+        top: 0,
+        zIndex: 1,
+        backgroundColor: 'background.paper',
+        borderBottom: 1,
+        borderColor: 'divider',
+        px: 3,
+        pt: 3
+      }}>
+        <Tabs
+          value={tabValue}
+          onChange={handleTabChange}
+          sx={{ 
+            '& .MuiTab-root': {
+              '&:focus': {
+                outline: 'none !important',
+                boxShadow: 'none !important',
+              },
+              '&.Mui-selected': {
+                outline: 'none !important',
+                boxShadow: 'none !important',
+              },
+              '&:focus-visible': {
+                outline: 'none !important',
+                boxShadow: 'none !important',
+              }
+            }
+          }}
+          variant="scrollable"
+          scrollButtons="auto"
+        >
           <Tab 
             label={t('transmittals.settings.fields_tab')} 
             id="transmittal-settings-tab-0"
             aria-controls="transmittal-settings-tabpanel-0"
           />
           <Tab 
-            label={t('transmittals.settings.incoming_tab')} 
+            label={t('transmittals.import_settings.title')} 
             id="transmittal-settings-tab-1"
             aria-controls="transmittal-settings-tabpanel-1"
           />
         </Tabs>
       </Box>
 
-      <DialogContent sx={{
+      <DialogContent sx={{ 
+        height: 700,
+        p: 0,
+        display: 'flex',
+        flexDirection: 'column',
         '&::-webkit-scrollbar': {
           width: '8px',
         },
@@ -309,19 +350,9 @@ export const TransmittalSettingsDialog: React.FC<TransmittalSettingsDialogProps>
           </Box>
         </TabPanel>
 
-        {/* Вкладка 2: Настройки входящих трансмитталов (пока пустая) */}
+        {/* Вкладка 2: Настройки импорта трансмитталов */}
         <TabPanel value={tabValue} index={1}>
-          <Box sx={{ 
-            display: 'flex', 
-            alignItems: 'center', 
-            justifyContent: 'center', 
-            height: '200px',
-            color: 'text.secondary'
-          }}>
-            <Typography variant="h6">
-              {t('transmittals.settings.incoming_coming_soon')}
-            </Typography>
-          </Box>
+          <TransmittalImportSettings onClose={onClose} />
         </TabPanel>
       </DialogContent>
 

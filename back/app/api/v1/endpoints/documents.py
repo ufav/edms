@@ -1162,3 +1162,47 @@ async def update_document(
     db.refresh(document)
     
     return {"message": "Документ обновлен", "document_id": document_id}
+
+
+@router.get("/search-by-number/{document_number}")
+async def search_document_by_number(
+    document_number: str,
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Поиск документа по номеру и получение последней ревизии"""
+    
+    # Ищем документ по номеру в рамках проекта
+    document = db.query(Document).filter(
+        Document.number == document_number,
+        Document.project_id == project_id,
+        Document.is_deleted == 0
+    ).first()
+    
+    if not document:
+        return {"found": False, "message": f"Документ с номером '{document_number}' не найден в проекте"}
+    
+    # Получаем последнюю ревизию документа
+    latest_revision = db.query(DocumentRevision).filter(
+        DocumentRevision.document_id == document.id,
+        DocumentRevision.is_deleted == 0
+    ).order_by(DocumentRevision.created_at.desc()).first()
+    
+    if not latest_revision:
+        return {"found": False, "message": f"У документа '{document_number}' нет ревизий"}
+    
+    return {
+        "found": True,
+        "document": {
+            "id": document.id,
+            "title": document.title,
+            "number": document.number
+        },
+        "latest_revision": {
+            "id": latest_revision.id,
+            "number": latest_revision.number,
+            "file_name": latest_revision.file_name,
+            "created_at": latest_revision.created_at
+        }
+    }

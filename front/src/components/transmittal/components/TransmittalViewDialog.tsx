@@ -86,7 +86,9 @@ const TransmittalViewDialog: React.FC<TransmittalViewDialogProps> = observer(({ 
           title: transmittalState.transmittalData.title,
           direction: transmittalStore.selectedTransmittal?.direction || undefined,
           counterparty_id: transmittalState.transmittalData.counterparty_id,
-          status: transmittalStore.selectedTransmittal?.status
+          status: transmittalStore.selectedTransmittal?.status,
+          created_at: transmittalStore.selectedTransmittal?.created_at,
+          created_by: transmittalStore.selectedTransmittal?.created_by
         }}
         isEditing={transmittalState.isEditing}
         onUpdateTransmittalData={(field: string, value: any) => transmittalState.updateTransmittalData(field as keyof typeof transmittalState.transmittalData, value)}

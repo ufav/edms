@@ -134,8 +134,26 @@ class TransmittalStore {
 
   // Получение статуса трансмиттала
   getTransmittalStatusLabel(status: string, t?: (key: string) => string): string {
+    // Нормализуем статус к нижнему регистру для поиска в локализации
+    const normalizedStatus = status.toLowerCase();
+    
     if (t) {
-      return t(`transmittals.status.${status}`) || status;
+      const key = `transmittals.status.${normalizedStatus}`;
+      const result = t(key);
+      
+      // Если локализация не работает, используем fallback
+      if (result === key) {
+        const statusMap: { [key: string]: string } = {
+          'draft': 'Черновик',
+          'sent': 'Отправлен',
+          'received': 'Получен',
+          'acknowledged': 'Подтвержден',
+          'rejected': 'Отклонен'
+        };
+        return statusMap[normalizedStatus] || status;
+      }
+      
+      return result;
     }
     
     // Fallback для случаев, когда t не передана
@@ -146,11 +164,14 @@ class TransmittalStore {
       'acknowledged': 'Подтвержден',
       'rejected': 'Отклонен'
     };
-    return statusMap[status] || status;
+    return statusMap[normalizedStatus] || status;
   }
 
   // Получение цвета статуса трансмиттала
   getTransmittalStatusColor(status: string): string {
+    // Нормализуем статус к нижнему регистру
+    const normalizedStatus = status.toLowerCase();
+    
     const colorMap: { [key: string]: string } = {
       'draft': 'default',
       'sent': 'warning',
@@ -158,7 +179,7 @@ class TransmittalStore {
       'acknowledged': 'success',
       'rejected': 'error'
     };
-    return colorMap[status] || 'default';
+    return colorMap[normalizedStatus] || 'default';
   }
 
 

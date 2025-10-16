@@ -500,6 +500,39 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
       } else {
         // Редактирование проекта
         await projectsApi.update(projectId!, projectData as any);
+        
+        // Обновляем участников проекта (компании)
+        try {
+          // Получаем текущих участников
+          const currentParticipants = await projectParticipantsApi.getAll(projectId!);
+          
+          // Удаляем всех старых участников
+          for (const currentParticipant of currentParticipants) {
+            await projectParticipantsApi.delete(projectId!, currentParticipant.id);
+          }
+          
+          // Создаем всех новых участников
+          for (const participant of pendingParticipants) {
+            const participantData: ProjectParticipantCreate = {
+              company_id: participant.company_id,
+              contact_id: participant.contact_id || undefined,
+              company_role_id: participant.company_role_id || undefined,
+              is_primary: participant.is_primary,
+              notes: participant.notes || undefined
+            };
+            
+            try {
+              await projectParticipantsApi.create(projectId!, participantData);
+            } catch (createError) {
+              console.error('Ошибка при создании участника:', createError);
+            }
+          }
+        } catch (err: any) {
+          // Не прерываем редактирование проекта из-за ошибки с участниками
+          console.error('Ошибка при обновлении участников проекта:', err);
+          console.error('Детали ошибки:', err.response?.data);
+        }
+        
         onSaved?.();
       }
       

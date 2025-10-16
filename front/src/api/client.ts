@@ -225,7 +225,6 @@ export interface Document {
   revision_description_id?: number;  // ID описания ревизии для получения кода (A, B, C, D)
   revision_status_id?: number;  // ID статуса ревизии вместо поля status
   is_deleted: number;
-  drs?: string;
   project_id: number;
   language_id?: number;
   uploaded_by: number;
@@ -338,6 +337,64 @@ export interface TransmittalUpdate {
   transmittal_number?: string;
   title?: string;
   counterparty_id?: number;
+}
+
+export interface TransmittalImportSettings {
+  id: number;
+  project_id: number;
+  company_id: number;
+  company_name: string;
+  settings_key: string;
+  settings_value: {
+    sheet_name: string;
+    metadata_fields: {
+      [key: string]: {
+        type: 'label_search';
+        label: string;
+        position: 'right' | 'left' | 'below' | 'above';
+      };
+    };
+    table_fields: {
+      [key: string]: string;
+    };
+  };
+  created_at: string;
+  updated_at: string;
+}
+
+export interface TransmittalImportSettingsCreate {
+  project_id: number;
+  company_id: number;
+  settings_key: string;
+  settings_value: {
+    sheet_name: string;
+    metadata_fields: {
+      [key: string]: {
+        type: 'label_search';
+        label: string;
+        position: 'right' | 'left' | 'below' | 'above';
+      };
+    };
+    table_fields: {
+      [key: string]: string;
+    };
+  };
+}
+
+export interface TransmittalImportSettingsUpdate {
+  settings_value: {
+    sheet_name: string;
+    metadata_fields: {
+      [key: string]: {
+        type: 'label_search';
+        label: string;
+        position: 'right' | 'left' | 'below' | 'above';
+      };
+    };
+    table_fields: {
+      [key: string]: string;
+    };
+  };
 }
 
 export interface User {
@@ -1037,6 +1094,62 @@ export const documentTypesApi = {
   // Удалить тип документа
   delete: async (id: number): Promise<void> => {
     await apiClient.delete(`/disciplines/document-types/${id}`);
+  },
+};
+
+// API методы для настроек импорта трансмитталов
+export const transmittalImportSettingsApi = {
+  // Получить настройки импорта для проекта
+  getByProject: async (projectId: number): Promise<TransmittalImportSettings[]> => {
+    const response = await apiClient.get(`/transmittal-import-settings/project/${projectId}`);
+    return response.data;
+  },
+
+  // Создать или обновить настройки импорта
+  createOrUpdate: async (settings: TransmittalImportSettingsCreate): Promise<TransmittalImportSettings> => {
+    const response = await apiClient.post('/transmittal-import-settings/', settings);
+    return response.data;
+  },
+
+  // Обновить настройки импорта
+  update: async (settingId: number, settings: TransmittalImportSettingsUpdate): Promise<TransmittalImportSettings> => {
+    const response = await apiClient.put(`/transmittal-import-settings/${settingId}`, settings);
+    return response.data;
+  },
+
+  // Удалить настройки импорта
+  delete: async (settingId: number): Promise<{ message: string }> => {
+    const response = await apiClient.delete(`/transmittal-import-settings/${settingId}`);
+    return response.data;
+  },
+};
+
+// Интерфейс для результата импорта трансмиттала
+export interface TransmittalImportResult {
+  message: string;
+  transmittal_id: number;
+  transmittal_number: string;
+  metadata: Record<string, string>;
+  table_rows_count: number;
+  created_revisions_count: number;
+  missing_documents?: string[];
+}
+
+// API методы для импорта трансмитталов
+export const transmittalImportApi = {
+  // Импорт входящего трансмиттала
+  importIncoming: async (file: File, projectId: number, counterpartyId: number): Promise<TransmittalImportResult> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('project_id', projectId.toString());
+    formData.append('counterparty_id', counterpartyId.toString());
+    
+    const response = await apiClient.post('/transmittal-import/import', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
   },
 };
 

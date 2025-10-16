@@ -1,5 +1,6 @@
 # Models package
 from .user import User
+from .user_settings import UserSettings
 from .project import Project, ProjectMember
 from .project_participant import ProjectParticipant
 from .contact import Contact
@@ -8,6 +9,7 @@ from .project_role import ProjectRole
 from .document import Document, DocumentRevision, DocumentReview
 from .document_comments import DocumentComment
 from .transmittal import Transmittal, TransmittalRevision
+from .transmittal_import_settings import TransmittalImportSettings
 # Temporarily commented out to avoid circular imports
 # from .workflow import (
 #     WorkflowTemplate, WorkflowStep, DocumentWorkflow, DocumentApproval, DocumentHistory,
@@ -22,6 +24,7 @@ from .references import (
 
 __all__ = [
     "User",
+    "UserSettings",
     "Project", "ProjectMember", 
     "ProjectParticipant",
     "Contact",
@@ -30,6 +33,7 @@ __all__ = [
     "Document", "DocumentRevision", "DocumentReview",
     "DocumentComment",
     "Transmittal", "TransmittalRevision",
+    "TransmittalImportSettings",
     # "WorkflowTemplate", "WorkflowStep", "DocumentWorkflow", "DocumentApproval", "DocumentHistory",
     # "DocumentStatus", "ApprovalStatus",
     # "Notification",

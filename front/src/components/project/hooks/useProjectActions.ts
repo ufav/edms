@@ -65,8 +65,25 @@ export const useProjectActions = ({ t }: UseProjectActionsProps): UseProjectActi
     }
   };
 
-  const handleProjectSaved = () => {
-    projectStore.loadProjects(true);
+  const handleProjectSaved = async () => {
+    // Небольшая задержка, чтобы API успел обновиться
+    await new Promise(resolve => setTimeout(resolve, 500));
+    
+    await projectStore.loadProjects(true);
+    
+    // Если редактируется выбранный проект, обновляем его из списка
+    if (projectStore.selectedProject) {
+      const updatedProject = projectStore.getProjectById(projectStore.selectedProject.id);
+      
+      if (updatedProject) {
+        // Принудительно обновляем MobX store
+        projectStore.selectedProject.participants = updatedProject.participants;
+        
+        // Принудительно уведомляем MobX об изменении
+        projectStore.selectedProject = { ...projectStore.selectedProject };
+      }
+    }
+    
     setSuccessNotification({
       open: true,
       message: t('projects.updated_notification')

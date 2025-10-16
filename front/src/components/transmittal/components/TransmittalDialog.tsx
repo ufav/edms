@@ -44,6 +44,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { observer } from 'mobx-react-lite';
 import { projectStore } from '../../../stores/ProjectStore';
+import { transmittalStore } from '../../../stores/TransmittalStore';
 import referenceDataStore from '../../../stores/ReferenceDataStore';
 import type { ProjectParticipant } from '../../../api/client';
 
@@ -366,7 +367,7 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
             <Grid item xs={readOnly ? (1.5 as any) : 0} sx={{ display: readOnly ? 'block' : 'none' }}>
               <TextField
                 label={t('common.status')}
-                value={(initialData as any)?.status ? t(`transStatus.${(initialData as any).status}`) : t('transStatus.draft')}
+                value={(initialData as any)?.status ? transmittalStore.getTransmittalStatusLabel((initialData as any).status, t) : transmittalStore.getTransmittalStatusLabel('draft', t)}
                 variant="standard"
                 fullWidth
                 disabled

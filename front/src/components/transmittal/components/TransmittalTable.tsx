@@ -24,6 +24,7 @@ import {
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import referenceDataStore from '../../../stores/ReferenceDataStore';
+import { transmittalStore } from '../../../stores/TransmittalStore';
 
 export interface TransmittalColumnOrder {
   column: string;
@@ -332,9 +333,8 @@ export const TransmittalTable: React.FC<TransmittalTableProps> = ({
                     minWidth: '100px'
                   }}>
                     <Chip
-                      label={transmittal.status || 'Черновик'}
-                      color={transmittal.status === 'sent' ? 'success' : 
-                             transmittal.status === 'received' ? 'info' : 'default'}
+                      label={transmittalStore.getTransmittalStatusLabel(transmittal.status, t)}
+                      color={transmittalStore.getTransmittalStatusColor(transmittal.status) as any}
                       size="small"
                       sx={{ fontSize: '0.75rem', height: '24px' }}
                     />
