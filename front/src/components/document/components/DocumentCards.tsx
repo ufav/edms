@@ -273,6 +273,7 @@ export const DocumentCards: React.FC<DocumentCardsProps> = observer(({
             }}
             fixedBottom={false}
             align="right"
+            leftInfo={`${t('common.total_documents').replace('{count}', '')} ${totalCount}`}
           />
         </Box>
       )}

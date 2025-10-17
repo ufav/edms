@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { documentsApi, type Document as ApiDocument, workflowApi } from '../../../api/client';
+import { documentsApi, type Document as ApiDocument } from '../../../api/client';
 import { documentStore } from '../../../stores/DocumentStore';
 import { documentRevisionStore } from '../../../stores/DocumentRevisionStore';
 import { projectStore } from '../../../stores/ProjectStore';
@@ -93,7 +93,7 @@ export const useDocumentActions = ({ t, onCloseDialog, onRefreshActiveRevisions 
       }
       
       // Отправляем запрос с отслеживанием прогресса
-      const result = await (documentsApi.createWithRevision as any)(formData, {
+      await (documentsApi.createWithRevision as any)(formData, {
         onUploadProgress: (progressEvent: any) => {
           if (progressEvent.total) {
             const progress = Math.round((progressEvent.loaded * 100) / progressEvent.total);
@@ -104,6 +104,11 @@ export const useDocumentActions = ({ t, onCloseDialog, onRefreshActiveRevisions 
       
       // Обновляем список документов
       refreshDocuments();
+      
+      // Очищаем ревизии после успешного создания документа
+      if (selectedDocumentId) {
+        documentRevisionStore.clearRevisions(selectedDocumentId);
+      }
       
       // Показываем сообщение об успехе
       setSuccessNotification({
@@ -124,6 +129,12 @@ export const useDocumentActions = ({ t, onCloseDialog, onRefreshActiveRevisions 
       setIsCreatingDocument(false);
       // Также закрываем диалог
       setSelectedDocument(null);
+      
+      // Очищаем ревизии при создании нового документа
+      if (selectedDocumentId) {
+        documentRevisionStore.clearRevisions(selectedDocumentId);
+      }
+      
       onCloseDialog?.();
     }
   };

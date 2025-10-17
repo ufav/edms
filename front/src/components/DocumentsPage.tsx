@@ -438,6 +438,7 @@ const DocumentsPage: React.FC = observer(() => {
             rowsPerPage={rowsPerPage}
             insetLeft={240}
             align="right"
+            leftInfo={`${i18n.language === 'ru' ? 'Всего документов:' : 'Total documents:'} ${totalCount}`}
           />
         )}
 

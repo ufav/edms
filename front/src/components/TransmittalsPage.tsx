@@ -379,6 +379,7 @@ const TransmittalsPage: React.FC = observer(() => {
             rowsPerPage={rowsPerPage}
             insetLeft={isMobile ? 0 : 240}
             align="right"
+            leftInfo={`${t('common.total_transmittals').replace('{count}', '')} ${filteredTransmittals.length}`}
           />
         )}
       </Box>

@@ -157,10 +157,11 @@ class DashboardStore {
     });
     
     try {
-      // Загружаем все данные параллельно (кроме документов - они загружаются в DocumentsPage)
+      // Загружаем все данные параллельно
       // Store'ы сами проверяют, нужно ли загружать данные повторно
       await Promise.all([
         projectStore.loadProjects(),
+        documentStore.loadDocuments(projectId),
         transmittalStore.loadTransmittals(projectId),
         reviewStore.loadReviews(projectId),
         userStore.loadUsers()

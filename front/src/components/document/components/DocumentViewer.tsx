@@ -33,6 +33,7 @@ import { useDocumentValidation } from '../hooks/useDocumentValidation';
 import { useDocumentPermissions } from '../hooks/useDocumentPermissions';
 import { useDocumentProjectData } from '../hooks/useDocumentProjectData';
 import { disciplineStore } from '../../../stores/DisciplineStore';
+import { documentRevisionStore } from '../../../stores/DocumentRevisionStore';
 
 interface DocumentViewerProps {
   open: boolean;
@@ -83,6 +84,13 @@ const DocumentViewer: React.FC<DocumentViewerProps> = observer(({
     isCreating,
     isEditing: documentState.isEditing,
   });
+
+  // Принудительно очищаем файл при открытии диалога создания документа
+  React.useEffect(() => {
+    if (open && isCreating && fileUpload.fileMetadata) {
+      fileUpload.resetAll();
+    }
+  }, [open, isCreating]);
 
   // Обработчики событий
   const handleClose = () => {

@@ -2,8 +2,6 @@ import React, { useState } from 'react';
 import {
   Box,
   Button,
-  Card,
-  CardContent,
   Chip,
   Dialog,
   DialogActions,
@@ -12,7 +10,6 @@ import {
   List,
   ListItem,
   ListItemButton,
-  ListItemText,
   Typography,
   CircularProgress,
   Alert,
@@ -29,7 +26,7 @@ interface ProjectSelectorProps {
 }
 
 const ProjectSelector: React.FC<ProjectSelectorProps> = observer(({ onProjectSelect }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [open, setOpen] = useState(false);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -105,11 +102,11 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = observer(({ onProjectSel
         }}
       >
         <DialogTitle>
-          Выбор проекта
+          {t('projects.selection.title')}
         </DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Выберите проект для работы с документами и трансмитталами
+            {t('projects.selection.description')}
           </Typography>
           {projectStore.isLoading ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
@@ -122,7 +119,7 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = observer(({ onProjectSel
           ) : (
             <Box>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                Проектов найдено: {projectStore.projects.length}
+                {i18n.language === 'ru' ? 'Проектов найдено:' : 'Projects found:'} {projectStore.projects.length}
               </Typography>
             <List sx={{ pt: 0 }}>
               {projectStore.projects.map((project) => (
@@ -153,8 +150,25 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = observer(({ onProjectSel
                       <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
                         {project.description}
                       </Typography>
-                      <Typography variant="caption" color="text.secondary">
-                        Период: {new Date(project.start_date).toLocaleDateString('ru-RU')} - {new Date(project.end_date).toLocaleDateString('ru-RU')}
+                      <Typography 
+                        variant="caption" 
+                        color="text.secondary"
+                        sx={{ 
+                          display: 'block',
+                          fontSize: '0.75rem',
+                          fontWeight: 500,
+                          mt: 0.5
+                        }}
+                      >
+                        {i18n.language === 'ru' ? 'Период' : 'Period'}: {new Date(project.start_date).toLocaleDateString('ru-RU', { 
+                          day: '2-digit', 
+                          month: '2-digit', 
+                          year: 'numeric' 
+                        })} - {new Date(project.end_date).toLocaleDateString('ru-RU', { 
+                          day: '2-digit', 
+                          month: '2-digit', 
+                          year: 'numeric' 
+                        })}
                       </Typography>
                     </Box>
                   </ListItemButton>
@@ -167,7 +181,7 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = observer(({ onProjectSel
 
         <DialogActions sx={{ p: 3, pt: 1 }}>
           <Button onClick={handleCloseDialog} variant="outlined">
-            Отмена
+            {t('common.cancel')}
           </Button>
         </DialogActions>
       </Dialog>

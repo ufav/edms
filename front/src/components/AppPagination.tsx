@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Pagination, TablePagination } from '@mui/material';
+import { Box, Pagination, TablePagination, Typography } from '@mui/material';
 
 export interface AppPaginationProps {
   // Common
@@ -13,7 +13,6 @@ export interface AppPaginationProps {
   align?: 'left' | 'center' | 'right';
 
   // Simple (no rows per page selector)
-  simple?: boolean; // if true, uses Pagination with fixed rowsPerPage
   rowsPerPage?: number; // required for simple mode to compute pages
   color?: 'primary' | 'secondary' | 'standard';
   size?: 'small' | 'medium' | 'large';
@@ -24,6 +23,9 @@ export interface AppPaginationProps {
   onRowsPerPageChange?: (event: React.ChangeEvent<HTMLInputElement>) => void;
   labelRowsPerPage?: string;
   labelDisplayedRows?: (paginationInfo: { from: number; to: number; count: number; page: number }) => string;
+
+  // Left side info
+  leftInfo?: string; // text to display on the left side
 }
 
 const AppPagination: React.FC<AppPaginationProps> = ({
@@ -33,7 +35,6 @@ const AppPagination: React.FC<AppPaginationProps> = ({
   fixedBottom = true,
   insetLeft = 240,
   align = 'right',
-  simple = false,
   rowsPerPage = 25,
   color = 'primary',
   size = 'small',
@@ -42,17 +43,34 @@ const AppPagination: React.FC<AppPaginationProps> = ({
   onRowsPerPageChange,
   labelRowsPerPage,
   labelDisplayedRows,
+  leftInfo,
 }) => {
   const container = (
     <Box sx={{
+      position: 'relative',
       display: 'flex',
       justifyContent: align === 'left' ? 'flex-start' : align === 'center' ? 'center' : 'flex-end',
+      alignItems: 'center',
       p: 1.5,
       pr: align === 'right' ? 2 : 1,
       width: '100%',
       boxSizing: 'border-box',
       mr: align === 'right' ? 1 : 0,
     }}>
+      {/* Left info */}
+      {leftInfo && (
+        <Typography
+          variant="body2"
+          sx={{
+            position: 'absolute',
+            left: 16,
+            color: 'text.secondary',
+            fontWeight: 500,
+          }}
+        >
+          {leftInfo}
+        </Typography>
+      )}
       {showRowsPerPage ? (
         <TablePagination
           component="div"
