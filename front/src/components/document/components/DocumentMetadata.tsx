@@ -22,14 +22,7 @@ const DocumentMetadata: React.FC<DocumentMetadataProps> = ({
     return null;
   }
 
-  return (
-    <Box sx={{ mb: 2 }}>
-      <Typography variant="body2" color="text.secondary">
-        {t('document.created')} {new Date(document.created_at).toLocaleDateString('ru-RU')}
-        {documentCreator && ` ${t('document.created_by')} ${documentCreator.full_name}`}
-      </Typography>
-    </Box>
-  );
+  return null;
 };
 
 export default DocumentMetadata;

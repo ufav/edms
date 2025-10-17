@@ -53,7 +53,7 @@ import { useDeleteDialog } from '../hooks/useDeleteDialog';
 import { transmittalsApi } from '../api/client';
 
 const TransmittalsPage: React.FC = observer(() => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { isViewer } = useCurrentUser();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
@@ -141,6 +141,8 @@ const TransmittalsPage: React.FC = observer(() => {
   const handleConfirmDelete = async (item: { id: number }) => {
     try {
       setDeletingId(item.id);
+      console.log('Attempting to delete transmittal:', item.id);
+      console.log('transmittalsApi methods:', Object.keys(transmittalsApi));
       await transmittalsApi.delete(item.id);
       if (projectStore.hasSelectedProject) {
         await transmittalStore.loadTransmittals(projectStore.selectedProject!.id, true);
@@ -331,7 +333,7 @@ const TransmittalsPage: React.FC = observer(() => {
                 onClick={handleCreate}
                 sx={{ backgroundColor: '#1976d2', flex: isMobile ? 1 : 'none' }}
               >
-                {t('transmittals.create')}
+                {t('transmittals.create_button')}
               </Button>
               <Button
                 variant="outlined"
@@ -375,11 +377,10 @@ const TransmittalsPage: React.FC = observer(() => {
               count={filteredTransmittals.length}
             page={Math.min(page, totalPages)}
             onPageChange={(_, value) => setPage(value)}
-            simple
             rowsPerPage={rowsPerPage}
             insetLeft={isMobile ? 0 : 240}
             align="right"
-            leftInfo={`${t('common.total_transmittals').replace('{count}', '')} ${filteredTransmittals.length}`}
+            leftInfo={`${t('common.total_transmittals', { count: filteredTransmittals.length }).replace('{count}', filteredTransmittals.length.toLocaleString(i18n.language === 'ru' ? 'ru-RU' : 'en-US'))}`}
           />
         )}
       </Box>

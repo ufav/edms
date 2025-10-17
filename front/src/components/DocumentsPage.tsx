@@ -7,7 +7,6 @@ import {
   useMediaQuery,
   IconButton,
   Badge,
-  TablePagination,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -258,8 +257,6 @@ const DocumentsPage: React.FC = observer(() => {
   };
 
 
-
-
   return (
     <ProjectRequired>
     <Box sx={{ 
@@ -434,11 +431,10 @@ const DocumentsPage: React.FC = observer(() => {
             count={totalCount}
             page={page + 1}
             onPageChange={(_, p) => handleChangePage(_, p - 1)}
-            simple
             rowsPerPage={rowsPerPage}
             insetLeft={240}
             align="right"
-            leftInfo={`${i18n.language === 'ru' ? 'Всего документов:' : 'Total documents:'} ${totalCount}`}
+            leftInfo={`${t('common.total_documents', { count: totalCount }).replace('{count}', totalCount.toLocaleString(i18n.language === 'ru' ? 'ru-RU' : 'en-US'))}`}
           />
         )}
 

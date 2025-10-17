@@ -210,7 +210,7 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
         setFormData({
           transmittal_number: '',
           title: '',
-          direction: undefined,
+          direction: 'out', // По умолчанию исходящий при создании
           counterparty_id: undefined,
         });
       }
@@ -224,7 +224,8 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
     if (!formData.transmittal_number?.trim()) {
       errors.transmittal_number = true;
     }
-    if (!formData.direction) {
+    // Направление не валидируем при создании, так как оно автоматически устанавливается как 'out'
+    if (readOnly && initialData && !formData.direction) {
       errors.direction = true;
     }
     if (!formData.counterparty_id) {
@@ -325,14 +326,11 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
       >
       <DialogTitle>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            {!readOnly && <SendIcon color="primary" />}
-            <Typography variant="h6">
-              {readOnly
-                ? `${t('transmittals.view_title', { defaultValue: 'Transmittal Details' })}: ${formData.transmittal_number || initialData?.transmittal_number || ''}`
-                : (titleOverride || t('transmittals.create'))}
-            </Typography>
-          </Box>
+          <Typography variant="h6">
+            {readOnly
+              ? `${t('transmittals.view_title', { defaultValue: 'Transmittal Details' })}: ${formData.transmittal_number || initialData?.transmittal_number || ''}`
+              : (titleOverride || t('transmittals.create'))}
+          </Typography>
           {readOnly && (initialData as any)?.created_at && (
             <Typography variant="body2" color="text.secondary">
               {t('document.created')} {new Date((initialData as any).created_at).toLocaleDateString('ru-RU')}
@@ -378,31 +376,35 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
               {/* Пустое место */}
             </Grid>
             
-            <Grid item xs={3}>
-              {isLoading && readOnly ? (
-                <Skeleton variant="rectangular" height={56} />
-              ) : (
-                <TextField
-                  label={t('transmittals.columns.direction')}
-                  value={formData.direction === 'out' ? t('transmittals.direction.out') : 
-                         formData.direction === 'in' ? t('transmittals.direction.in') : ''}
-                  variant="standard"
-                  fullWidth
-                  required
-                  disabled={true}
-                  error={validationErrors.direction}
-                  helperText={validationErrors.direction ? t('common.required', { defaultValue: 'Обязательно' }) : ''}
-                />
-              )}
-            </Grid>
+            {/* Показываем направление только при просмотре/редактировании, не при создании */}
+            {readOnly && initialData && (
+              <Grid item xs={3}>
+                {isLoading && readOnly ? (
+                  <Skeleton variant="rectangular" height={56} />
+                ) : (
+                  <TextField
+                    label={t('transmittals.columns.direction')}
+                    value={formData.direction === 'out' ? t('transmittals.direction.out') : 
+                           formData.direction === 'in' ? t('transmittals.direction.in') : ''}
+                    variant="standard"
+                    fullWidth
+                    disabled={true}
+                    error={validationErrors.direction}
+                    helperText={validationErrors.direction ? t('common.required', { defaultValue: 'Обязательно' }) : ''}
+                  />
+                )}
+              </Grid>
+            )}
             
             {/* Вторая строка */}
             <Grid item xs={3}>
               {isLoading && readOnly ? (
                 <Skeleton variant="rectangular" height={56} />
-              ) : isEditing ? (
+              ) : (
                 <FormControl variant="standard" fullWidth required error={validationErrors.counterparty_id}>
-                  <InputLabel>{t('transmittals.recipient_company')}</InputLabel>
+                  <InputLabel>
+                    {formData.direction === 'in' ? t('transmittals.columns.sender') : t('transmittals.recipient_company')}
+                  </InputLabel>
                   <Select
                     value={formData.counterparty_id || ''}
                     onChange={(e) => {
@@ -414,7 +416,7 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
                         onUpdateTransmittalData('counterparty_id', e.target.value);
                       }
                     }}
-                    disabled={isLoading}
+                    disabled={isLoading || (readOnly && !isEditing)}
                   >
                     {projectStore.selectedProject?.participants?.length ? (
                       projectStore.selectedProject.participants.map((participant: ProjectParticipant) => (
@@ -430,21 +432,10 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
                   </Select>
                   {validationErrors.counterparty_id && (
                     <Typography variant="caption" color="error" sx={{ fontSize: '0.75rem', mt: 0.5 }}>
-                      {t('transmittals.recipient_company_required')}
+                      {formData.direction === 'in' ? t('transmittals.sender_company_required', { defaultValue: 'Компания отправитель обязательна' }) : t('transmittals.recipient_company_required')}
                     </Typography>
                   )}
                 </FormControl>
-              ) : (
-                <TextField
-                  label={t('transmittals.recipient_company')}
-                  value={referenceDataStore.getCompanyName(formData.counterparty_id || 0)}
-                  variant="standard"
-                  fullWidth
-                  required
-                  disabled={true}
-                  error={validationErrors.counterparty_id}
-                  helperText={validationErrors.counterparty_id ? t('transmittals.recipient_company_required') : ''}
-                />
               )}
             </Grid>
             

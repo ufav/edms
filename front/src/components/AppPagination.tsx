@@ -1,5 +1,5 @@
 import React from 'react';
-import { Box, Pagination, TablePagination, Typography } from '@mui/material';
+import { Box, Pagination, Typography } from '@mui/material';
 
 export interface AppPaginationProps {
   // Common
@@ -17,13 +17,6 @@ export interface AppPaginationProps {
   color?: 'primary' | 'secondary' | 'standard';
   size?: 'small' | 'medium' | 'large';
 
-  // Table-like (with rows per page selector)
-  showRowsPerPage?: boolean; // if true, renders TablePagination
-  rowsPerPageOptions?: number[];
-  onRowsPerPageChange?: (event: React.ChangeEvent<HTMLInputElement>) => void;
-  labelRowsPerPage?: string;
-  labelDisplayedRows?: (paginationInfo: { from: number; to: number; count: number; page: number }) => string;
-
   // Left side info
   leftInfo?: string; // text to display on the left side
 }
@@ -38,13 +31,29 @@ const AppPagination: React.FC<AppPaginationProps> = ({
   rowsPerPage = 25,
   color = 'primary',
   size = 'small',
-  showRowsPerPage = false,
-  rowsPerPageOptions = [10, 25, 50],
-  onRowsPerPageChange,
-  labelRowsPerPage,
-  labelDisplayedRows,
   leftInfo,
 }) => {
+  const totalPages = Math.max(1, Math.ceil(count / rowsPerPage));
+
+  // Фрагмент для текста — рендерится в fixed Box
+  const leftInfoElement = leftInfo && (
+    <Typography
+      variant="body2"
+      sx={{
+        position: 'absolute',  // Absolute относительно fixed Box
+        left: 30,  // Небольшой отступ: ~16px от левого края экрана (подкрутите: 1=8px, 3=24px)
+        top: '50%',  // Вертикально по центру
+        transform: 'translateY(-50%)',  // Точный центр по вертикали
+        color: 'text.secondary',
+        fontWeight: 500,
+        zIndex: 1,  // Над пагинацией, если перекрытие
+        fontStyle: 'italic',
+      }}
+    >
+      {leftInfo}
+    </Typography>
+  );
+
   const container = (
     <Box sx={{
       position: 'relative',
@@ -57,72 +66,55 @@ const AppPagination: React.FC<AppPaginationProps> = ({
       boxSizing: 'border-box',
       mr: align === 'right' ? 1 : 0,
     }}>
-      {/* Left info */}
-      {leftInfo && (
-        <Typography
-          variant="body2"
-          sx={{
-            position: 'absolute',
-            left: 16,
-            color: 'text.secondary',
-            fontWeight: 500,
-          }}
-        >
-          {leftInfo}
-        </Typography>
-      )}
-      {showRowsPerPage ? (
-        <TablePagination
-          component="div"
-          count={count}
-          rowsPerPage={rowsPerPage}
+      <Box sx={{ display: 'flex', alignItems: 'center' }}>
+        <Pagination
+          count={totalPages}
           page={page}
-          onPageChange={onPageChange}
-          onRowsPerPageChange={onRowsPerPageChange as any}
-          rowsPerPageOptions={rowsPerPageOptions}
-          labelRowsPerPage={labelRowsPerPage}
-          labelDisplayedRows={labelDisplayedRows as any}
+          onChange={onPageChange}
+          color={color === 'standard' ? 'standard' : color}
+          showFirstButton
+          showLastButton
+          siblingCount={1}
+          boundaryCount={1}
+          size={size}
           sx={{
-            '& .MuiTablePagination-toolbar': {
-              paddingLeft: 2,
-              paddingRight: 2,
-              flexWrap: 'wrap',
-            },
-            '& .MuiTablePagination-selectLabel, & .MuiTablePagination-displayedRows': {
-              fontSize: '0.875rem',
-            },
+            mr: align === 'right' ? 3 : 0,  // Отступ справа вместо хака (~28px)
+            '& .MuiPagination-ul': {
+              flexWrap: 'nowrap',
+              alignItems: 'center',
+              gap: 0.5,
+            }
           }}
         />
-      ) : (
-        <Box sx={{ display: 'flex', alignItems: 'center' }}>
-          <Pagination
-            count={Math.max(1, Math.ceil(count / rowsPerPage))}
-            page={page}
-            onChange={onPageChange}
-            color={color === 'standard' ? 'standard' : color}
-            showFirstButton
-            showLastButton
-            siblingCount={1}
-            boundaryCount={1}
-            size={size}
-            sx={{
-              '& .MuiPagination-ul': {
-                flexWrap: 'nowrap',
-                alignItems: 'center',
-                gap: 0.5,
-              }
-            }}
-          />
-          {align === 'right' && (
-            <Box sx={{ width: 28, flex: '0 0 auto' }} />
-          )}
-        </Box>
-      )}
+      </Box>
     </Box>
   );
 
-  if (!fixedBottom) return container;
+  if (!fixedBottom) {
+    // Fallback для не-fixed: текст в flex слева
+    return (
+      <Box sx={{
+        position: 'relative',
+        display: 'flex',
+        justifyContent: align === 'left' ? 'flex-start' : align === 'center' ? 'center' : 'flex-end',
+        alignItems: 'center',
+        p: 1.5,
+        pr: align === 'right' ? 2 : 1,
+        width: '100%',
+        boxSizing: 'border-box',
+        mr: align === 'right' ? 1 : 0,
+      }}>
+        {leftInfo && (
+          <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 500, mr: 2 }}>
+            {leftInfo}
+          </Typography>
+        )}
+        {container}
+      </Box>
+    );
+  }
 
+  // FIXED: Убрали дубликат position: 'relative' — fixed уже достаточно
   return (
     <Box sx={{
       position: 'fixed',
@@ -132,15 +124,14 @@ const AppPagination: React.FC<AppPaginationProps> = ({
       borderTop: '1px solid #e0e0e0',
       boxShadow: '0 -2px 8px rgba(0,0,0,0.1)',
       zIndex: 1000,
-      paddingLeft: { xs: 0, md: insetLeft },
+      paddingLeft: { xs: 0, md: insetLeft },  // Пагинация уважает padding, текст — нет
       paddingRight: { xs: 2, md: 4 },
       backgroundColor: 'white',
     }}>
-      {container}
+      {leftInfoElement}  {/* Текст слева от экрана */}
+      {container}  {/* Пагинация справа */}
     </Box>
   );
 };
 
 export default AppPagination;
-
-

@@ -41,7 +41,7 @@ export const useDocumentFilters = (): UseDocumentFiltersReturn => {
       const disciplineMatch = selectedDisciplineId ? doc.discipline_id === selectedDisciplineId : true;
       const searchMatch = searchTerm === '' || 
         doc.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        doc.description.toLowerCase().includes(searchTerm.toLowerCase());
+        (doc.description && doc.description.toLowerCase().includes(searchTerm.toLowerCase()));
       
       return statusMatch && selectedProjectMatch && disciplineMatch && searchMatch;
     });

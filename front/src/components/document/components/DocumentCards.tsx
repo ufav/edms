@@ -260,20 +260,10 @@ export const DocumentCards: React.FC<DocumentCardsProps> = observer(({
             count={totalCount}
             page={page}
             onPageChange={onPageChange}
-            showRowsPerPage
             rowsPerPage={rowsPerPage}
-            rowsPerPageOptions={rowsPerPageOptions}
-            onRowsPerPageChange={onRowsPerPageChange}
-            labelRowsPerPage={t('common.rows_per_page') || 'Строк на странице:'}
-            labelDisplayedRows={({ from, to, count }) => {
-              const ofText = t('common.of') || 'из';
-              const moreThanText = t('common.more_than') || 'больше чем';
-              const countText = count !== -1 ? count.toString() : `${moreThanText} ${to}`;
-              return `${from}-${to} ${ofText} ${countText}`;
-            }}
             fixedBottom={false}
             align="right"
-            leftInfo={`${t('common.total_documents').replace('{count}', '')} ${totalCount}`}
+            leftInfo={`${t('common.total_documents', { count: totalCount }).replace('{count}', totalCount.toLocaleString(t.i18n.language === 'ru' ? 'ru-RU' : 'en-US'))}`}
           />
         </Box>
       )}

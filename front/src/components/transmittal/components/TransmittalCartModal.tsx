@@ -232,7 +232,7 @@ export const TransmittalCartModal: React.FC<TransmittalCartModalProps> = observe
                   disabled={isLoading}
                   sx={{ flex: 1 }}
                 >
-                  {t('transmittals.create')}
+                  {t('transmittals.create_button')}
                 </Button>
               </Box>
             </>

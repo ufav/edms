@@ -882,6 +882,11 @@ export const transmittalsApi = {
     return response.data;
   },
 
+  // Удалить трансмиттал
+  delete: async (id: number): Promise<void> => {
+    await apiClient.delete(`/transmittals/${id}`);
+  },
+
   // Получить активные ревизии документов
   getActiveRevisions: async (projectId?: number): Promise<any[]> => {
     const params = projectId ? { project_id: projectId } : {};
