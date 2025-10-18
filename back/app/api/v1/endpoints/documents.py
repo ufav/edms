@@ -21,7 +21,7 @@ from app.models.user import User
 from app.models.document import Document, DocumentRevision
 from app.models.discipline import Discipline, DocumentType
 from app.models.discipline import Discipline, DocumentType
-from app.models.references import Language
+from app.models.references import Language, WorkflowStatus
 from app.models.project import ProjectDisciplineDocumentType, ProjectMember
 from app.services.auth import get_current_active_user
 
@@ -247,6 +247,9 @@ async def upload_document(
     db.commit()
     db.refresh(db_document)
     
+    # Получаем ID статуса "Draft" из workflow_statuses
+    draft_workflow_status = db.query(WorkflowStatus).filter(WorkflowStatus.name == "Draft").first()
+    
     # Создаем первую ревизию документа
     revision_row = DocumentRevision(
         document_id=db_document.id,
@@ -257,6 +260,7 @@ async def upload_document(
         file_type=file.content_type,
         change_description="First revision - Первая ревизия",
         uploaded_by=current_user.id,
+        workflow_status_id=draft_workflow_status.id if draft_workflow_status else None,
     )
     
     db.add(revision_row)
@@ -349,6 +353,9 @@ async def create_document_with_revision(
     active_status = db.query(RevisionStatus).filter(RevisionStatus.id == 1).first()
     active_status_id = active_status.id if active_status else None
     
+    # Получаем ID статуса "Draft" из workflow_statuses
+    draft_workflow_status = db.query(WorkflowStatus).filter(WorkflowStatus.name == "Draft").first()
+    
     # Создаем первую ревизию документа
     revision_row = DocumentRevision(
         document_id=db_document.id,
@@ -361,7 +368,8 @@ async def create_document_with_revision(
         uploaded_by=current_user.id,
         revision_status_id=active_status_id,
         revision_description_id=revision_description_id,
-        revision_step_id=revision_step_id
+        revision_step_id=revision_step_id,
+        workflow_status_id=draft_workflow_status.id if draft_workflow_status else None,
     )
     
     db.add(revision_row)
@@ -602,6 +610,9 @@ async def import_documents_by_paths(
             db.commit()
             db.refresh(db_document)
             
+            # Получаем ID статуса "Draft" из workflow_statuses
+            draft_workflow_status = db.query(WorkflowStatus).filter(WorkflowStatus.name == "Draft").first()
+            
             # Создаем первую ревизию документа
             revision_row = DocumentRevision(
                 document_id=db_document.id,
@@ -612,6 +623,7 @@ async def import_documents_by_paths(
                 file_type=file_extension,
                 change_description="Импорт по пути",
                 uploaded_by=current_user.id,
+                workflow_status_id=draft_workflow_status.id if draft_workflow_status else None,
             )
             
             db.add(revision_row)
@@ -679,6 +691,7 @@ async def list_document_revisions(
             "revision_status_id": v.revision_status_id,
             "revision_description_id": v.revision_description_id,
             "revision_step_id": v.revision_step_id,
+            "workflow_status_id": v.workflow_status_id,
         }
         for v in versions
     ]
@@ -750,6 +763,9 @@ async def create_document_revision(
     active_status = db.query(RevisionStatus).filter(RevisionStatus.name == "Active").first()
     superseded_status = db.query(RevisionStatus).filter(RevisionStatus.name == "Superseded").first()
     
+    # Получаем ID статуса "Draft" из workflow_statuses
+    draft_workflow_status = db.query(WorkflowStatus).filter(WorkflowStatus.name == "Draft").first()
+    
     # Если есть предыдущие ревизии, помечаем их как Superseded
     if latest_revision and active_status and superseded_status:
         # Обновляем все предыдущие активные ревизии на Superseded (кроме отмененных)
@@ -773,6 +789,7 @@ async def create_document_revision(
         revision_status_id=active_status.id if active_status else None,
         revision_step_id=latest_revision.revision_step_id if latest_revision else None,
         revision_description_id=latest_revision.revision_description_id if latest_revision else None,
+        workflow_status_id=draft_workflow_status.id if draft_workflow_status else None,
     )
     db.add(revision_row)
     db.commit()

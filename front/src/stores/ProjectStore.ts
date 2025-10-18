@@ -37,6 +37,14 @@ class ProjectStore {
     if (this.isLoaded && !force) {
       return;
     }
+    
+    // Принудительная очистка кэша
+    if (force) {
+      runInAction(() => {
+        this.projects = [];
+        this.isLoaded = false;
+      });
+    }
 
     runInAction(() => {
       this.isLoading = true;
@@ -60,7 +68,22 @@ class ProjectStore {
           created_at: apiProject.created_at || '',
           updated_at: apiProject.updated_at || '',
           participants: apiProject.participants || []
-        }));
+        }))
+        // Сортируем по updated_at в убывающем порядке (новые сверху)
+        .sort((a, b) => {
+          // Обрабатываем случаи с пустыми или невалидными датами
+          const dateA = a.updated_at ? new Date(a.updated_at).getTime() : 0;
+          const dateB = b.updated_at ? new Date(b.updated_at).getTime() : 0;
+          
+          // Если даты одинаковые, сортируем по created_at
+          if (dateA === dateB) {
+            const createdA = a.created_at ? new Date(a.created_at).getTime() : 0;
+            const createdB = b.created_at ? new Date(b.created_at).getTime() : 0;
+            return createdB - createdA;
+          }
+          
+          return dateB - dateA; // Убывающий порядок (новые сверху)
+        });
         this.isLoaded = true;
       });
     } catch (error) {

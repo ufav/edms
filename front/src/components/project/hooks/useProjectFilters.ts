@@ -24,9 +24,9 @@ export const useProjectFilters = (): UseProjectFiltersReturn => {
         return statusMatch && searchMatch;
       })
       .sort((a, b) => {
-        // Сортировка по дате создания (новые сверху)
-        const dateA = new Date(a.created_at);
-        const dateB = new Date(b.created_at);
+        // Сортировка по дате обновления (новые сверху)
+        const dateA = new Date(a.updated_at);
+        const dateB = new Date(b.updated_at);
         return dateB.getTime() - dateA.getTime();
       });
   }, [projectStore.projects, filterStatus, searchTerm]);

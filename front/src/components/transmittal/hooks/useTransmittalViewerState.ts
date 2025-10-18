@@ -81,6 +81,12 @@ export const useTransmittalViewerState = ({
 
   // Начать редактирование
   const startEditing = () => {
+    // Проверяем, можно ли редактировать трансмиттал
+    if (transmittal?.direction === 'out' && transmittal?.status === 'Sent') {
+      showNotification(t('transmittals.cannot_edit_sent'), 'warning');
+      return;
+    }
+    
     setOriginalTransmittalData({ ...transmittalData });
     setIsEditing(true);
     // Инициализируем локальное состояние ревизий

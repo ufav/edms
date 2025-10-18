@@ -357,6 +357,10 @@ export interface TransmittalImportSettings {
     table_fields: {
       [key: string]: string;
     };
+    status_mapping?: Array<{
+      incoming_status: string;
+      system_status_id: string;
+    }>;
   };
   created_at: string;
   updated_at: string;
@@ -378,6 +382,10 @@ export interface TransmittalImportSettingsCreate {
     table_fields: {
       [key: string]: string;
     };
+    status_mapping?: Array<{
+      incoming_status: string;
+      system_status_id: string;
+    }>;
   };
 }
 
@@ -394,6 +402,10 @@ export interface TransmittalImportSettingsUpdate {
     table_fields: {
       [key: string]: string;
     };
+    status_mapping?: Array<{
+      incoming_status: string;
+      system_status_id: string;
+    }>;
   };
 }
 
@@ -438,6 +450,7 @@ export interface DocumentRevision {
   created: string;
   modified?: string;
   deleted: number;
+  workflow_status_id?: number;
 }
 
 export interface DocumentRevisionFile {
@@ -587,6 +600,15 @@ export interface UserRole {
   name_native?: string;
   description?: string;
   permissions?: string;
+  is_active: boolean;
+  created_at: string;
+}
+
+export interface WorkflowStatus {
+  id: number;
+  name: string;
+  name_native?: string;
+  description?: string;
   is_active: boolean;
   created_at: string;
 }
@@ -1448,7 +1470,14 @@ export const referencesApi = {
     apiClient.get('/references/user-roles').then(res => res.data),
   
   createUserRole: (data: Partial<UserRole>): Promise<UserRole> => 
-    apiClient.post('/references/user-roles', data).then(res => res.data)
+    apiClient.post('/references/user-roles', data).then(res => res.data),
+  
+  // Workflow Statuses
+  getWorkflowStatuses: (): Promise<WorkflowStatus[]> => 
+    apiClient.get('/references/workflow-statuses').then(res => res.data),
+  
+  createWorkflowStatus: (data: Partial<WorkflowStatus>): Promise<WorkflowStatus> => 
+    apiClient.post('/references/workflow-statuses', data).then(res => res.data)
 };
 
 // Workflow Presets API

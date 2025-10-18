@@ -339,9 +339,7 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
   };
 
   const handleCreate = async () => {
-    console.log('handleCreate called');
     if (!validateForm()) {
-      console.log('Validation failed');
       return;
     }
 
@@ -354,7 +352,6 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
         };
         await onCreateTransmittal(transmittalData);
       }
-      console.log('onCreateTransmittal succeeded, showing success notification');
       if (onShowNotification) {
         onShowNotification(t('transmittals.create_success'), 'success');
       }
@@ -928,9 +925,12 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
               </Button>
             </>
           ) : (
-            <Button onClick={onEdit} variant="contained">
-              {t('common.edit')}
-            </Button>
+            // Показываем кнопку редактирования только если трансмиттал не отправлен
+            !(initialData?.direction === 'out' && initialData?.status === 'Sent') && (
+              <Button onClick={onEdit} variant="contained">
+                {t('common.edit')}
+              </Button>
+            )
           )}
         </DialogActions>
       )}

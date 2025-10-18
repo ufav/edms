@@ -208,10 +208,8 @@ const DocumentViewer: React.FC<DocumentViewerProps> = observer(({
 
   // Обработка загрузки файла - сохраняем только метаданные
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    console.log('handleFileUpload called', event.target.files);
     const file = event.target.files?.[0];
     if (file) {
-      console.log('File selected:', file.name, file.size);
       // Сохраняем только метаданные, не загружаем файл в память
       setFileMetadata({
         name: file.name,
@@ -238,9 +236,7 @@ const DocumentViewer: React.FC<DocumentViewerProps> = observer(({
     if (!documentId) return;
     
     try {
-      console.log('Начинаем скачивание ревизии:', revisionId, 'для документа:', documentId);
       const blob = await documentsApi.downloadRevision(documentId, revisionId);
-      console.log('Получен blob:', blob, 'тип:', typeof blob);
       
       // Создаем ссылку для скачивания (как в DocumentsPage)
       const url = URL.createObjectURL(blob);
@@ -253,7 +249,6 @@ const DocumentViewer: React.FC<DocumentViewerProps> = observer(({
       
       // Очищаем URL
       URL.revokeObjectURL(url);
-      console.log('Скачивание завершено');
     } catch (error) {
       console.error('Ошибка скачивания файла:', error);
       // Можно добавить уведомление об ошибке

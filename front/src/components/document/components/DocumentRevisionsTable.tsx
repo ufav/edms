@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   Box,
   Table,
@@ -61,6 +61,11 @@ const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer((
 }) => {
   const { t, i18n } = useTranslation();
 
+  // Загружаем workflow статусы при монтировании компонента
+  useEffect(() => {
+    referencesStore.loadWorkflowStatuses();
+  }, []);
+
   const hasRevisions = !isCreating && documentId && documentRevisionStore.getRevisions(documentId || 0).length > 0;
   const hasFile = isCreating && fileMetadata;
   const isLoading = !isCreating && documentId && documentRevisionStore.isLoadingDocument(documentId);
@@ -99,6 +104,7 @@ const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer((
                 <TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>{t('document.revision_description')}</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>{t('document.step')}</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>{t('document.status')}</TableCell>
+                <TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>Review Status</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>{t('document.file_name')}</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>{t('document.change_description')}</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>{t('document.uploaded_at')}</TableCell>
@@ -155,6 +161,13 @@ const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer((
                       label="Active" 
                       size="small"
                       color="success"
+                    />
+                  </TableCell>
+                  <TableCell>
+                    <Chip 
+                      label="Draft" 
+                      size="small"
+                      color="default"
                     />
                   </TableCell>
                   <TableCell>
@@ -251,6 +264,13 @@ const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer((
                         label={referencesStore.getRevisionStatusLabel(revision.revision_status_id, i18n.language)} 
                         size="small"
                         color={getRevisionStatusColor(revision.revision_status_id || null) as any}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Chip 
+                        label={referencesStore.getWorkflowStatusLabel(revision.workflow_status_id, i18n.language)} 
+                        size="small"
+                        color="default"
                       />
                     </TableCell>
                     <TableCell>

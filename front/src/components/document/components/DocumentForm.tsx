@@ -250,7 +250,7 @@ const DocumentForm: React.FC<DocumentFormProps> = ({
                 <InputLabel htmlFor="document-type-select">{t('document.document_type')}</InputLabel>
                 <Select
                   id="document-type-select"
-                  value={isCreating ? (documentData.document_type_id || '') : (documentData.document_type_id || '')}
+                  value={projectDocumentTypes.length > 0 ? (documentData.document_type_id || '') : ''}
                   onChange={(e) => {
                     const documentTypeId = e.target.value;
                         setDocumentData({document_type_id: documentTypeId});

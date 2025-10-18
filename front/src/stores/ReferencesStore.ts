@@ -1,5 +1,5 @@
 import { makeAutoObservable, runInAction } from 'mobx';
-import { referencesApi, documentTypesApi, type RevisionDescription, type RevisionStatus, type RevisionStep, type ReviewCode, type DocumentType } from '../api/client';
+import { referencesApi, documentTypesApi, type RevisionDescription, type RevisionStatus, type RevisionStep, type ReviewCode, type DocumentType, type WorkflowStatus } from '../api/client';
 
 class ReferencesStore {
   revisionDescriptions: RevisionDescription[] = [];
@@ -8,6 +8,7 @@ class ReferencesStore {
   reviewCodes: ReviewCode[] = [];
   documentTypes: DocumentType[] = [];
   projectDocumentTypes: any[] = [];
+  workflowStatuses: WorkflowStatus[] = [];
   
   isLoading = false;
   error: string | null = null;
@@ -18,6 +19,7 @@ class ReferencesStore {
   isStepsLoaded = false;
   isReviewCodesLoaded = false;
   isDocumentTypesLoaded = false;
+  isWorkflowStatusesLoaded = false;
 
   constructor() {
     makeAutoObservable(this);
@@ -248,6 +250,52 @@ class ReferencesStore {
     return code.name_native || code.name || (language === 'en' ? 'Not defined' : 'Не определен');
   }
 
+  // Загрузка workflow статусов
+  async loadWorkflowStatuses() {
+    if (this.isWorkflowStatusesLoaded) return;
+
+    runInAction(() => {
+      this.isLoading = true;
+      this.error = null;
+    });
+
+    try {
+      const statuses = await referencesApi.getWorkflowStatuses();
+      runInAction(() => {
+        this.workflowStatuses = statuses;
+        this.isWorkflowStatusesLoaded = true;
+      });
+    } catch (error) {
+      runInAction(() => {
+        this.error = 'Ошибка загрузки workflow статусов';
+      });
+    } finally {
+      runInAction(() => {
+        this.isLoading = false;
+      });
+    }
+  }
+
+  // Получение workflow статуса по ID
+  getWorkflowStatus(statusId?: number): WorkflowStatus | null {
+    if (!statusId) return null;
+    return this.workflowStatuses.find(status => status.id === statusId) || null;
+  }
+
+  // Получение локализованного названия workflow статуса
+  getWorkflowStatusLabel(statusId?: number, language: string = 'ru'): string {
+    const status = this.getWorkflowStatus(statusId);
+    if (!status) return language === 'en' ? 'Not defined' : 'Не определен';
+    
+    // Если английский язык и есть английское название - используем его
+    if (language === 'en' && status.name) {
+      return status.name;
+    }
+    
+    // Иначе используем русское название или fallback на английское
+    return status.name_native || status.name || (language === 'en' ? 'Not defined' : 'Не определен');
+  }
+
   // Установка типов документов проекта
   setProjectDocumentTypes(documentTypes: any[]) {
     this.projectDocumentTypes = documentTypes;
@@ -261,11 +309,13 @@ class ReferencesStore {
     this.reviewCodes = [];
     this.documentTypes = [];
     this.projectDocumentTypes = [];
+    this.workflowStatuses = [];
     this.isDescriptionsLoaded = false;
     this.isStatusesLoaded = false;
     this.isStepsLoaded = false;
     this.isReviewCodesLoaded = false;
     this.isDocumentTypesLoaded = false;
+    this.isWorkflowStatusesLoaded = false;
     this.error = null;
   }
 }

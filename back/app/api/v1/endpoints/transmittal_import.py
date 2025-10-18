@@ -76,10 +76,6 @@ async def import_incoming_transmittal(
         if 'sheet_name' not in settings_data or not settings_data['sheet_name'] or not settings_data['sheet_name'].strip():
             raise HTTPException(status_code=400, detail=get_localized_message("MISSING_SHEET_NAME"))
         
-        if 'metadata_fields' not in settings_data:
-            raise HTTPException(status_code=400, detail=get_localized_message("MISSING_METADATA_FIELDS"))
-        
-        
         # Читаем Excel файл
         contents = await file.read()
         try:
@@ -98,20 +94,22 @@ async def import_incoming_transmittal(
             else:
                 raise HTTPException(status_code=400, detail=get_localized_message("EXCEL_READ_ERROR", error=error_str))
         
-        # Извлекаем метаданные
-        metadata = extract_metadata(excel_data, settings_data['metadata_fields'])
-        
-        # Проверяем, что найдены все необходимые метаданные
-        missing_metadata = []
-        for field_key, field_config in settings_data['metadata_fields'].items():
-            if field_key not in metadata or not metadata[field_key]:
-                missing_metadata.append(field_config['label'])
-        
-        if missing_metadata:
-            raise HTTPException(
-                status_code=400, 
-                detail=get_localized_message("IMPORT_METADATA_NOT_FOUND", fields=','.join(missing_metadata))
-            )
+        # Извлекаем метаданные (если они настроены)
+        metadata = {}
+        if 'metadata_fields' in settings_data and settings_data['metadata_fields']:
+            metadata = extract_metadata(excel_data, settings_data['metadata_fields'])
+            
+            # Проверяем, что найдены все необходимые метаданные
+            missing_metadata = []
+            for field_key, field_config in settings_data['metadata_fields'].items():
+                if field_key not in metadata or not metadata[field_key]:
+                    missing_metadata.append(field_config['label'])
+            
+            if missing_metadata:
+                raise HTTPException(
+                    status_code=400, 
+                    detail=get_localized_message("IMPORT_METADATA_NOT_FOUND", fields=','.join(missing_metadata))
+                )
         
         # Проверяем наличие table_fields в настройках
         if 'table_fields' not in settings_data:
@@ -119,6 +117,21 @@ async def import_incoming_transmittal(
         
         # Получаем настраиваемые поля таблицы
         table_fields = settings_data['table_fields']
+        
+        # Проверяем конфликт источников номера трансмиттала ПЕРЕД поиском полей
+        has_metadata_label = (settings_data and 
+                             'metadata_fields' in settings_data and 
+                             'transmittal_number' in settings_data['metadata_fields'] and
+                             settings_data['metadata_fields']['transmittal_number'].get('label', '').strip())
+        has_table_field = 'transmittal_number_label' in table_fields and table_fields['transmittal_number_label'].strip()
+        
+        
+        if has_metadata_label and has_table_field:
+            # Оба источника настроены - ошибка
+            raise HTTPException(
+                status_code=400,
+                detail=get_localized_message("IMPORT_BOTH_SOURCES_CONFIGURED")
+            )
         
         # Находим начало таблицы
         table_start_row, missing_fields = find_table_start(excel_data, table_fields)
@@ -142,7 +155,7 @@ async def import_incoming_transmittal(
         
         # Сначала проверяем все документы, не создавая трансмиттал
         table_result = process_table_data_for_transmittal_revisions(
-            db, table_data, table_fields, None, project_id  # transmittal_id = None для проверки
+            db, table_data, table_fields, None, project_id, table_start_row, excel_data  # transmittal_id = None для проверки
         )
         
         missing_documents = table_result['missing_documents']
@@ -156,15 +169,44 @@ async def import_incoming_transmittal(
             )
         
         # Если все документы существуют, создаем трансмиттал
+        # Определяем источник номера трансмиттала
+        transmittal_number = ''
+        
+        if has_metadata_label:
+            # Только метаданные
+            transmittal_number = metadata.get('transmittal_number', '').strip()
+        elif has_table_field:
+            # Только таблица
+            transmittal_number = find_transmittal_number_in_table(table_data, table_fields)
+        else:
+            # Ничего не настроено - ошибка
+            raise HTTPException(
+                status_code=400,
+                detail=get_localized_message("IMPORT_NO_SOURCE_CONFIGURED")
+            )
+        
+        # Проверяем, что номер найден
+        if not transmittal_number:
+            if has_metadata_label:
+                raise HTTPException(
+                    status_code=400,
+                    detail=get_localized_message("IMPORT_TRANSMITTAL_NOT_FOUND_METADATA")
+                )
+            else:
+                raise HTTPException(
+                    status_code=400,
+                    detail=get_localized_message("IMPORT_TRANSMITTAL_NOT_FOUND_TABLE")
+                )
+        
         transmittal = Transmittal(
-            transmittal_number=metadata.get('transmittal_number', ''),
+            transmittal_number=transmittal_number,
             project_id=project_id,
             counterparty_id=counterparty_id,
             direction='in',
             status_id=received_status.id,
             created_by=current_user.id,
             transmittal_date=datetime.now(),
-            title=f"Входящий трансмиттал от {metadata.get('transmittal_number', '')}",
+            title=f"Входящий трансмиттал {transmittal_number}",
             description=f"Импортирован из Excel файла: {file.filename}"
         )
         
@@ -174,7 +216,7 @@ async def import_incoming_transmittal(
         
         # Теперь создаем transmittal_revisions
         table_result = process_table_data_for_transmittal_revisions(
-            db, table_data, table_fields, transmittal.id, project_id
+            db, table_data, table_fields, transmittal.id, project_id, table_start_row, excel_data
         )
         
         created_revisions = table_result['created_revisions']
@@ -255,19 +297,27 @@ def extract_metadata(excel_data: pd.DataFrame, metadata_fields: Dict[str, Any]) 
 
 def find_table_start(excel_data: pd.DataFrame, table_fields: Dict[str, str]) -> tuple[int, list[str]]:
     """Находит начало таблицы по заголовкам и возвращает отсутствующие поля"""
-    table_field_labels = list(table_fields.values())
+    # Фильтруем пустые поля - они не нужны для поиска заголовков
+    table_field_labels = [label for label in table_fields.values() if label and label.strip()]
     missing_fields = []
+    
+    # Если нет полей для поиска, возвращаем ошибку
+    if not table_field_labels:
+        return None, ["Нет настроенных полей для поиска в таблице"]
     
     for row_idx, row in excel_data.iterrows():
         # Проверяем каждую ячейку в строке на точное совпадение
         found_headers = []
+        row_cells = []
         for col_idx, cell_value in enumerate(row):
             if pd.notna(cell_value):
                 cell_str = str(cell_value).strip()
+                row_cells.append(cell_str)
                 # Проверяем точное совпадение с каждым полем
                 for field_label in table_field_labels:
                     if cell_str == field_label:
                         found_headers.append(field_label)
+        
         
         # Если найдены ВСЕ заголовки - это начало таблицы
         if len(found_headers) == len(table_field_labels):
@@ -298,9 +348,16 @@ def process_table_data_for_transmittal_revisions(
     table_data: pd.DataFrame, 
     table_fields: Dict[str, str], 
     transmittal_id: int | None, 
-    project_id: int
+    project_id: int,
+    header_row_idx: int = 0,
+    original_excel_data: pd.DataFrame = None
 ) -> Dict[str, Any]:
     """Обрабатывает данные таблицы и создает transmittal_revisions"""
+    
+    print(f"DEBUG: process_table_data_for_transmittal_revisions called")
+    print(f"DEBUG: table_fields = {table_fields}")
+    print(f"DEBUG: table_data columns = {list(table_data.columns)}")
+    print(f"DEBUG: header_row_idx = {header_row_idx}")
     
     created_revisions = []
     missing_documents = []  # Список несуществующих документов
@@ -309,51 +366,86 @@ def process_table_data_for_transmittal_revisions(
     document_number_label = table_fields.get('document_number_label', '')
     status_label = table_fields.get('status_label', '')
     
-    # Находим индексы колонок
+    print(f"DEBUG: document_number_label = '{document_number_label}'")
+    print(f"DEBUG: status_label = '{status_label}'")
+    
+    # Находим индексы колонок в строке заголовка
     document_number_col = None
     status_col = None
     
-    for col_idx, col_name in enumerate(table_data.columns):
-        col_name_clean = str(col_name).strip().lower()
+    # Ищем колонки в строке заголовка исходного Excel файла
+    if original_excel_data is not None and len(original_excel_data) > header_row_idx:
+        header_row = original_excel_data.iloc[header_row_idx]  # Строка заголовка в исходном файле
+        print(f"DEBUG: header_row from original Excel = {list(header_row)}")
         
-        # Ищем колонку номера документа
-        if document_number_label and document_number_label.strip().lower() in col_name_clean:
-            document_number_col = col_idx
-        # Если не нашли по названию, ищем по содержимому первой строки
-        elif document_number_label and document_number_col is None:
-            first_row_value = str(table_data.iloc[0, col_idx]).strip().lower()
-            if document_number_label.strip().lower() in first_row_value:
-                document_number_col = col_idx
-        
-        # Ищем колонку статуса
-        if status_label and status_label.strip().lower() in col_name_clean:
-            status_col = col_idx
-        # Если не нашли по названию, ищем по содержимому первой строки
-        elif status_label and status_col is None:
-            first_row_value = str(table_data.iloc[0, col_idx]).strip().lower()
-            if status_label.strip().lower() in first_row_value:
-                status_col = col_idx
+        for col_idx, cell_value in enumerate(header_row):
+            if pd.notna(cell_value):
+                cell_str = str(cell_value).strip()
+                cell_lower = cell_str.lower()
+                
+                # Ищем колонку номера документа
+                if document_number_label and document_number_col is None:
+                    document_label_clean = document_number_label.strip().lower()
+                    # Точное совпадение или заканчивается на нужный текст, но НЕ содержит "load sheet"
+                    if (cell_lower == document_label_clean or 
+                        cell_lower.endswith(document_label_clean)) and not any(exclude_word in cell_lower for exclude_word in ['load sheet', 'transmittal']):
+                        document_number_col = col_idx
+                        print(f"DEBUG: Found document column at index {col_idx}: '{cell_str}'")
+                
+                # Ищем колонку статуса
+                if status_label and status_col is None:
+                    status_label_clean = status_label.strip().lower()
+                    if (cell_lower == status_label_clean or 
+                        cell_lower.endswith(status_label_clean) or
+                        status_label_clean in cell_lower):
+                        status_col = col_idx
+                        print(f"DEBUG: Found status column at index {col_idx}: '{cell_str}'")
+    else:
+        # Fallback - ищем в первой строке table_data
+        if len(table_data) > 0:
+            header_row = table_data.iloc[0]
+            print(f"DEBUG: header_row from table_data = {list(header_row)}")
+            
+            for col_idx, cell_value in enumerate(header_row):
+                if pd.notna(cell_value):
+                    cell_str = str(cell_value).strip()
+                    cell_lower = cell_str.lower()
+                    
+                    # Ищем колонку номера документа
+                    if document_number_label and document_number_col is None:
+                        document_label_clean = document_number_label.strip().lower()
+                        # Точное совпадение или заканчивается на нужный текст, но НЕ содержит "load sheet"
+                        if (cell_lower == document_label_clean or 
+                            cell_lower.endswith(document_label_clean)) and not any(exclude_word in cell_lower for exclude_word in ['load sheet', 'transmittal']):
+                            document_number_col = col_idx
+                            print(f"DEBUG: Found document column at index {col_idx}: '{cell_str}'")
+                    
+                    # Ищем колонку статуса
+                    if status_label and status_col is None:
+                        status_label_clean = status_label.strip().lower()
+                        if (cell_lower == status_label_clean or 
+                            cell_lower.endswith(status_label_clean) or
+                            status_label_clean in cell_lower):
+                            status_col = col_idx
+                            print(f"DEBUG: Found status column at index {col_idx}: '{cell_str}'")
     
-    # Находим строку с заголовком по настройкам
-    header_row_idx = None
-    for row_idx, row in table_data.iterrows():
-        # Проверяем, содержит ли строка заголовки из настроек
-        if document_number_col is not None and document_number_col < len(row):
-            cell_value = str(row.iloc[document_number_col]).strip().lower()
-            if document_number_label and document_number_label.strip().lower() in cell_value:
-                header_row_idx = row_idx
-                break
+    # В table_data первая строка (индекс 0) - это заголовок, данные начинаются с индекса 1
+    # Но индексы в table_data соответствуют исходному Excel файлу, поэтому нужно учитывать header_row_idx
+    data_start_row = 1  # Относительно table_data (первая строка после заголовка)
     
-    if header_row_idx is None:
-        raise HTTPException(
-            status_code=400,
-            detail=get_localized_message("IMPORT_TABLE_FIELDS_NOT_FOUND", fields=document_number_label)
-        )
+    print(f"DEBUG: Using data_start_row = {data_start_row}")
+    print(f"DEBUG: document_number_col = {document_number_col}")
+    print(f"DEBUG: status_col = {status_col}")
     
     # Сначала проверяем все документы, не создавая записи
     for row_idx, row in table_data.iterrows():
-        # Пропускаем строки до заголовка и сам заголовок
-        if row_idx <= header_row_idx:
+        # Вычисляем относительный индекс в table_data (0 = заголовок, 1+ = данные)
+        relative_row_idx = row_idx - header_row_idx
+        print(f"DEBUG: Processing row {row_idx} (relative {relative_row_idx}): {list(row)}")
+        
+        # Пропускаем заголовок (относительный индекс 0), начинаем с данных (относительный индекс 1+)
+        if relative_row_idx < data_start_row:
+            print(f"DEBUG: Skipping header row {row_idx} (relative {relative_row_idx})")
             continue
         
         # Проверяем, есть ли данные в строке
@@ -364,16 +456,22 @@ def process_table_data_for_transmittal_revisions(
                 break
         
         if not has_data:
+            print(f"DEBUG: No data in row {row_idx}, skipping")
             continue
+        
+        print(f"DEBUG: Processing data row {row_idx}")
             
         # Получаем номер документа
         document_number = None
         if document_number_col is not None and document_number_col < len(row):
             doc_value = row.iloc[document_number_col]
+            print(f"DEBUG: document_number_col={document_number_col}, doc_value='{doc_value}'")
             if pd.notna(doc_value):
                 document_number = str(doc_value).strip()
+                print(f"DEBUG: Found document_number='{document_number}'")
         
         if not document_number:
+            print(f"DEBUG: No document_number in row {row_idx}, skipping")
             continue  # Пропускаем строки без номера документа
         
         # Ищем документ по номеру в проекте
@@ -477,3 +575,61 @@ def process_table_data_for_transmittal_revisions(
         'created_revisions': created_revisions,
         'missing_documents': missing_documents
     }
+
+def find_transmittal_number_in_table(table_data: pd.DataFrame, table_fields: Dict[str, str]) -> str:
+    """Ищет номер трансмиттала в таблице по различным возможным полям"""
+    
+    # Сначала проверяем настройки Table Fields
+    if 'transmittal_number_label' in table_fields and table_fields['transmittal_number_label']:
+        transmittal_field_label = table_fields['transmittal_number_label']
+        
+        # Ищем колонку с этим лейблом в заголовке (первая строка)
+        header_row = table_data.iloc[0]  # Первая строка - заголовок
+        for col_idx, cell_value in enumerate(header_row):
+            if pd.notna(cell_value) and str(cell_value).strip() == transmittal_field_label:
+                # Нашли колонку, берем первое непустое значение из данных (начиная со строки 1)
+                for row_idx in range(1, len(table_data)):
+                    cell_value = table_data.iloc[row_idx, col_idx]
+                    if pd.notna(cell_value) and str(cell_value).strip():
+                        return str(cell_value).strip()
+                break
+    
+    # Если не нашли по настройкам, используем автопоиск
+    possible_transmittal_fields = [
+        'transmittal_number',
+        'transmittal_no', 
+        'transmittal_id',
+        'transmittal',
+        'number',
+        'no',
+        'id',
+        'document_id',
+        'load_sheet_document_id'
+    ]
+    
+    # Ищем в заголовках таблицы (первая строка)
+    header_row = table_data.iloc[0]  # Первая строка - заголовок
+    for col_idx, cell_value in enumerate(header_row):
+        if pd.notna(cell_value):
+            col_str = str(cell_value).strip().lower()
+            for possible_field in possible_transmittal_fields:
+                if possible_field in col_str or col_str in possible_field:
+                    # Нашли потенциальное поле, берем первое непустое значение из данных (начиная со строки 1)
+                    for row_idx in range(1, len(table_data)):
+                        cell_value = table_data.iloc[row_idx, col_idx]
+                        if pd.notna(cell_value) and str(cell_value).strip():
+                            return str(cell_value).strip()
+    
+    # Если не нашли в заголовках, ищем в самих данных (начиная со строки 1)
+    for row_idx in range(1, len(table_data)):
+        row = table_data.iloc[row_idx]
+        for col_idx, cell_value in enumerate(row):
+            if pd.notna(cell_value):
+                cell_str = str(cell_value).strip()
+                # Ищем значения, которые могут быть номерами трансмитталов
+                if (len(cell_str) > 3 and 
+                    (cell_str.isalnum() or '-' in cell_str or '_' in cell_str) and
+                    not cell_str.isdigit()):  # Исключаем чисто числовые значения
+                    return cell_str
+    
+    return ""

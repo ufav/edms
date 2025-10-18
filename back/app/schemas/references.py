@@ -191,3 +191,23 @@ class UserRoleResponse(UserRoleBase):
     
     class Config:
         from_attributes = True
+
+
+# Workflow Status schemas
+class WorkflowStatusBase(BaseModel):
+    name: str
+    name_native: Optional[str] = None
+    description: Optional[str] = None
+    is_active: bool = True
+
+
+class WorkflowStatusCreate(WorkflowStatusBase):
+    pass
+
+
+class WorkflowStatusResponse(WorkflowStatusBase):
+    id: int
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True

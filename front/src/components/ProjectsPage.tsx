@@ -73,7 +73,7 @@ const ProjectsPage: React.FC = observer(() => {
 
   // Загружаем проекты при монтировании компонента
   useEffect(() => {
-    projectStore.loadProjects();
+    projectStore.loadProjects(true); // Принудительная перезагрузка для получения актуальной сортировки
   }, []);
 
   const handleDelete = (projectId: number) => {

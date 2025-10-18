@@ -42,6 +42,7 @@ class DocumentRevisionBase(BaseModel):
     number: Optional[str] = None
     user_id: Optional[int] = None
     remarks: Optional[str] = None
+    workflow_status_id: Optional[int] = None
 
 
 class DocumentRevisionCreate(DocumentRevisionBase):

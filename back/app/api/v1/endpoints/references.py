@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.models.references import (
     RevisionStatus, RevisionDescription, RevisionStep, Originator, ReviewCode,
-    Language, Department, Company, UserRole
+    Language, Department, Company, UserRole, WorkflowStatus
 )
 from app.schemas.references import (
     RevisionStatusCreate, RevisionStatusResponse,
@@ -19,7 +19,8 @@ from app.schemas.references import (
     LanguageCreate, LanguageResponse,
     DepartmentCreate, DepartmentResponse,
     CompanyCreate, CompanyResponse,
-    UserRoleCreate, UserRoleResponse
+    UserRoleCreate, UserRoleResponse,
+    WorkflowStatusCreate, WorkflowStatusResponse
 )
 
 router = APIRouter()
@@ -176,3 +177,20 @@ def create_user_role(role: UserRoleCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(db_role)
     return db_role
+
+
+# Workflow Status endpoints
+@router.get("/workflow-statuses", response_model=List[WorkflowStatusResponse])
+def get_workflow_statuses(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    """Get all workflow statuses"""
+    return db.query(WorkflowStatus).filter(WorkflowStatus.is_active == True).offset(skip).limit(limit).all()
+
+
+@router.post("/workflow-statuses", response_model=WorkflowStatusResponse)
+def create_workflow_status(status: WorkflowStatusCreate, db: Session = Depends(get_db)):
+    """Create new workflow status"""
+    db_status = WorkflowStatus(**status.dict())
+    db.add(db_status)
+    db.commit()
+    db.refresh(db_status)
+    return db_status

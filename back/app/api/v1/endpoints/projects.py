@@ -118,21 +118,19 @@ async def check_project_code(
 
 @router.get("/", response_model=List[dict])
 async def get_projects(
-    skip: int = 0,
-    limit: int = 100,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
     """Получение списка проектов"""
     # Админ видит все проекты, остальные только свои
     if current_user.user_role and current_user.user_role.code == 'admin':
-        projects_query = db.query(Project).filter(Project.is_deleted == 0).offset(skip).limit(limit)
+        projects_query = db.query(Project).filter(Project.is_deleted == 0).order_by(Project.updated_at.desc())
     else:
         # Получаем проекты, где пользователь является участником
         projects_query = db.query(Project).join(ProjectMember).filter(
             ProjectMember.user_id == current_user.id,
             Project.is_deleted == 0
-        ).offset(skip).limit(limit)
+        ).order_by(Project.updated_at.desc())
     
     projects = projects_query.all()
     result = []

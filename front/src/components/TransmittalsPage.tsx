@@ -115,8 +115,6 @@ const TransmittalsPage: React.FC = observer(() => {
   const handleConfirmDelete = async (item: { id: number }) => {
     try {
       setDeletingId(item.id);
-      console.log('Attempting to delete transmittal:', item.id);
-      console.log('transmittalsApi methods:', Object.keys(transmittalsApi));
       await transmittalsApi.delete(item.id);
       if (projectStore.hasSelectedProject) {
         await transmittalStore.loadTransmittals(projectStore.selectedProject!.id, true);
@@ -151,8 +149,6 @@ const TransmittalsPage: React.FC = observer(() => {
       message: message,
       severity: result.missing_documents && result.missing_documents.length > 0 ? 'warning' : 'success'
     });
-    
-    console.log('Трансмиттал успешно импортирован:', result);
   };
 
   const handleNotificationClose = () => {
@@ -212,9 +208,6 @@ const TransmittalsPage: React.FC = observer(() => {
 
 
   const handleImportError = (error: string) => {
-    console.log('Import error received:', error); // Для отладки
-    console.log('Error starts with WORKSHEET_NOT_FOUND:', error.startsWith('WORKSHEET_NOT_FOUND:')); // Для отладки
-    
     // Обрабатываем коды ошибок от бэкенда
     if (error.startsWith('IMPORT_DUPLICATE:')) {
       const transmittalNumber = error.split(':')[1];

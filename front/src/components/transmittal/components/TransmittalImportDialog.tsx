@@ -111,7 +111,6 @@ const TransmittalImportDialog: React.FC<TransmittalImportDialogProps> = observer
       onSuccess(result);
       handleClose();
     } catch (err: any) {
-      console.log('Import error in dialog:', err); // Для отладки
       const errorMessage = err.response?.data?.detail || err.message || t('transmittals.import_error');
       // Не показываем ошибку в модалке, только передаем в родительский компонент
       if (onError) {
