@@ -893,6 +893,25 @@ export const transmittalsApi = {
     const response = await apiClient.get('/transmittals/documents/active-revisions', { params });
     return response.data;
   },
+
+  // Удалить ревизию из трансмиттала
+  removeRevision: async (transmittalId: number, revisionId: number): Promise<void> => {
+    await apiClient.delete(`/transmittals/${transmittalId}/revisions/${revisionId}`);
+  },
+
+  // Добавить ревизии в трансмиттал
+  addRevisions: async (transmittalId: number, revisionIds: number[]): Promise<any> => {
+    const response = await apiClient.post(`/transmittals/${transmittalId}/revisions`, {
+      revision_ids: revisionIds
+    });
+    return response.data;
+  },
+
+  // Получить статусы трансмитталов
+  getStatuses: async (): Promise<any[]> => {
+    const response = await apiClient.get('/transmittals/statuses/');
+    return response.data;
+  },
 };
 
 // API методы для ревью

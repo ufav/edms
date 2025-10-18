@@ -4,6 +4,7 @@ Transmittals endpoints
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from typing import List
 from pydantic import BaseModel
 
@@ -114,8 +115,25 @@ async def create_transmittal(
     )
     
     db.add(db_transmittal)
-    db.commit()
-    db.refresh(db_transmittal)
+    try:
+        db.commit()
+        db.refresh(db_transmittal)
+    except IntegrityError as e:
+        db.rollback()
+        if "ix_transmittals_transmittal_number" in str(e.orig):
+            # Извлекаем номер трансмиттала из ошибки
+            import re
+            match = re.search(r'\(transmittal_number\)=\(([^)]+)\)', str(e.orig))
+            transmittal_number = match.group(1) if match else transmittal_data.transmittal_number
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Трансмиттал с номером '{transmittal_number}' уже существует"
+            )
+        else:
+            raise HTTPException(
+                status_code=400, 
+                detail="Ошибка при создании трансмиттала"
+            )
     
     # Добавляем ревизии в трансмиттал
     for revision_id in transmittal_data.revision_ids:
@@ -168,8 +186,25 @@ async def update_transmittal(
     if transmittal_data.counterparty_id is not None:
         transmittal.counterparty_id = transmittal_data.counterparty_id
     
-    db.commit()
-    db.refresh(transmittal)
+    try:
+        db.commit()
+        db.refresh(transmittal)
+    except IntegrityError as e:
+        db.rollback()
+        if "ix_transmittals_transmittal_number" in str(e.orig):
+            # Извлекаем номер трансмиттала из ошибки
+            import re
+            match = re.search(r'\(transmittal_number\)=\(([^)]+)\)', str(e.orig))
+            transmittal_number = match.group(1) if match else transmittal_data.transmittal_number
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Трансмиттал с номером '{transmittal_number}' уже существует"
+            )
+        else:
+            raise HTTPException(
+                status_code=400, 
+                detail="Ошибка при обновлении трансмиттала"
+            )
     
     return {
         "id": transmittal.id,
@@ -455,7 +490,7 @@ async def send_transmittal(
     from app.models.references import TransmittalStatus
     
     # Получаем статус "sent"
-    sent_status = db.query(TransmittalStatus).filter(TransmittalStatus.name == "sent").first()
+    sent_status = db.query(TransmittalStatus).filter(TransmittalStatus.name == "Sent").first()
     if not sent_status:
         raise HTTPException(status_code=500, detail="Статус 'sent' не найден")
     
@@ -500,3 +535,19 @@ async def receive_transmittal(
     db.refresh(transmittal)
     
     return {"message": "Трансмиттал успешно получен", "transmittal_id": transmittal.id}
+
+
+@router.get("/statuses/")
+async def get_transmittal_statuses(db: Session = Depends(get_db)):
+    """Получить все статусы трансмитталов"""
+    from app.models.references import TransmittalStatus
+    
+    statuses = db.query(TransmittalStatus).all()
+    return [
+        {
+            "id": status.id,
+            "name": status.name,
+            "description": status.description
+        }
+        for status in statuses
+    ]

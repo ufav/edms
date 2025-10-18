@@ -54,6 +54,7 @@ export interface TransmittalTableProps {
   // Обработчики действий
   onShowDetails: (transmittalId: number) => void;
   onDelete: (transmittal: any) => void;
+  onSend?: (transmittal: any) => void;
   
   // Утилиты
   formatDate: (date: string) => string;
@@ -68,6 +69,7 @@ export const TransmittalTable: React.FC<TransmittalTableProps> = ({
   columnOrder,
   onShowDetails,
   onDelete,
+  onSend,
   formatDate,
 }) => {
   const { t } = useTranslation();
@@ -392,6 +394,21 @@ export const TransmittalTable: React.FC<TransmittalTableProps> = ({
                           <DetailsIcon fontSize="small" />
                         </IconButton>
                       </Tooltip>
+                      
+                      {/* Кнопка отправки - только для исходящих трансмитталов со статусом черновик */}
+                      {transmittal.direction === 'out' && transmittal.status === 'Draft' && (
+                        <Tooltip title={t('transmittals.send')}>
+                          <IconButton 
+                            size="small" 
+                            onClick={() => onSend && onSend(transmittal)} 
+                            sx={{ padding: '4px' }}
+                            color="default"
+                          >
+                            <SendIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                      
                       <Tooltip title={t('transmittals.delete')}>
                         <IconButton size="small" onClick={() => onDelete(transmittal)} sx={{ padding: '4px' }}>
                           <DeleteIcon fontSize="small" />

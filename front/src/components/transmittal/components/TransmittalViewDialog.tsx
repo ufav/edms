@@ -31,6 +31,19 @@ const TransmittalViewDialog: React.FC<TransmittalViewDialogProps> = observer(({ 
         await transmittalsApi.update(transmittalId, transmittalData);
         // Перезагружаем данные трансмиттала
         await transmittalStore.loadTransmittalDetails(transmittalId);
+        
+        // Обновляем основной список трансмитталов
+        if (transmittalStore.selectedTransmittal?.project_id) {
+          await transmittalStore.loadTransmittals(transmittalStore.selectedTransmittal.project_id, true);
+        }
+        
+        // Обновляем selectedTransmittal из обновленного списка (как в документах)
+        const updatedTransmittal = transmittalStore.transmittals.find(t => t.id === transmittalId);
+        if (updatedTransmittal) {
+          runInAction(() => {
+            transmittalStore.selectedTransmittal = updatedTransmittal;
+          });
+        }
       }
     }
   });
@@ -96,8 +109,12 @@ const TransmittalViewDialog: React.FC<TransmittalViewDialogProps> = observer(({ 
         onCancel={handleCancel}
         onSave={handleSave}
         hasChanges={transmittalState.hasChanges}
-        revisions={transmittalStore.selectedRevisions}
-        isLoading={transmittalStore.detailsLoading}
+        revisions={transmittalState.getCurrentRevisions(transmittalStore.selectedRevisions)}
+        isLoading={transmittalStore.detailsLoading || transmittalState.isSaving}
+        onShowNotification={transmittalState.showNotification}
+        // Передаем функции для работы с ревизиями
+        onAddRevision={transmittalState.addPendingRevision}
+        onRemoveRevision={transmittalState.removePendingRevision}
         onOpenDocument={async (documentId) => {
           setDocViewerId(documentId);
           setDocData(null);

@@ -12,6 +12,7 @@ import {
   Table,
   TableBody,
   TableCell,
+  TableContainer,
   TableHead,
   TableRow,
   Paper,
@@ -75,6 +76,8 @@ export interface TransmittalDialogProps {
   onEdit?: () => void;
   onCancel?: () => void;
   onSave?: () => void;
+  onAddRevision?: (revision: any) => void;
+  onRemoveRevision?: (revisionId: number) => void;
   hasChanges?: boolean;
   // Утилиты
   formatFileSize: (bytes: number) => string;
@@ -98,6 +101,8 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
   onEdit,
   onCancel,
   onSave,
+  onAddRevision,
+  onRemoveRevision,
   hasChanges = false,
   formatFileSize,
   isLoading = false,
@@ -313,8 +318,24 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
   const handleAddDocument = (revision: any) => {
     if (!revision) return;
     
-    // Добавляем ревизию в store
-    transmittalCartStore.addRevision(revision.id);
+    if (isEditing && onAddRevision) {
+      // В режиме редактирования - добавляем в локальное состояние
+      onAddRevision(revision);
+    } else {
+      // В режиме создания - добавляем в store
+      transmittalCartStore.addRevision(revision.id);
+    }
+  };
+
+  // Функция удаления ревизии
+  const handleRemoveRevision = (revisionId: number) => {
+    if (isEditing && onRemoveRevision) {
+      // В режиме редактирования - удаляем из локального состояния
+      onRemoveRevision(revisionId);
+    } else {
+      // В режиме создания - удаляем из store
+      transmittalCartStore.removeRevision(revisionId);
+    }
   };
 
   const handleCreate = async () => {
@@ -340,10 +361,19 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
       // Очищаем корзину после успешного создания
       transmittalCartStore.clearAll();
       onClose();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error creating transmittal:', error);
-      if (onShowNotification) {
-        onShowNotification(t('transmittals.create_error'), 'error');
+      
+      // Обрабатываем ошибки уникальности номера трансмиттала
+      if (error.response?.data?.detail?.includes('повторяющееся значение ключа нарушает ограничение уникальности "ix_transmittals_transmittal_number"')) {
+        if (onShowNotification) {
+          onShowNotification(t('transmittals.transmittal_number_exists'), 'error');
+        }
+      } else {
+        const errorMessage = error.response?.data?.detail || error.message || t('transmittals.create_error');
+        if (onShowNotification) {
+          onShowNotification(errorMessage, 'error');
+        }
       }
     }
   };
@@ -367,9 +397,35 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
           sx: {
             height: '80vh',
             maxHeight: '800px',
+            position: 'relative', // Для позиционирования overlay
           }
         }}
       >
+        {/* Overlay со спиннером при сохранении */}
+        {isLoading && (
+          <Box
+            sx={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: 'rgba(255, 255, 255, 0.8)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 9999,
+              backdropFilter: 'blur(2px)',
+            }}
+          >
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+              <CircularProgress size={48} />
+              <Typography variant="body2" color="text.secondary">
+                {t('common.saving')}
+              </Typography>
+            </Box>
+          </Box>
+        )}
       <DialogTitle>
         <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <Typography variant="h6">
@@ -525,12 +581,12 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
           {/* Заголовок таблицы */}
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
             <Typography variant="h6">
-              {t('transmittals.documents')} ({readOnly ? (revisions?.length || 0) : selectedRevisionsFromStore.length})
+              {t('transmittals.documents')} ({readOnly || isEditing ? (revisions?.length || 0) : selectedRevisionsFromStore.length})
             </Typography>
           </Box>
 
           {/* Поле для добавления документов */}
-          {!readOnly && (
+          {(!readOnly || isEditing) && (
             <Box sx={{ mb: 2 }}>
               <Autocomplete
                 options={availableRevisions}
@@ -562,8 +618,10 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
                     }}
                   />
                 )}
-                renderOption={(props, option) => (
-                  <Box component="li" {...props}>
+                renderOption={(props, option) => {
+                  const { key, ...otherProps } = props;
+                  return (
+                    <Box component="li" key={key} {...otherProps}>
                     <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
                         <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
@@ -585,7 +643,8 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
                       </Typography>
                     </Box>
                   </Box>
-                )}
+                  );
+                }}
                 noOptionsText={t('transmittals.no_documents_found')}
                 clearOnEscape
                 selectOnFocus
@@ -595,11 +654,84 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
           )}
 
           {/* Таблица с единой сеткой */}
-          <Paper sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-            <Box sx={{ 
+          {isLoading ? (
+            <Paper sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              <Box sx={{ 
+                flexGrow: 1, 
+                maxHeight: '400px', 
+                overflow: 'auto',
+                '&::-webkit-scrollbar': {
+                  width: '8px',
+                },
+                '&::-webkit-scrollbar-track': {
+                  background: '#f1f1f1',
+                  borderRadius: '4px',
+                },
+                '&::-webkit-scrollbar-thumb': {
+                  background: '#c1c1c1',
+                  borderRadius: '4px',
+                  '&:hover': {
+                    background: '#a8a8a8',
+                  },
+                },
+              }}>
+                <Table size="small" stickyHeader>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>
+                        {t('transmittals.columns.document_number')}
+                      </TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>
+                        {t('transmittals.columns.revision')}
+                      </TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>
+                        {t('transmittals.columns.file')}
+                      </TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>
+                        {t('transmittals.columns.file_size')}
+                      </TableCell>
+                      <TableCell 
+                        sx={{ 
+                          position: 'sticky', 
+                          right: 0, 
+                          backgroundColor: 'background.paper',
+                          zIndex: 2,
+                          fontWeight: 'bold',
+                          fontSize: '0.875rem'
+                        }}
+                      >
+                        {t('transmittals.columns.actions')}
+                      </TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {/* Скелетон для загрузки */}
+                    {Array.from({ length: 3 }).map((_, index) => (
+                      <TableRow key={`skeleton-${index}`}>
+                        <TableCell><Skeleton variant="text" width="80%" /></TableCell>
+                        <TableCell><Skeleton variant="rectangular" width={60} height={24} /></TableCell>
+                        <TableCell>
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Skeleton variant="circular" width={24} height={24} />
+                            <Skeleton variant="text" width="60%" />
+                          </Box>
+                        </TableCell>
+                        <TableCell><Skeleton variant="text" width="40%" /></TableCell>
+                        <TableCell><Skeleton variant="circular" width={32} height={32} /></TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </Box>
+            </Paper>
+          ) : (readOnly ? (revisions?.length || 0) === 0 : selectedRevisionsFromStore.length === 0) ? (
+            <TableContainer component={Paper} sx={{ 
               flexGrow: 1, 
               maxHeight: '400px', 
               overflow: 'auto',
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center',
               '&::-webkit-scrollbar': {
                 width: '8px',
               },
@@ -615,62 +747,64 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
                 },
               },
             }}>
-              <Table size="small" stickyHeader>
-                <TableHead>
-                  <TableRow>
-                    <TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>
-                      {t('transmittals.columns.document_number')}
-                    </TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>
-                      {t('transmittals.columns.revision')}
-                    </TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>
-                      {t('transmittals.columns.file')}
-                    </TableCell>
-                    <TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>
-                      {t('transmittals.columns.file_size')}
-                    </TableCell>
-                    <TableCell 
-                      sx={{ 
-                        position: 'sticky', 
-                        right: 0, 
-                        backgroundColor: 'background.paper',
-                        zIndex: 2,
-                        fontWeight: 'bold',
-                        fontSize: '0.875rem'
-                      }}
-                    >
-                      {t('transmittals.columns.actions')}
-                    </TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {isLoading ? (
-                    // Скелетон для загрузки
-                    Array.from({ length: 3 }).map((_, index) => (
-                      <TableRow key={`skeleton-${index}`}>
-                        <TableCell><Skeleton variant="text" width="80%" /></TableCell>
-                        <TableCell><Skeleton variant="rectangular" width={60} height={24} /></TableCell>
-                        <TableCell>
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                            <Skeleton variant="circular" width={24} height={24} />
-                            <Skeleton variant="text" width="60%" />
-                          </Box>
-                        </TableCell>
-                        <TableCell><Skeleton variant="text" width="40%" /></TableCell>
-                        <TableCell><Skeleton variant="circular" width={32} height={32} /></TableCell>
-                      </TableRow>
-                    ))
-                  ) : (readOnly ? (revisions?.length || 0) === 0 : selectedRevisionsFromStore.length === 0) ? (
+              <Box sx={{ textAlign: 'center', py: 4 }}>
+                <Typography variant="h6" color="text.secondary">
+                  {t('transmittals.no_documents_selected')}
+                </Typography>
+              </Box>
+            </TableContainer>
+          ) : (
+            <Paper sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+              <Box sx={{ 
+                flexGrow: 1, 
+                maxHeight: '400px', 
+                overflow: 'auto',
+                '&::-webkit-scrollbar': {
+                  width: '8px',
+                },
+                '&::-webkit-scrollbar-track': {
+                  background: '#f1f1f1',
+                  borderRadius: '4px',
+                },
+                '&::-webkit-scrollbar-thumb': {
+                  background: '#c1c1c1',
+                  borderRadius: '4px',
+                  '&:hover': {
+                    background: '#a8a8a8',
+                  },
+                },
+              }}>
+                <Table size="small" stickyHeader>
+                  <TableHead>
                     <TableRow>
-                      <TableCell colSpan={5} sx={{ textAlign: 'center', py: 4 }}>
-                        <Typography variant="body2" color="text.secondary">
-                          {t('transmittals.no_documents_selected')}
-                        </Typography>
+                      <TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>
+                        {t('transmittals.columns.document_number')}
+                      </TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>
+                        {t('transmittals.columns.revision')}
+                      </TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>
+                        {t('transmittals.columns.file')}
+                      </TableCell>
+                      <TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>
+                        {t('transmittals.columns.file_size')}
+                      </TableCell>
+                      <TableCell 
+                        sx={{ 
+                          position: 'sticky', 
+                          right: 0, 
+                          backgroundColor: 'background.paper',
+                          zIndex: 2,
+                          fontWeight: 'bold',
+                          fontSize: '0.875rem'
+                        }}
+                      >
+                        {t('transmittals.columns.actions')}
                       </TableCell>
                     </TableRow>
-                  ) : (
-                    (readOnly ? (revisions || []) : selectedRevisionsFromStore).map((revision: any) => {
+                  </TableHead>
+                  <TableBody>
+                    {(readOnly || isEditing ? (revisions || []) : selectedRevisionsFromStore).map((revision: any) => {
                     const fileTypeInfo = getFileTypeInfo(revision.file_type || '', revision.file_name);
                     return (
                       <TableRow 
@@ -732,13 +866,13 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
                             justifyContent: 'flex-start'
                           }}
                         >
-                          {readOnly ? (
+                          {readOnly && !isEditing ? (
                             <IconButton disabled size="small">
                               <DeleteIcon fontSize="small" />
                             </IconButton>
                           ) : (
                             <IconButton
-                              onClick={() => transmittalCartStore.removeRevision(revision.id)}
+                              onClick={() => handleRemoveRevision(revision.id)}
                               disabled={isLoading}
                               size="small"
                             >
@@ -749,11 +883,12 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
                       </TableRow>
                     );
                   })
-                  )}
+                  }
                 </TableBody>
               </Table>
             </Box>
           </Paper>
+          )}
         </Box>
       </DialogContent>
 

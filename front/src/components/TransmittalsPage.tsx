@@ -29,12 +29,14 @@ import AppPagination from './AppPagination';
 import NotificationSnackbar from './NotificationSnackbar';
 import { useDeleteDialog } from '../hooks/useDeleteDialog';
 import { transmittalsApi } from '../api/client';
+import { useRefreshStore } from '../hooks/useRefreshStore';
 
 const TransmittalsPage: React.FC = observer(() => {
   const { t, i18n } = useTranslation();
   const { isViewer } = useCurrentUser();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const { refreshTransmittals } = useRefreshStore();
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterProject] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
@@ -75,7 +77,7 @@ const TransmittalsPage: React.FC = observer(() => {
 
   // Фильтрация трансмитталов
   const filteredTransmittals = transmittalStore.transmittals.filter(t => {
-    const statusMatch = filterStatus === 'all' || t.status === filterStatus;
+    const statusMatch = filterStatus === 'all' || t.status?.toLowerCase() === filterStatus.toLowerCase();
     const projectMatch = filterProject === 'all' || t.project_id.toString() === filterProject;
     const selectedProjectMatch = !projectStore.hasSelectedProject || t.project_id === projectStore.selectedProject?.id;
     const searchMatch = searchTerm === '' || 
@@ -179,6 +181,30 @@ const TransmittalsPage: React.FC = observer(() => {
       setNotification({
         open: true,
         message: err.response?.data?.detail || err.message || t('transmittals.create_error'),
+        severity: 'error'
+      });
+    }
+  };
+
+  const handleSend = async (transmittal: any) => {
+    try {
+      await transmittalsApi.send(transmittal.id);
+      
+      setNotification({
+        open: true,
+        message: t('transmittals.send_success'),
+        severity: 'success'
+      });
+      
+      // Перезагружаем список трансмитталов
+      if (projectStore.selectedProject) {
+        transmittalStore.loadTransmittals(projectStore.selectedProject.id, true);
+      }
+    } catch (error: any) {
+      console.error('Error sending transmittal:', error);
+      setNotification({
+        open: true,
+        message: error.response?.data?.detail || error.message || t('transmittals.send_error'),
         severity: 'error'
       });
     }
@@ -367,6 +393,7 @@ const TransmittalsPage: React.FC = observer(() => {
             columnOrder={transmittalSettings.columnOrder}
             onShowDetails={handleView}
             onDelete={(transmittal) => handleDelete(transmittal.id)}
+            onSend={handleSend}
             formatDate={transmittalStore.formatDate}
           />
         </Box>
@@ -387,9 +414,11 @@ const TransmittalsPage: React.FC = observer(() => {
       <TransmittalViewDialog
         open={viewerOpen}
         transmittalId={selectedTransmittalId}
-        onClose={() => {
+        onClose={async () => {
           setViewerOpen(false);
           setSelectedTransmittalId(null);
+          // Обновляем список трансмитталов после закрытия диалога
+          await refreshTransmittals();
         }}
       />
 

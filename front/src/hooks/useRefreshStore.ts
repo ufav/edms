@@ -17,7 +17,7 @@ export const useRefreshStore = () => {
 
   const refreshTransmittals = useCallback(async () => {
     if (projectStore.selectedProject) {
-      await transmittalStore.loadTransmittals(projectStore.selectedProject.id);
+      await transmittalStore.loadTransmittals(projectStore.selectedProject.id, true);
     }
   }, []);
 

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   TextField,
@@ -17,6 +17,7 @@ import {
   Settings as SettingsIcon,
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
+import { transmittalsApi } from '../../../api/client';
 
 export interface TransmittalFiltersProps {
   searchTerm: string;
@@ -36,6 +37,26 @@ export const TransmittalFilters: React.FC<TransmittalFiltersProps> = ({
   const { t } = useTranslation();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  
+  // Состояние для статусов
+  const [statuses, setStatuses] = useState<any[]>([]);
+  const [statusesLoading, setStatusesLoading] = useState(true);
+
+  // Загружаем статусы при монтировании компонента
+  useEffect(() => {
+    const loadStatuses = async () => {
+      try {
+        const statusesData = await transmittalsApi.getStatuses();
+        setStatuses(statusesData);
+      } catch (error) {
+        console.error('Error loading transmittal statuses:', error);
+      } finally {
+        setStatusesLoading(false);
+      }
+    };
+    
+    loadStatuses();
+  }, []);
 
   return (
     <Box sx={{ 
@@ -68,11 +89,11 @@ export const TransmittalFilters: React.FC<TransmittalFiltersProps> = ({
           label={t('common.status')}
         >
           <MenuItem value="all">{t('filter.all')}</MenuItem>
-          <MenuItem value="draft">{t('transmittals.status.draft')}</MenuItem>
-          <MenuItem value="sent">{t('transmittals.status.sent')}</MenuItem>
-          <MenuItem value="received">{t('transmittals.status.received')}</MenuItem>
-          <MenuItem value="acknowledged">{t('transmittals.status.acknowledged')}</MenuItem>
-          <MenuItem value="rejected">{t('transmittals.status.rejected')}</MenuItem>
+          {statuses.map((status) => (
+            <MenuItem key={status.id} value={status.name.toLowerCase()}>
+              {status.name}
+            </MenuItem>
+          ))}
         </Select>
       </FormControl>
 

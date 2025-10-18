@@ -199,6 +199,18 @@ class TransmittalStore {
       return dateString;
     }
   }
+
+  // Удаление ревизии из трансмиттала
+  async removeRevisionFromTransmittal(transmittalId: number, revisionId: number) {
+    try {
+      await transmittalsApi.removeRevision(transmittalId, revisionId);
+      // Перезагружаем данные трансмиттала
+      await this.loadTransmittalDetails(transmittalId);
+    } catch (error) {
+      console.error('Error removing revision from transmittal:', error);
+      throw error;
+    }
+  }
 }
 
 export const transmittalStore = new TransmittalStore();
