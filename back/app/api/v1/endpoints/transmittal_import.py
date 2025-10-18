@@ -73,7 +73,7 @@ async def import_incoming_transmittal(
         if not isinstance(settings_data, dict):
             raise HTTPException(status_code=400, detail=get_localized_message("INVALID_SETTINGS_FORMAT"))
         
-        if 'sheet_name' not in settings_data:
+        if 'sheet_name' not in settings_data or not settings_data['sheet_name'] or not settings_data['sheet_name'].strip():
             raise HTTPException(status_code=400, detail=get_localized_message("MISSING_SHEET_NAME"))
         
         if 'metadata_fields' not in settings_data:

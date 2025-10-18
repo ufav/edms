@@ -2,35 +2,12 @@ import React, { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
   Button,
-  Chip,
-  IconButton,
-  TextField,
-  InputAdornment,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  CircularProgress,
-  Alert,
-  Tooltip,
   useTheme,
   useMediaQuery,
-  Pagination,
 } from '@mui/material';
 import {
   Add as AddIcon,
-  Send as SendIcon,
-  Description as DetailsIcon,
-  Delete as DeleteIcon,
-  CheckCircle as CheckCircleIcon,
   UploadFile as UploadFileIcon,
 } from '@mui/icons-material';
 import { observer } from 'mobx-react-lite';
@@ -43,6 +20,7 @@ import { TransmittalSettingsDialog } from './transmittal/components/TransmittalS
 import { TransmittalFilters } from './transmittal/components/TransmittalFilters';
 import { TransmittalTable } from './transmittal/components/TransmittalTable';
 import TransmittalImportDialog from './transmittal/components/TransmittalImportDialog';
+import TransmittalDialog from './transmittal/components/TransmittalDialog';
 import { useTransmittalSettings } from './transmittal/hooks/useTransmittalSettings';
 import { useTranslation } from 'react-i18next';
 import { useCurrentUser } from '../hooks/useCurrentUser';
@@ -58,11 +36,12 @@ const TransmittalsPage: React.FC = observer(() => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const [filterStatus, setFilterStatus] = useState<string>('all');
-  const [filterProject, setFilterProject] = useState<string>('all');
+  const [filterProject] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [viewerOpen, setViewerOpen] = useState(false);
   const [selectedTransmittalId, setSelectedTransmittalId] = useState<number | null>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [notification, setNotification] = useState<{
     open: boolean;
     message: string;
@@ -72,7 +51,7 @@ const TransmittalsPage: React.FC = observer(() => {
     message: '',
     severity: 'success'
   });
-  const [deletingId, setDeletingId] = useState<number | null>(null);
+  const [, setDeletingId] = useState<number | null>(null);
   const deleteDialog = useDeleteDialog();
   const [page, setPage] = useState<number>(1); // 1-based for MUI Pagination
   const rowsPerPage = 13; // фиксированное количество на страницу
@@ -118,7 +97,7 @@ const TransmittalsPage: React.FC = observer(() => {
 
 
   const handleCreate = () => {
-    // TODO: Реализовать создание трансмиттала
+    setCreateDialogOpen(true);
   };
 
   const handleView = (transmittalId: number) => {
@@ -126,13 +105,6 @@ const TransmittalsPage: React.FC = observer(() => {
     setViewerOpen(true);
   };
 
-  const handleSend = (transmittalId: number) => {
-    // TODO: Реализовать отправку трансмиттала
-  };
-
-  const handleReceive = (transmittalId: number) => {
-    // TODO: Реализовать подтверждение получения
-  };
 
   const handleDelete = (transmittalId: number) => {
     deleteDialog.openDeleteDialog({ id: transmittalId });
@@ -184,6 +156,34 @@ const TransmittalsPage: React.FC = observer(() => {
   const handleNotificationClose = () => {
     setNotification(prev => ({ ...prev, open: false }));
   };
+
+  const handleCreateTransmittal = async (transmittalData: any) => {
+    try {
+      if (!projectStore.selectedProject) return;
+      
+      await transmittalsApi.create({
+        ...transmittalData,
+        project_id: projectStore.selectedProject.id,
+      });
+      
+      setNotification({
+        open: true,
+        message: t('transmittals.create_success'),
+        severity: 'success'
+      });
+      
+      // Перезагружаем список трансмитталов
+      transmittalStore.loadTransmittals(projectStore.selectedProject.id, true);
+      setCreateDialogOpen(false);
+    } catch (err: any) {
+      setNotification({
+        open: true,
+        message: err.response?.data?.detail || err.message || t('transmittals.create_error'),
+        severity: 'error'
+      });
+    }
+  };
+
 
   const handleImportError = (error: string) => {
     console.log('Import error received:', error); // Для отладки
@@ -418,6 +418,15 @@ const TransmittalsPage: React.FC = observer(() => {
         onClose={() => setImportDialogOpen(false)}
         onSuccess={handleImportSuccess}
         onError={handleImportError}
+      />
+
+      {/* Диалог создания трансмиттала */}
+      <TransmittalDialog
+        open={createDialogOpen}
+        onClose={() => setCreateDialogOpen(false)}
+        onCreateTransmittal={handleCreateTransmittal}
+        formatFileSize={(bytes: number) => `${(bytes / 1024 / 1024).toFixed(2)} MB`}
+        formatDate={(date: string) => new Date(date).toLocaleDateString()}
       />
 
       <NotificationSnackbar

@@ -17,7 +17,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { observer } from 'mobx-react-lite';
 import { projectStore } from '../../../stores/ProjectStore';
-import { transmittalImportApi, type TransmittalImportResult } from '../../../api/client';
+import { transmittalImportApi, transmittalImportSettingsApi, type TransmittalImportResult, type TransmittalImportSettings } from '../../../api/client';
 
 interface TransmittalImportDialogProps {
   open: boolean;
@@ -36,9 +36,44 @@ const TransmittalImportDialog: React.FC<TransmittalImportDialogProps> = observer
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [selectedCounterpartyId, setSelectedCounterpartyId] = useState<number | ''>('');
   const [loading, setLoading] = useState(false);
+  const [importSettings, setImportSettings] = useState<TransmittalImportSettings[]>([]);
+  const [settingsLoading, setSettingsLoading] = useState(false);
 
   // Получаем участников проекта
   const projectParticipants = projectStore.selectedProject?.participants || [];
+
+  // Загружаем настройки импорта при открытии диалога
+  useEffect(() => {
+    if (open && projectStore.selectedProject) {
+      loadImportSettings();
+    }
+  }, [open, projectStore.selectedProject]);
+
+  const loadImportSettings = async () => {
+    if (!projectStore.selectedProject) return;
+    
+    setSettingsLoading(true);
+    try {
+      const settings = await transmittalImportSettingsApi.getByProject(projectStore.selectedProject.id);
+      setImportSettings(settings);
+    } catch (err) {
+      console.error('Ошибка загрузки настроек импорта:', err);
+      setImportSettings([]);
+    } finally {
+      setSettingsLoading(false);
+    }
+  };
+
+  // Проверяем есть ли настройки для выбранной компании
+  const hasSettingsForCompany = (companyId: number): boolean => {
+    return importSettings.some(setting => setting.company_id === companyId);
+  };
+
+  // Получаем название компании по ID
+  const getCompanyName = (companyId: number): string => {
+    const participant = projectParticipants.find(p => p.company_id === companyId);
+    return participant?.company?.name || 'Неизвестная компания';
+  };
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -51,6 +86,15 @@ const TransmittalImportDialog: React.FC<TransmittalImportDialogProps> = observer
     if (!selectedFile || !selectedCounterpartyId || !projectStore.selectedProject) {
       if (onError) {
         onError(t('transmittals.import_file_required'));
+      }
+      return;
+    }
+
+    // Проверяем наличие настроек для выбранной компании
+    if (!hasSettingsForCompany(selectedCounterpartyId as number)) {
+      const companyName = getCompanyName(selectedCounterpartyId as number);
+      if (onError) {
+        onError(t('transmittals.import_settings_not_found', { company: companyName }));
       }
       return;
     }
@@ -82,6 +126,7 @@ const TransmittalImportDialog: React.FC<TransmittalImportDialogProps> = observer
     setSelectedFile(null);
     setSelectedCounterpartyId('');
     setLoading(false);
+    setImportSettings([]);
     onClose();
   };
 
@@ -131,6 +176,15 @@ const TransmittalImportDialog: React.FC<TransmittalImportDialogProps> = observer
                    </label>
                  </Box>
 
+          {/* Предупреждение о отсутствии настроек */}
+          {selectedCounterpartyId && !hasSettingsForCompany(selectedCounterpartyId as number) && (
+            <Alert severity="warning">
+              <Typography variant="body2">
+                {t('transmittals.import_settings_not_found', { company: getCompanyName(selectedCounterpartyId as number) })}
+              </Typography>
+            </Alert>
+          )}
+
           {/* Информация */}
           <Alert severity="info">
             <Typography variant="body2">
@@ -147,7 +201,7 @@ const TransmittalImportDialog: React.FC<TransmittalImportDialogProps> = observer
         <Button
           onClick={handleImport}
           variant="contained"
-          disabled={loading || !selectedFile || !selectedCounterpartyId}
+          disabled={loading || !selectedFile || !selectedCounterpartyId || (selectedCounterpartyId && !hasSettingsForCompany(selectedCounterpartyId as number))}
           startIcon={loading ? <CircularProgress size={20} /> : null}
         >
           {loading ? t('transmittals.import_loading') : t('transmittals.import_button')}

@@ -109,7 +109,7 @@ export const TransmittalCart: React.FC<TransmittalCartProps> = observer(({
               onClick={onCreateTransmittal}
               disabled={isLoading}
             >
-              Создать трансмиттал
+              {t('common.create')}
             </Button>
           </Box>
         )}
@@ -157,7 +157,6 @@ export const TransmittalCart: React.FC<TransmittalCartProps> = observer(({
                       </Typography>
                       <Box sx={{ display: 'flex', gap: 2, fontSize: '0.75rem', color: 'text.secondary' }}>
                         <span>{revision.file_name}</span>
-                        <span>{formatFileSize(revision.file_size)}</span>
                         <span>{formatDate(revision.created_at)}</span>
                       </Box>
                     </Box>

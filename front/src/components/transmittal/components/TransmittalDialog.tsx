@@ -25,10 +25,10 @@ import {
   Grid,
   Chip,
   Skeleton,
+  Autocomplete,
 } from '@mui/material';
 import {
   Delete as DeleteIcon,
-  Send as SendIcon,
   PictureAsPdf as PdfIcon,
   Description as DocIcon,
   TableChart as ExcelIcon,
@@ -46,13 +46,16 @@ import { observer } from 'mobx-react-lite';
 import { projectStore } from '../../../stores/ProjectStore';
 import { transmittalStore } from '../../../stores/TransmittalStore';
 import referenceDataStore from '../../../stores/ReferenceDataStore';
-import type { ProjectParticipant } from '../../../api/client';
+import { referencesStore } from '../../../stores/ReferencesStore';
+import { transmittalCartStore } from '../../../stores/TransmittalCartStore';
+import { transmittalsApi, type ProjectParticipant } from '../../../api/client';
 
 export interface TransmittalData {
   transmittal_number: string;
   title: string;
   direction?: 'out' | 'in';
   counterparty_id?: number;
+  revision_ids?: number[];
 }
 
 export interface TransmittalDialogProps {
@@ -60,8 +63,6 @@ export interface TransmittalDialogProps {
   onClose: () => void;
   // Создание
   onCreateTransmittal?: (transmittalData: TransmittalData) => Promise<void>;
-  selectedRevisions?: any[];
-  onRemoveRevision?: (revisionId: number) => void;
   onOpenDocument?: (documentId: number) => void;
   // Просмотр (readOnly)
   readOnly?: boolean;
@@ -87,8 +88,6 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
   open,
   onClose,
   onCreateTransmittal,
-  selectedRevisions = [],
-  onRemoveRevision,
   onOpenDocument,
   readOnly = false,
   revisions,
@@ -189,6 +188,13 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
     counterparty_id?: boolean;
   }>({});
 
+  // Состояние для выбора документов
+  const [availableRevisions, setAvailableRevisions] = useState<any[]>([]);
+  const [documentsLoading, setDocumentsLoading] = useState(false);
+  
+  // Получаем выбранные ревизии из store
+  const selectedRevisionsFromStore = transmittalCartStore.getSelectedRevisions(availableRevisions);
+
   // Мемоизируем функцию для получения имени пользователя
   const referenceCreatedByName = useCallback((userId?: number) => {
     if (!userId) return '';
@@ -241,8 +247,31 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
     if (open) {
       // Загружаем справочные данные для отображения названий компаний и пользователей
       referenceDataStore.loadAllReferenceData();
+      
+      // Загружаем справочные данные для ревизий
+      referencesStore.loadAll();
+      
+      // Загружаем активные ревизии проекта для выбора
+      if (projectStore.selectedProject) {
+        loadActiveRevisions();
+      }
     }
   }, [open]);
+
+  // Функция загрузки активных ревизий проекта
+  const loadActiveRevisions = async () => {
+    if (!projectStore.selectedProject) return;
+    
+    setDocumentsLoading(true);
+    try {
+      const revisions = await transmittalsApi.getActiveRevisions(projectStore.selectedProject.id);
+      setAvailableRevisions(revisions);
+    } catch (err) {
+      console.error('Ошибка загрузки активных ревизий:', err);
+    } finally {
+      setDocumentsLoading(false);
+    }
+  };
 
   // Очищаем ошибки валидации при изменении полей
   useEffect(() => {
@@ -280,6 +309,14 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
     }
   }, [handleInputChange, isEditing, onUpdateTransmittalData]);
 
+  // Функции для работы с документами
+  const handleAddDocument = (revision: any) => {
+    if (!revision) return;
+    
+    // Добавляем ревизию в store
+    transmittalCartStore.addRevision(revision.id);
+  };
+
   const handleCreate = async () => {
     console.log('handleCreate called');
     if (!validateForm()) {
@@ -289,12 +326,19 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
 
     try {
       if (onCreateTransmittal) {
-        await onCreateTransmittal(formData);
+        // Добавляем ID ревизий к данным трансмиттала
+        const transmittalData = {
+          ...formData,
+          revision_ids: transmittalCartStore.selectedRevisionIds
+        };
+        await onCreateTransmittal(transmittalData);
       }
       console.log('onCreateTransmittal succeeded, showing success notification');
       if (onShowNotification) {
         onShowNotification(t('transmittals.create_success'), 'success');
       }
+      // Очищаем корзину после успешного создания
+      transmittalCartStore.clearAll();
       onClose();
     } catch (error) {
       console.error('Error creating transmittal:', error);
@@ -306,6 +350,8 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
 
   const handleClose = () => {
     if (!isLoading) {
+      // Очищаем корзину при закрытии диалога
+      transmittalCartStore.clearAll();
       onClose();
     }
   };
@@ -479,9 +525,74 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
           {/* Заголовок таблицы */}
           <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
             <Typography variant="h6">
-              {t('transmittals.documents')} ({readOnly ? (revisions?.length || 0) : selectedRevisions.length})
+              {t('transmittals.documents')} ({readOnly ? (revisions?.length || 0) : selectedRevisionsFromStore.length})
             </Typography>
           </Box>
+
+          {/* Поле для добавления документов */}
+          {!readOnly && (
+            <Box sx={{ mb: 2 }}>
+              <Autocomplete
+                options={availableRevisions}
+                getOptionLabel={(option) => option.document_number || option.document_title}
+                isOptionEqualToValue={(option, value) => option.id === value?.id}
+                filterOptions={(options, { inputValue }) => {
+                  return options.filter(option => 
+                    option.document_number?.toLowerCase().includes(inputValue.toLowerCase()) ||
+                    option.document_title.toLowerCase().includes(inputValue.toLowerCase())
+                  );
+                }}
+                loading={documentsLoading}
+                onChange={(_, newValue) => {
+                  handleAddDocument(newValue);
+                }}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label={t('transmittals.add_documents')}
+                    placeholder={t('transmittals.search_documents')}
+                    InputProps={{
+                      ...params.InputProps,
+                      endAdornment: (
+                        <>
+                          {documentsLoading ? <CircularProgress color="inherit" size={20} /> : null}
+                          {params.InputProps.endAdornment}
+                        </>
+                      ),
+                    }}
+                  />
+                )}
+                renderOption={(props, option) => (
+                  <Box component="li" {...props}>
+                    <Box sx={{ display: 'flex', flexDirection: 'column', width: '100%' }}>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                        <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
+                          {option.document_number || ''}
+                        </Typography>
+                        {option.revision_number && (
+                          <Box sx={{ display: 'flex', gap: 0.5 }}>
+                            <Chip
+                              label={`Rev. ${option.revision_number}`}
+                              size="small"
+                              color="default"
+                              variant="outlined"
+                            />
+                          </Box>
+                        )}
+                      </Box>
+                      <Typography variant="caption" color="text.secondary">
+                        {option.document_title}
+                      </Typography>
+                    </Box>
+                  </Box>
+                )}
+                noOptionsText={t('transmittals.no_documents_found')}
+                clearOnEscape
+                selectOnFocus
+                handleHomeEndKeys
+              />
+            </Box>
+          )}
 
           {/* Таблица с единой сеткой */}
           <Paper sx={{ flexGrow: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
@@ -550,7 +661,7 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
                         <TableCell><Skeleton variant="circular" width={32} height={32} /></TableCell>
                       </TableRow>
                     ))
-                  ) : (readOnly ? (revisions?.length || 0) === 0 : selectedRevisions.length === 0) ? (
+                  ) : (readOnly ? (revisions?.length || 0) === 0 : selectedRevisionsFromStore.length === 0) ? (
                     <TableRow>
                       <TableCell colSpan={5} sx={{ textAlign: 'center', py: 4 }}>
                         <Typography variant="body2" color="text.secondary">
@@ -559,7 +670,7 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
                       </TableCell>
                     </TableRow>
                   ) : (
-                    (readOnly ? (revisions || []) : selectedRevisions).map((revision: any) => {
+                    (readOnly ? (revisions || []) : selectedRevisionsFromStore).map((revision: any) => {
                     const fileTypeInfo = getFileTypeInfo(revision.file_type || '', revision.file_name);
                     return (
                       <TableRow 
@@ -627,7 +738,7 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
                             </IconButton>
                           ) : (
                             <IconButton
-                              onClick={() => onRemoveRevision && onRemoveRevision(revision.id)}
+                              onClick={() => transmittalCartStore.removeRevision(revision.id)}
                               disabled={isLoading}
                               size="small"
                             >
@@ -658,10 +769,10 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
           <Button
             onClick={handleCreate}
             variant="contained"
-            startIcon={isLoading ? <CircularProgress size={16} /> : <SendIcon />}
-            disabled={isLoading || selectedRevisions.length === 0}
+            startIcon={isLoading ? <CircularProgress size={16} /> : ''}
+            disabled={isLoading}
           >
-            {isLoading ? t('common.creating') : t('transmittals.create')}
+            {isLoading ? t('common.creating') : t('transmittals.create_button')}
           </Button>
         </DialogActions>
       )}
@@ -690,6 +801,7 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
       )}
       
       </Dialog>
+
     </>
   );
 });

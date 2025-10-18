@@ -187,7 +187,6 @@ export const TransmittalCartModal: React.FC<TransmittalCartModalProps> = observe
                         secondary={
                           <span style={{ display: 'flex', gap: '4px', fontSize: '0.75rem', color: 'inherit' }}>
                             <span>{revision.file_name}</span>
-                            <span>{formatFileSize(revision.file_size)}</span>
                           </span>
                         }
                       />
@@ -222,17 +221,16 @@ export const TransmittalCartModal: React.FC<TransmittalCartModalProps> = observe
                   disabled={isLoading}
                   sx={{ flex: 1 }}
                 >
-                  {t('transmittals.clear')}
+                  {t('transmittals.cart_clear')}
                 </Button>
                 <Button
                   variant="contained"
                   size="small"
-                  startIcon={<SendIcon />}
                   onClick={() => setCreateDialogOpen(true)}
                   disabled={isLoading}
                   sx={{ flex: 1 }}
                 >
-                  {t('transmittals.create_button')}
+                  {t('transmittals.cart_create')}
                 </Button>
               </Box>
             </>
