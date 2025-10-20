@@ -42,10 +42,10 @@ export const TransmittalImportSettings = forwardRef<TransmittalImportSettingsHan
   const [loading, setLoading] = useState(false);
   // no local saving state; handled by parent if needed
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
   const [activeIndex, setActiveIndex] = useState(0);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [snackbarSeverity, setSnackbarSeverity] = useState<'error' | 'warning' | 'success' | 'info'>('warning');
 
   // Загружаем настройки при монтировании
   useEffect(() => {
@@ -173,6 +173,18 @@ export const TransmittalImportSettings = forwardRef<TransmittalImportSettingsHan
     ));
   };
 
+  // Функция для проверки дублирования incoming_status
+  const checkDuplicateIncomingStatus = (companyId: number, currentIndex: number, value: string): boolean => {
+    const setting = settings.find(s => s.company_id === companyId);
+    if (!setting || !setting.settings_value.status_mapping) return false;
+    
+    return setting.settings_value.status_mapping.some((mapping: any, index: number) => 
+      index !== currentIndex && 
+      mapping.incoming_status && 
+      mapping.incoming_status.trim().toLowerCase() === value.trim().toLowerCase()
+    );
+  };
+
   const handleAddStatusMapping = (companyId: number) => {
     setSettings(prev => prev.map(setting => 
       setting.company_id === companyId 
@@ -205,7 +217,6 @@ export const TransmittalImportSettings = forwardRef<TransmittalImportSettingsHan
     if (!projectStore.selectedProject) return;
     
     setError(null);
-    setSuccess(null);
     
     try {
       // Валидация настроек перед сохранением
@@ -221,6 +232,7 @@ export const TransmittalImportSettings = forwardRef<TransmittalImportSettingsHan
         // 1) Имя листа обязательно
         if (!sheetName) {
           setSnackbarMessage(`${companyPrefix}${t('transmittals.import_missing_sheet_name') || 'Не указано имя листа'}`);
+          setSnackbarSeverity('error');
           setSnackbarOpen(true);
           return;
         }
@@ -228,11 +240,13 @@ export const TransmittalImportSettings = forwardRef<TransmittalImportSettingsHan
         // 2) Источник номера трансмиттала: либо метаданные, либо таблица
         if (!metaLabel && !tableTransmittal) {
           setSnackbarMessage(`${companyPrefix}${t('transmittals.import_no_source_configured') || 'Укажите источник номера трансмиттала (метаданные или таблица)'}`);
+          setSnackbarSeverity('error');
           setSnackbarOpen(true);
           return;
         }
         if (metaLabel && tableTransmittal) {
           setSnackbarMessage(`${companyPrefix}${t('transmittals.import_both_sources_configured') || 'Оставьте только один источник номера трансмиттала'}`);
+          setSnackbarSeverity('error');
           setSnackbarOpen(true);
           return;
         }
@@ -240,11 +254,13 @@ export const TransmittalImportSettings = forwardRef<TransmittalImportSettingsHan
         // 3) Поля таблицы: номер документа и статус обязательны
         if (!docLabel) {
           setSnackbarMessage(`${companyPrefix}Заполните поле: ${t('transmittals.import_settings.document_number_label')}`);
+          setSnackbarSeverity('error');
           setSnackbarOpen(true);
           return;
         }
         if (!statusLabel) {
           setSnackbarMessage(`${companyPrefix}Заполните поле: ${t('transmittals.import_settings.status_label')}`);
+          setSnackbarSeverity('error');
           setSnackbarOpen(true);
           return;
         }
@@ -252,6 +268,27 @@ export const TransmittalImportSettings = forwardRef<TransmittalImportSettingsHan
         // 4) Наличие маппинга статусов (минимум одна строка)
         if (!Array.isArray(statusMapping) || statusMapping.length === 0) {
           setSnackbarMessage(`${companyPrefix}${t('transmittals.import_settings.status_mapping_title')} — ${t('common.fill') || 'заполните'}`);
+          setSnackbarSeverity('error');
+          setSnackbarOpen(true);
+          return;
+        }
+
+        // 5) Проверяем, что все маппинги статусов заполнены
+        for (const mapping of statusMapping) {
+          if (!mapping.incoming_status?.trim() || !mapping.system_status_id) {
+            setSnackbarMessage(`${companyPrefix}Не все маппинги статусов заполнены`);
+            setSnackbarSeverity('error');
+            setSnackbarOpen(true);
+            return;
+          }
+        }
+
+        // 6) Проверяем дублирование incoming_status
+        const incomingStatuses = statusMapping.map((m: any) => m.incoming_status?.trim().toLowerCase()).filter(Boolean);
+        const uniqueStatuses = new Set(incomingStatuses);
+        if (incomingStatuses.length !== uniqueStatuses.size) {
+          setSnackbarMessage(`${companyPrefix}Найдены дублирующиеся статусы в маппинге. Каждый статус должен быть уникальным.`);
+          setSnackbarSeverity('error');
           setSnackbarOpen(true);
           return;
         }
@@ -267,8 +304,9 @@ export const TransmittalImportSettings = forwardRef<TransmittalImportSettingsHan
         });
       }
       
-      setSuccess(t('transmittals.import_settings.save_success'));
-      setTimeout(() => setSuccess(null), 3000);
+      setSnackbarMessage(t('transmittals.import_settings.save_success'));
+      setSnackbarSeverity('success');
+      setSnackbarOpen(true);
     } catch (err) {
       setError(t('transmittals.import_settings.save_error'));
       console.error('Ошибка сохранения настроек импорта:', err);
@@ -309,11 +347,6 @@ export const TransmittalImportSettings = forwardRef<TransmittalImportSettingsHan
         </Alert>
       )}
 
-      {success && (
-        <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess(null)}>
-          {success}
-        </Alert>
-      )}
 
       {settings.length === 0 ? (
         <Alert severity="info">
@@ -491,6 +524,12 @@ export const TransmittalImportSettings = forwardRef<TransmittalImportSettingsHan
                               onChange={(e) => handleStatusMappingChange(setting.company_id, index, 'incoming_status', e.target.value)}
                               placeholder="Code 1, Code 2, etc."
                               variant="standard"
+                              error={mapping.incoming_status && checkDuplicateIncomingStatus(setting.company_id, index, mapping.incoming_status)}
+                              helperText={
+                                mapping.incoming_status && checkDuplicateIncomingStatus(setting.company_id, index, mapping.incoming_status)
+                                  ? 'Этот статус уже используется в другом маппинге'
+                                  : ''
+                              }
                             />
                           </Grid>
                           <Grid item xs={5}>
@@ -559,7 +598,7 @@ export const TransmittalImportSettings = forwardRef<TransmittalImportSettingsHan
       onClose={() => setSnackbarOpen(false)}
       anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
     >
-      <Alert onClose={() => setSnackbarOpen(false)} severity="warning" sx={{ width: '100%' }}>
+      <Alert onClose={() => setSnackbarOpen(false)} severity={snackbarSeverity} sx={{ width: '100%' }}>
         {snackbarMessage}
       </Alert>
     </Snackbar>

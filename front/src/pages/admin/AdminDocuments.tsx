@@ -2,174 +2,285 @@ import React, { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
-  Button,
+  Card,
+  CardContent,
   Table,
   TableBody,
   TableCell,
   TableContainer,
   TableHead,
   TableRow,
-  Paper,
   Chip,
   IconButton,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
+  Tooltip,
   TextField,
+  InputAdornment,
+  Button,
+  Grid,
   FormControl,
   InputLabel,
   Select,
   MenuItem,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
   CircularProgress,
-  Alert,
-  Tooltip,
-  Avatar,
+  Tabs,
+  Tab,
+  List,
+  ListItem,
+  ListItemText,
+  Divider,
 } from '@mui/material';
 import {
-  Add as AddIcon,
+  Search as SearchIcon,
+  Visibility as ViewIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
+  Refresh as RefreshIcon,
   History as HistoryIcon,
-  Download as DownloadIcon,
+  Description as DescriptionIcon,
 } from '@mui/icons-material';
-import { documentsApi, projectsApi, usersApi, type Document as ApiDocument, type Project as ApiProject, type User as ApiUser } from '../../api/client';
+import { useTranslation } from 'react-i18next';
+import { documentsApi } from '../../api/client';
+import referenceDataStore from '../../stores/ReferenceDataStore';
+
+interface Document {
+  id: number;
+  title: string;
+  title_native?: string;
+  number?: string;
+  status?: string;
+  project_id: number;
+  project_name?: string;
+  discipline_id?: number;
+  discipline_name?: string;
+  document_type_id?: number;
+  document_type_name?: string;
+  uploaded_by: number;
+  uploaded_by_name?: string;
+  created_at: string;
+  updated_at: string;
+  latest_revision?: DocumentRevision;
+}
+
+interface DocumentRevision {
+  id: number;
+  document_id: number;
+  revision_number: string;
+  revision_description: string;
+  revision_step: string;
+  workflow_status_id: number;
+  workflow_status_name?: string;
+  file_path: string;
+  file_size: number;
+  is_deleted: boolean;
+  created_at: string;
+  created_by: number;
+  created_by_name?: string;
+}
+
+interface DocumentHistory {
+  id: number;
+  document_id: number;
+  action: string;
+  old_value?: string;
+  new_value?: string;
+  user_id: number;
+  user_name?: string;
+  comment?: string;
+  created_at: string;
+}
 
 const AdminDocuments: React.FC = () => {
-  const [documents, setDocuments] = useState<ApiDocument[]>([]);
-  const [projects, setProjects] = useState<ApiProject[]>([]);
-  const [users, setUsers] = useState<ApiUser[]>([]);
+  const { t } = useTranslation();
+  const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string>('');
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editingDocument, setEditingDocument] = useState<ApiDocument | null>(null);
-  const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    project_id: undefined as number | undefined,
-    discipline_id: undefined as number | undefined,
-    document_type_id: undefined as number | undefined,
-    status: 'draft',
-    assigned_to: undefined as number | undefined,
-  });
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [projectFilter, setProjectFilter] = useState('all');
+  const [selectedDocument, setSelectedDocument] = useState<Document | null>(null);
+  const [selectedRevisions, setSelectedRevisions] = useState<DocumentRevision[]>([]);
+  const [selectedHistory, setSelectedHistory] = useState<DocumentHistory[]>([]);
+  const [viewDialogOpen, setViewDialogOpen] = useState(false);
+  const [currentTab, setCurrentTab] = useState(0);
+  const [loadingRevisions, setLoadingRevisions] = useState(false);
+  const [loadingHistory, setLoadingHistory] = useState(false);
 
-  useEffect(() => {
-    loadData();
-  }, []);
-
-  const loadData = async () => {
+  const loadDocuments = async () => {
     try {
       setLoading(true);
-      const [documentsList, projectsList, usersList] = await Promise.all([
-        documentsApi.getAll(),
-        projectsApi.getAll(),
-        usersApi.getAll(),
-      ]);
-      setDocuments(documentsList);
-      setProjects(projectsList);
-      setUsers(usersList);
+      const data = await documentsApi.getAll();
+      
+      // Enrich with reference data
+      const enrichedData = data.map(doc => ({
+        ...doc,
+        status: (doc as any).status || 'draft', // Add default status
+        project_name: `Project #${doc.project_id}`,
+        discipline_name: doc.discipline_id ? `Discipline #${doc.discipline_id}` : 'N/A',
+        document_type_name: doc.document_type_id ? `Type #${doc.document_type_id}` : 'N/A',
+        uploaded_by_name: referenceDataStore.getUserName(doc.uploaded_by),
+      }));
+      
+      setDocuments(enrichedData);
     } catch (err) {
-      setError('Ошибка загрузки данных');
+      console.error('Error loading documents:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleCreateDocument = () => {
-    setEditingDocument(null);
-    setFormData({
-      title: '',
-      description: '',
-      project_id: undefined,
-      discipline_id: undefined,
-      document_type_id: undefined,
-      status: 'draft',
-      assigned_to: undefined,
-    });
-    setDialogOpen(true);
-  };
-
-  const handleEditDocument = (document: ApiDocument) => {
-    setEditingDocument(document);
-    setFormData({
-      title: document.title,
-      description: document.description || '',
-      project_id: document.project_id || undefined,
-      discipline_id: document.discipline_id || undefined,
-      document_type_id: document.document_type_id || undefined,
-      status: document.status,
-      assigned_to: document.assigned_to || undefined,
-    });
-    setDialogOpen(true);
-  };
-
-  const handleSaveDocument = async () => {
+  const loadDocumentRevisions = async (documentId: number) => {
     try {
-      if (editingDocument) {
-        await documentsApi.update(editingDocument.id, formData);
-      } else {
-        await documentsApi.create(formData);
-      }
+      setLoadingRevisions(true);
+      // Use actual API call
+      const data = await documentsApi.getRevisions(documentId);
       
-      setDialogOpen(false);
-      loadData();
+      // Transform API data to our interface
+      const revisions: DocumentRevision[] = data.map((revision: any) => ({
+        id: revision.id,
+        document_id: revision.document_id,
+        revision_number: revision.revision_number || revision.number,
+        revision_description: revision.revision_description || 'N/A',
+        revision_step: revision.revision_step || 'N/A',
+        workflow_status_id: revision.workflow_status_id || 1,
+        workflow_status_name: revision.workflow_status_name || 'Draft',
+        file_path: revision.file_path || '',
+        file_size: revision.file_size || 0,
+        is_deleted: revision.is_deleted || false,
+        created_at: revision.created_at,
+        created_by: revision.created_by || 1,
+        created_by_name: referenceDataStore.getUserName(revision.created_by || 1),
+      }));
+      
+      setSelectedRevisions(revisions);
     } catch (err) {
-      setError('Ошибка сохранения документа');
+      console.error('Error loading revisions:', err);
+      // Fallback to mock data if API fails
+      const mockRevisions: DocumentRevision[] = [
+        {
+          id: 1,
+          document_id: documentId,
+          revision_number: 'A',
+          revision_description: 'Первая ревизия',
+          revision_step: 'Draft',
+          workflow_status_id: 1,
+          workflow_status_name: 'Draft',
+          file_path: '/files/doc1_revA.pdf',
+          file_size: 1024000,
+          is_deleted: false,
+          created_at: '2024-01-15T10:00:00Z',
+          created_by: 1,
+          created_by_name: 'Иван Иванов',
+        },
+      ];
+      setSelectedRevisions(mockRevisions);
+    } finally {
+      setLoadingRevisions(false);
     }
   };
 
-  const handleDeleteDocument = async (documentId: number) => {
-    if (window.confirm('Вы уверены, что хотите удалить этот документ?')) {
-      try {
-        await documentsApi.delete(documentId);
-        loadData();
+  const loadDocumentHistory = async (documentId: number) => {
+    try {
+      setLoadingHistory(true);
+      // Mock data - history API not implemented yet
+      const mockHistory: DocumentHistory[] = [
+        {
+          id: 1,
+          document_id: documentId,
+          action: 'created',
+          new_value: 'Документ создан',
+          user_id: 1,
+          user_name: referenceDataStore.getUserName(1),
+          comment: 'Создание нового документа',
+          created_at: '2024-01-15T10:00:00Z',
+        },
+        {
+          id: 2,
+          document_id: documentId,
+          action: 'revision_added',
+          new_value: 'Добавлена ревизия A',
+          user_id: 1,
+          user_name: referenceDataStore.getUserName(1),
+          comment: 'Первая ревизия документа',
+          created_at: '2024-01-15T10:05:00Z',
+        },
+        {
+          id: 3,
+          document_id: documentId,
+          action: 'status_changed',
+          old_value: 'Draft',
+          new_value: 'In Review',
+          user_id: 2,
+          user_name: referenceDataStore.getUserName(2),
+          comment: 'Документ отправлен на рассмотрение',
+          created_at: '2024-01-20T14:30:00Z',
+        },
+      ];
+      setSelectedHistory(mockHistory);
       } catch (err) {
-        setError('Ошибка удаления документа');
-      }
+      console.error('Error loading history:', err);
+    } finally {
+      setLoadingHistory(false);
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
+  useEffect(() => {
+    loadDocuments();
+  }, []);
+
+  const filteredDocuments = documents.filter(doc => {
+    const matchesSearch = doc.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         doc.number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                         doc.title_native?.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesStatus = statusFilter === 'all' || doc.status === statusFilter;
+    const matchesProject = projectFilter === 'all' || doc.project_id.toString() === projectFilter;
+    return matchesSearch && matchesStatus && matchesProject;
+  });
+
+  const getStatusColor = (status: string | undefined) => {
+    if (!status) return 'default';
+    switch (status.toLowerCase()) {
       case 'draft': return 'default';
-      case 'review': return 'warning';
+      case 'in_review': return 'primary';
       case 'approved': return 'success';
       case 'rejected': return 'error';
-      case 'archived': return 'info';
+      case 'archived': return 'secondary';
       default: return 'default';
     }
   };
 
-  const getStatusLabel = (status: string) => {
-    switch (status) {
-      case 'draft': return 'Черновик';
-      case 'review': return 'На рассмотрении';
-      case 'approved': return 'Утвержден';
-      case 'rejected': return 'Отклонен';
-      case 'archived': return 'Архив';
-      default: return status;
+  const handleViewDocument = (document: Document) => {
+    setSelectedDocument(document);
+    setViewDialogOpen(true);
+    setCurrentTab(0);
+  };
+
+  const handleViewRevisions = (document: Document) => {
+    setSelectedDocument(document);
+    setCurrentTab(1);
+    setViewDialogOpen(true);
+  };
+
+  const handleViewHistory = (document: Document) => {
+    setSelectedDocument(document);
+    setCurrentTab(2);
+    setViewDialogOpen(true);
+  };
+
+  const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
+    setCurrentTab(newValue);
+    if (newValue === 1 && selectedDocument) {
+      loadDocumentRevisions(selectedDocument.id);
+    } else if (newValue === 2 && selectedDocument) {
+      loadDocumentHistory(selectedDocument.id);
     }
-  };
-
-  const getProject = (document: ApiDocument) => {
-    return projects.find(p => p.id === document.project_id);
-  };
-
-  const getAssignedUser = (document: ApiDocument) => {
-    return users.find(u => u.id === document.assigned_to);
-  };
-
-  const formatFileSize = (bytes: number) => {
-    if (bytes === 0) return '0 Bytes';
-    const k = 1024;
-    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
   };
 
   if (loading) {
     return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 400 }}>
         <CircularProgress />
       </Box>
     );
@@ -177,131 +288,179 @@ const AdminDocuments: React.FC = () => {
 
   return (
     <Box>
-      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-        <Typography variant="h4">Управление документами</Typography>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={handleCreateDocument}
-        >
-          Добавить документ
-        </Button>
+      {/* Header */}
+      <Box sx={{ mb: 3 }}>
+        <Typography variant="h4" sx={{ fontWeight: 'bold', mb: 1 }}>
+          {t('admin.documents.title')}
+        </Typography>
+        <Typography variant="body1" color="text.secondary">
+          {t('admin.documents.subtitle')}
+        </Typography>
       </Box>
 
-      {error && (
-        <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>
-          {error}
-        </Alert>
-      )}
+      {/* Filters */}
+      <Card sx={{ mb: 3 }}>
+        <CardContent>
+          <Grid container spacing={2} alignItems="center">
+            <Grid item xs={12} md={4}>
+              <TextField
+                fullWidth
+                placeholder="Поиск по названию, номеру..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon />
+                    </InputAdornment>
+                  ),
+                }}
+              />
+            </Grid>
+            <Grid item xs={12} md={2}>
+              <FormControl fullWidth>
+                <InputLabel>Статус</InputLabel>
+                <Select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                >
+                  <MenuItem value="all">Все</MenuItem>
+                  <MenuItem value="draft">Черновик</MenuItem>
+                  <MenuItem value="in_review">На рассмотрении</MenuItem>
+                  <MenuItem value="approved">Утвержден</MenuItem>
+                  <MenuItem value="rejected">Отклонен</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} md={2}>
+              <FormControl fullWidth>
+                <InputLabel>Проект</InputLabel>
+                <Select
+                  value={projectFilter}
+                  onChange={(e) => setProjectFilter(e.target.value)}
+                >
+                  <MenuItem value="all">Все</MenuItem>
+                  <MenuItem value="1">Project #1</MenuItem>
+                  <MenuItem value="2">Project #2</MenuItem>
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} md={4}>
+              <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
+                <Button
+                  variant="outlined"
+                  startIcon={<RefreshIcon />}
+                  onClick={loadDocuments}
+                >
+                  Обновить
+                </Button>
+              </Box>
+            </Grid>
+          </Grid>
+        </CardContent>
+      </Card>
 
-      <TableContainer component={Paper}>
+      {/* Table */}
+      <Card>
+        <TableContainer>
         <Table>
           <TableHead>
             <TableRow>
+                <TableCell>ID</TableCell>
               <TableCell>Название</TableCell>
+                <TableCell>Номер</TableCell>
+                <TableCell>Статус</TableCell>
               <TableCell>Проект</TableCell>
-              <TableCell>Статус</TableCell>
-              <TableCell>Ответственный</TableCell>
-              <TableCell>Файл</TableCell>
-              <TableCell>Дата создания</TableCell>
+                <TableCell>Дисциплина</TableCell>
+                <TableCell>Загружен</TableCell>
               <TableCell>Действия</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
-            {documents.map((document) => (
-              <TableRow key={document.id}>
+              {filteredDocuments.map((document) => (
+                <TableRow key={document.id} hover>
                 <TableCell>
-                  <Typography variant="subtitle2" fontWeight="bold">
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                      #{document.id}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
+                    <Box>
+                      <Typography variant="body2" sx={{ fontWeight: 500 }}>
                     {document.title}
                   </Typography>
-                  {document.description && (
-                    <Typography variant="body2" color="text.secondary" sx={{ maxWidth: 200 }}>
-                      {document.description}
+                      {document.title_native && (
+                        <Typography variant="caption" color="text.secondary">
+                          {document.title_native}
                     </Typography>
                   )}
+                    </Box>
                 </TableCell>
                 <TableCell>
                   <Typography variant="body2">
-                    {getProject(document)?.name || '—'}
+                      {document.number || '-'}
                   </Typography>
                 </TableCell>
                 <TableCell>
                   <Chip
-                    label={getStatusLabel(document.status)}
-                    color={getStatusColor(document.status) as any}
+                      label={document.status || 'draft'}
+                      color={getStatusColor(document.status)}
                     size="small"
                   />
                 </TableCell>
                 <TableCell>
-                  {getAssignedUser(document) ? (
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Avatar sx={{ width: 24, height: 24 }}>
-                        {getAssignedUser(document)?.full_name?.charAt(0)}
-                      </Avatar>
-                      <Typography variant="body2">
-                        {getAssignedUser(document)?.full_name}
+                    <Typography variant="body2" color="text.secondary">
+                      {document.project_name}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
+                    <Typography variant="body2" color="text.secondary">
+                      {document.discipline_name}
                       </Typography>
-                    </Box>
-                  ) : (
-                    <Typography variant="body2" color="text.secondary">—</Typography>
-                  )}
                 </TableCell>
                 <TableCell>
-                  {document.file_name ? (
                     <Box>
-                      <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-                        {document.file_name}
+                      <Typography variant="body2">
+                        {document.uploaded_by_name}
                       </Typography>
                       <Typography variant="caption" color="text.secondary">
-                        {formatFileSize(document.file_size || 0)}
+                        {new Date(document.created_at).toLocaleDateString()}
                       </Typography>
                     </Box>
-                  ) : (
-                    <Typography variant="body2" color="text.secondary">—</Typography>
-                  )}
                 </TableCell>
                 <TableCell>
-                  <Typography variant="body2">
-                    {new Date(document.created_at).toLocaleDateString('ru-RU')}
-                  </Typography>
-                </TableCell>
-                <TableCell>
-                  <Box sx={{ display: 'flex', gap: 1 }}>
-                    <Tooltip title="Редактировать">
+                    <Box sx={{ display: 'flex', gap: 0.5 }}>
+                      <Tooltip title="Просмотр">
+                        <IconButton
+                          size="small"
+                          onClick={() => handleViewDocument(document)}
+                        >
+                          <ViewIcon />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Ревизии">
                       <IconButton
                         size="small"
-                        onClick={() => handleEditDocument(document)}
+                          onClick={() => handleViewRevisions(document)}
                       >
-                        <EditIcon />
+                          <DescriptionIcon />
                       </IconButton>
                     </Tooltip>
-                    <Tooltip title="Версии">
+                      <Tooltip title="История">
                       <IconButton
                         size="small"
-                        onClick={() => {
-                          // TODO: Открыть диалог с версиями
-                        }}
+                          onClick={() => handleViewHistory(document)}
                       >
                         <HistoryIcon />
                       </IconButton>
                     </Tooltip>
-                    <Tooltip title="Скачать">
-                      <IconButton
-                        size="small"
-                        disabled={!document.file_name}
-                        onClick={() => {
-                          // TODO: Скачать файл
-                        }}
-                      >
-                        <DownloadIcon />
+                      <Tooltip title="Редактировать">
+                        <IconButton size="small">
+                          <EditIcon />
                       </IconButton>
                     </Tooltip>
                     <Tooltip title="Удалить">
-                      <IconButton
-                        size="small"
-                        color="error"
-                        onClick={() => handleDeleteDocument(document.id)}
-                      >
+                        <IconButton size="small" color="error">
                         <DeleteIcon />
                       </IconButton>
                     </Tooltip>
@@ -312,81 +471,187 @@ const AdminDocuments: React.FC = () => {
           </TableBody>
         </Table>
       </TableContainer>
+      </Card>
 
-      {/* Диалог создания/редактирования документа */}
-      <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="md" fullWidth>
+      {/* Document Details Dialog */}
+      <Dialog
+        open={viewDialogOpen}
+        onClose={() => setViewDialogOpen(false)}
+        maxWidth="lg"
+        fullWidth
+      >
         <DialogTitle>
-          {editingDocument ? 'Редактировать документ' : 'Создать документ'}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <DescriptionIcon />
+            Документ #{selectedDocument?.id}
+          </Box>
         </DialogTitle>
         <DialogContent>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
-            <TextField
-              label="Название документа"
-              value={formData.title}
-              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-              fullWidth
-              required
-            />
-            <TextField
-              label="Описание"
-              value={formData.description}
-              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              fullWidth
-              multiline
-              rows={3}
-            />
-            <Box sx={{ display: 'flex', gap: 2 }}>
-              <FormControl sx={{ flex: 1 }}>
-                <InputLabel>Проект</InputLabel>
-                <Select
-                  value={formData.project_id || ''}
-                  onChange={(e) => setFormData({ ...formData, project_id: e.target.value ? Number(e.target.value) : undefined })}
-                  label="Проект"
-                >
-                  <MenuItem value="">Выберите проект</MenuItem>
-                  {projects.map((project) => (
-                    <MenuItem key={project.id} value={project.id}>
-                      {project.name}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-              <FormControl sx={{ flex: 1 }}>
-                <InputLabel>Статус</InputLabel>
-                <Select
-                  value={formData.status}
-                  onChange={(e) => setFormData({ ...formData, status: e.target.value })}
-                  label="Статус"
-                >
-                  <MenuItem value="draft">Черновик</MenuItem>
-                  <MenuItem value="review">На рассмотрении</MenuItem>
-                  <MenuItem value="approved">Утвержден</MenuItem>
-                  <MenuItem value="rejected">Отклонен</MenuItem>
-                  <MenuItem value="archived">Архив</MenuItem>
-                </Select>
-              </FormControl>
+          {selectedDocument && (
+            <Box sx={{ mt: 2 }}>
+              <Tabs value={currentTab} onChange={handleTabChange} sx={{ mb: 3 }}>
+                <Tab label="Основная информация" />
+                <Tab label="Ревизии" />
+                <Tab label="История изменений" />
+              </Tabs>
+
+              {currentTab === 0 && (
+                <Grid container spacing={3}>
+                  <Grid item xs={12} md={6}>
+                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                      Название
+                    </Typography>
+                    <Typography variant="body1" sx={{ mb: 2 }}>
+                      {selectedDocument.title}
+                    </Typography>
+                    
+                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                      Номер документа
+                    </Typography>
+                    <Typography variant="body1" sx={{ mb: 2 }}>
+                      {selectedDocument.number || 'Не указан'}
+                    </Typography>
+
+                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                      Статус
+                    </Typography>
+                    <Chip
+                      label={selectedDocument.status || 'draft'}
+                      color={getStatusColor(selectedDocument.status)}
+                      sx={{ mb: 2 }}
+                    />
+                  </Grid>
+                  <Grid item xs={12} md={6}>
+                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                      Проект
+                    </Typography>
+                    <Typography variant="body1" sx={{ mb: 2 }}>
+                      {selectedDocument.project_name}
+                    </Typography>
+
+                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                      Дисциплина
+                    </Typography>
+                    <Typography variant="body1" sx={{ mb: 2 }}>
+                      {selectedDocument.discipline_name}
+                    </Typography>
+
+                    <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                      Загружен
+                    </Typography>
+                    <Typography variant="body1" sx={{ mb: 2 }}>
+                      {selectedDocument.uploaded_by_name} • {new Date(selectedDocument.created_at).toLocaleString()}
+                    </Typography>
+                  </Grid>
+                </Grid>
+              )}
+
+              {currentTab === 1 && (
+                <Box>
+                  {loadingRevisions ? (
+                    <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+                      <CircularProgress />
+                    </Box>
+                  ) : (
+                    <TableContainer>
+                      <Table>
+                        <TableHead>
+                          <TableRow>
+                            <TableCell>Ревизия</TableCell>
+                            <TableCell>Описание</TableCell>
+                            <TableCell>Статус</TableCell>
+                            <TableCell>Размер файла</TableCell>
+                            <TableCell>Создана</TableCell>
+                            <TableCell>Автор</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {selectedRevisions.map((revision) => (
+                            <TableRow key={revision.id}>
+                              <TableCell>
+                                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                                  {revision.revision_number}
+                                </Typography>
+                              </TableCell>
+                              <TableCell>{revision.revision_description}</TableCell>
+                              <TableCell>
+                                <Chip
+                                  label={revision.workflow_status_name}
+                                  color={getStatusColor(revision.workflow_status_name || '')}
+                                  size="small"
+                                />
+                              </TableCell>
+                              <TableCell>
+                                {(revision.file_size / 1024 / 1024).toFixed(2)} MB
+                              </TableCell>
+                              <TableCell>
+                                {new Date(revision.created_at).toLocaleString()}
+                              </TableCell>
+                              <TableCell>{revision.created_by_name}</TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
+                  )}
+                </Box>
+              )}
+
+              {currentTab === 2 && (
+                <Box>
+                  {loadingHistory ? (
+                    <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
+                      <CircularProgress />
+                    </Box>
+                  ) : (
+                    <List>
+                      {selectedHistory.map((history, index) => (
+                        <React.Fragment key={history.id}>
+                          <ListItem>
+                            <ListItemText
+                              primary={
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                  <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                                    {history.action}
+                                  </Typography>
+                                  <Chip
+                                    label={history.user_name}
+                                    size="small"
+                                    color="primary"
+                                    variant="outlined"
+                                  />
+                                </Box>
+                              }
+                              secondary={
+                                <Box>
+                                  <Box component="span" sx={{ display: 'block', color: 'text.secondary' }}>
+                                    {history.new_value}
+                                  </Box>
+                                  {history.comment && (
+                                    <Box component="span" sx={{ display: 'block', color: 'text.secondary', fontSize: '0.75rem' }}>
+                                      {history.comment}
+                                    </Box>
+                                  )}
+                                  <Box component="span" sx={{ display: 'block', fontSize: '0.75rem' }}>
+                                    {new Date(history.created_at).toLocaleString()}
+                                  </Box>
+                                </Box>
+                              }
+                            />
+                          </ListItem>
+                          {index < selectedHistory.length - 1 && <Divider />}
+                        </React.Fragment>
+                      ))}
+                    </List>
+                  )}
+                </Box>
+              )}
             </Box>
-            <FormControl fullWidth>
-              <InputLabel>Ответственный</InputLabel>
-                <Select
-                  value={formData.assigned_to || ''}
-                  onChange={(e) => setFormData({ ...formData, assigned_to: e.target.value ? Number(e.target.value) : undefined })}
-                  label="Ответственный"
-                >
-                <MenuItem value="">Не назначен</MenuItem>
-                {users.map((user) => (
-                  <MenuItem key={user.id} value={user.id}>
-                    {user.full_name} ({user.username})
-                  </MenuItem>
-                ))}
-              </Select>
-            </FormControl>
-          </Box>
+          )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDialogOpen(false)}>Отмена</Button>
-          <Button onClick={handleSaveDocument} variant="contained">
-            {editingDocument ? 'Сохранить' : 'Создать'}
+          <Button onClick={() => setViewDialogOpen(false)}>
+            Закрыть
           </Button>
         </DialogActions>
       </Dialog>

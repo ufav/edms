@@ -6,8 +6,9 @@ from app.models.user import User
 from app.models.transmittal_import_settings import TransmittalImportSettings
 from app.models.transmittal import Transmittal, TransmittalRevision
 from app.models.document import Document, DocumentRevision
-from app.models.references import TransmittalStatus
+from app.models.references import TransmittalStatus, WorkflowStatus
 from app.models.project_participant import ProjectParticipant
+from app.models.document_workflow_history import DocumentWorkflowHistory
 import pandas as pd
 import json
 import io
@@ -34,6 +35,38 @@ def get_localized_message(key: str, **kwargs) -> str:
     
     message = messages.get(key, key)
     return message.format(**kwargs)
+
+def get_mapped_workflow_status(db: Session, incoming_status: str, status_mapping: List[Dict[str, str]]) -> tuple[WorkflowStatus, str]:
+    """
+    Определяет новый workflow статус на основе входящего статуса и маппинга
+    
+    Returns:
+        tuple: (workflow_status, error_message)
+        - workflow_status: найденный статус или None
+        - error_message: сообщение об ошибке или None
+    """
+    if not incoming_status or not status_mapping:
+        # Если нет статуса или маппинга, возвращаем статус "In Review" по умолчанию
+        default_status = db.query(WorkflowStatus).filter(WorkflowStatus.name == "In Review").first()
+        return default_status, None
+    
+    # Ищем маппинг для входящего статуса
+    for mapping in status_mapping:
+        if mapping.get('incoming_status', '').strip().lower() == incoming_status.strip().lower():
+            system_status_id = mapping.get('system_status_id')
+            if system_status_id:
+                try:
+                    status_id = int(system_status_id)
+                    workflow_status = db.query(WorkflowStatus).filter(WorkflowStatus.id == status_id).first()
+                    if workflow_status:
+                        return workflow_status, None
+                except (ValueError, TypeError):
+                    continue
+    
+    # Если маппинг не найден, возвращаем ошибку
+    available_mappings = [m.get('incoming_status', '') for m in status_mapping if m.get('incoming_status')]
+    error_msg = f"Статус '{incoming_status}' не найден в настройках маппинга. Доступные статусы: {', '.join(available_mappings)}"
+    return None, error_msg
 
 router = APIRouter()
 
@@ -155,7 +188,8 @@ async def import_incoming_transmittal(
         
         # Сначала проверяем все документы, не создавая трансмиттал
         table_result = process_table_data_for_transmittal_revisions(
-            db, table_data, table_fields, None, project_id, table_start_row, excel_data  # transmittal_id = None для проверки
+            db, table_data, table_fields, None, project_id, table_start_row, excel_data, 
+            status_mapping=settings_data.get('status_mapping', []), current_user=current_user
         )
         
         missing_documents = table_result['missing_documents']
@@ -216,7 +250,8 @@ async def import_incoming_transmittal(
         
         # Теперь создаем transmittal_revisions
         table_result = process_table_data_for_transmittal_revisions(
-            db, table_data, table_fields, transmittal.id, project_id, table_start_row, excel_data
+            db, table_data, table_fields, transmittal.id, project_id, table_start_row, excel_data,
+            status_mapping=settings_data.get('status_mapping', []), current_user=current_user
         )
         
         created_revisions = table_result['created_revisions']
@@ -350,7 +385,9 @@ def process_table_data_for_transmittal_revisions(
     transmittal_id: int | None, 
     project_id: int,
     header_row_idx: int = 0,
-    original_excel_data: pd.DataFrame = None
+    original_excel_data: pd.DataFrame = None,
+    status_mapping: List[Dict[str, str]] = None,
+    current_user: User = None
 ) -> Dict[str, Any]:
     """Обрабатывает данные таблицы и создает transmittal_revisions"""
     
@@ -567,6 +604,39 @@ def process_table_data_for_transmittal_revisions(
             
             db.add(transmittal_revision)
             created_revisions.append(transmittal_revision)
+            
+            # Обрабатываем статус документа, если он есть
+            if document_status and status_mapping and current_user:
+                # Сохраняем старый статус
+                old_status_id = latest_revision.workflow_status_id
+                
+                # Определяем новый статус на основе маппинга
+                new_workflow_status, mapping_error = get_mapped_workflow_status(db, document_status, status_mapping)
+                
+                if mapping_error:
+                    raise HTTPException(status_code=400, detail=mapping_error)
+                
+                if new_workflow_status and new_workflow_status.id != old_status_id:
+                    # Валидируем переход статусов
+                    from app.utils.workflow_status_validator import WorkflowStatusValidator
+                    if not WorkflowStatusValidator.validate_transition(db, old_status_id, new_workflow_status.id):
+                        from_status_name = latest_revision.workflow_status.name if latest_revision.workflow_status else "Draft"
+                        error_msg = WorkflowStatusValidator.get_transition_error_message(from_status_name, new_workflow_status.name)
+                        raise HTTPException(status_code=400, detail=error_msg)
+                    
+                    # Обновляем статус ревизии
+                    latest_revision.workflow_status_id = new_workflow_status.id
+                    
+                    # Создаем запись в истории workflow
+                    workflow_history = DocumentWorkflowHistory(
+                        revision_id=latest_revision.id,
+                        from_status_id=old_status_id,
+                        to_status_id=new_workflow_status.id,
+                        user_id=current_user.id,
+                        action_type="transmittal_import",
+                        comments=f"Статус изменен при импорте трансмиттала. Входящий статус: {document_status}"
+                    )
+                    db.add(workflow_history)
         
         # Сохраняем все изменения
         db.commit()

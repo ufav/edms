@@ -540,6 +540,13 @@ async def send_transmittal(
             # Сохраняем старый статус перед обновлением
             old_status_id = revision.workflow_status_id
             
+            # Валидируем переход статусов
+            from app.utils.workflow_status_validator import WorkflowStatusValidator
+            if not WorkflowStatusValidator.validate_transition(db, old_status_id, in_review_status.id):
+                from_status_name = revision.workflow_status.name if revision.workflow_status else "Draft"
+                error_msg = WorkflowStatusValidator.get_transition_error_message(from_status_name, "In Review")
+                raise HTTPException(status_code=400, detail=error_msg)
+            
             # Обновляем статус ревизии
             revision.workflow_status_id = in_review_status.id
             

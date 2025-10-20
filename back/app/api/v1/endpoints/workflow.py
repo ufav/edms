@@ -318,6 +318,24 @@ async def approve_document(
     
     print(f"DEBUG: latest_revision found: {latest_revision is not None}")
     if latest_revision:
+        # Проверяем, требует ли документ трансмиттал
+        from app.models.project import WorkflowPresetSequence, Project
+        from app.models.document import Document
+        workflow_sequence = db.query(WorkflowPresetSequence).join(
+            Project, Project.workflow_preset_id == WorkflowPresetSequence.preset_id
+        ).join(
+            Document, Document.project_id == Project.id
+        ).filter(
+            Document.id == approval.workflow.document_id,
+            WorkflowPresetSequence.revision_description_id == latest_revision.revision_description_id,
+            WorkflowPresetSequence.revision_step_id == latest_revision.revision_step_id
+        ).first()
+        
+        if workflow_sequence and workflow_sequence.requires_transmittal:
+            raise HTTPException(
+                status_code=400, 
+                detail="Документ должен быть утвержден через трансмиттал"
+            )
         print(f"DEBUG: revision_id: {latest_revision.id}, workflow_status_id: {latest_revision.workflow_status_id}")
         
         # Сохраняем старый статус перед обновлением
@@ -327,6 +345,12 @@ async def approve_document(
         approved_status = db.query(WorkflowStatus).filter(WorkflowStatus.id == 3).first()
         print(f"DEBUG: approved_status found: {approved_status is not None}")
         if approved_status:
+            # Валидируем переход статусов
+            from app.utils.workflow_status_validator import WorkflowStatusValidator
+            if not WorkflowStatusValidator.validate_transition(db, old_status_id, approved_status.id):
+                from_status_name = latest_revision.workflow_status.name if latest_revision.workflow_status else "Draft"
+                error_msg = WorkflowStatusValidator.get_transition_error_message(from_status_name, "Approved")
+                raise HTTPException(status_code=400, detail=error_msg)
             print(f"DEBUG: Creating workflow_history with from_status_id={old_status_id}, to_status_id={approved_status.id}")
             # Создаем запись в document_workflow_history
             workflow_history = DocumentWorkflowHistory(
@@ -430,12 +454,36 @@ async def reject_document(
     ).order_by(DocumentRevision.created_at.desc()).first()
     
     if latest_revision:
+        # Проверяем, требует ли документ трансмиттал
+        from app.models.project import WorkflowPresetSequence, Project
+        from app.models.document import Document
+        workflow_sequence = db.query(WorkflowPresetSequence).join(
+            Project, Project.workflow_preset_id == WorkflowPresetSequence.preset_id
+        ).join(
+            Document, Document.project_id == Project.id
+        ).filter(
+            Document.id == workflow.document_id,
+            WorkflowPresetSequence.revision_description_id == latest_revision.revision_description_id,
+            WorkflowPresetSequence.revision_step_id == latest_revision.revision_step_id
+        ).first()
+        
+        if workflow_sequence and workflow_sequence.requires_transmittal:
+            raise HTTPException(
+                status_code=400, 
+                detail="Документ должен быть отклонен через трансмиттал"
+            )
         # Сохраняем старый статус перед обновлением
         old_status_id = latest_revision.workflow_status_id
         
         # Получаем статус "Rejected" (id = 4)
         rejected_status = db.query(WorkflowStatus).filter(WorkflowStatus.id == 4).first()
         if rejected_status:
+            # Валидируем переход статусов
+            from app.utils.workflow_status_validator import WorkflowStatusValidator
+            if not WorkflowStatusValidator.validate_transition(db, old_status_id, rejected_status.id):
+                from_status_name = latest_revision.workflow_status.name if latest_revision.workflow_status else "Draft"
+                error_msg = WorkflowStatusValidator.get_transition_error_message(from_status_name, "Rejected")
+                raise HTTPException(status_code=400, detail=error_msg)
             latest_revision.workflow_status_id = rejected_status.id
             
             # Создаем запись в document_workflow_history

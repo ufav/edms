@@ -838,6 +838,13 @@ async def release_revision(
     if not in_review_status:
         raise HTTPException(status_code=500, detail="Статус 'In Review' не найден в системе")
     
+    # Валидируем переход статусов
+    from app.utils.workflow_status_validator import WorkflowStatusValidator
+    if not WorkflowStatusValidator.validate_transition(db, revision.workflow_status_id, in_review_status.id):
+        from_status_name = revision.workflow_status.name if revision.workflow_status else "Draft"
+        error_msg = WorkflowStatusValidator.get_transition_error_message(from_status_name, "In Review")
+        raise HTTPException(status_code=400, detail=error_msg)
+    
     # Обновляем статус ревизии
     revision.workflow_status_id = in_review_status.id
     db.commit()

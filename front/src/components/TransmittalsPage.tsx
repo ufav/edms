@@ -68,7 +68,8 @@ const TransmittalsPage: React.FC = observer(() => {
       await referenceDataStore.loadAllReferenceData();
       
       if (projectStore.hasSelectedProject) {
-        transmittalStore.loadTransmittals(projectStore.selectedProject!.id);
+        // Перезагружаем трансмитталы после загрузки справочных данных
+        await transmittalStore.loadTransmittals(projectStore.selectedProject!.id, true);
       }
     };
     

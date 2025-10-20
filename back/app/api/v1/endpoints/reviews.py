@@ -168,6 +168,42 @@ async def approve_document(
     if not latest_revision:
         raise HTTPException(status_code=404, detail="Ревизия документа не найдена")
     
+    # Проверяем, требует ли документ трансмиттал
+    from app.models.project import WorkflowPresetSequence, Project
+    workflow_sequence = db.query(WorkflowPresetSequence).join(
+        Project, Project.workflow_preset_id == WorkflowPresetSequence.preset_id
+    ).join(
+        Document, Document.project_id == Project.id
+    ).filter(
+        Document.id == document_id,
+        WorkflowPresetSequence.revision_description_id == latest_revision.revision_description_id,
+        WorkflowPresetSequence.revision_step_id == latest_revision.revision_step_id
+    ).first()
+    
+    if workflow_sequence and workflow_sequence.requires_transmittal:
+        raise HTTPException(
+            status_code=400, 
+            detail="Документ должен быть утвержден через трансмиттал"
+        )
+    
+    # Проверяем, не находится ли ревизия в активном трансмиттале
+    from app.models.transmittal import TransmittalRevision, Transmittal
+    from app.models.references import TransmittalStatus
+    active_transmittal = db.query(TransmittalRevision).join(
+        Transmittal, Transmittal.id == TransmittalRevision.transmittal_id
+    ).join(
+        TransmittalStatus, TransmittalStatus.id == Transmittal.status_id
+    ).filter(
+        TransmittalRevision.revision_id == latest_revision.id,
+        TransmittalStatus.name.in_(["Draft", "Sent"])  # Активные статусы трансмиттала
+    ).first()
+    
+    if active_transmittal:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Ревизия находится в активном трансмиттале #{active_transmittal.transmittal.transmittal_number}"
+        )
+    
     # Получаем статус "Approved"
     approved_status = db.query(WorkflowStatus).filter(
         WorkflowStatus.name == "Approved"
@@ -178,6 +214,13 @@ async def approve_document(
     
     # Сохраняем старый статус перед обновлением
     old_status_id = latest_revision.workflow_status_id
+    
+    # Валидируем переход статусов
+    from app.utils.workflow_status_validator import WorkflowStatusValidator
+    if not WorkflowStatusValidator.validate_transition(db, old_status_id, approved_status.id):
+        from_status_name = latest_revision.workflow_status.name if latest_revision.workflow_status else "Draft"
+        error_msg = WorkflowStatusValidator.get_transition_error_message(from_status_name, "Approved")
+        raise HTTPException(status_code=400, detail=error_msg)
     
     # Обновляем статус ревизии
     latest_revision.workflow_status_id = approved_status.id
@@ -231,6 +274,42 @@ async def reject_document(
     if not latest_revision:
         raise HTTPException(status_code=404, detail="Ревизия документа не найдена")
     
+    # Проверяем, требует ли документ трансмиттал
+    from app.models.project import WorkflowPresetSequence, Project
+    workflow_sequence = db.query(WorkflowPresetSequence).join(
+        Project, Project.workflow_preset_id == WorkflowPresetSequence.preset_id
+    ).join(
+        Document, Document.project_id == Project.id
+    ).filter(
+        Document.id == document_id,
+        WorkflowPresetSequence.revision_description_id == latest_revision.revision_description_id,
+        WorkflowPresetSequence.revision_step_id == latest_revision.revision_step_id
+    ).first()
+    
+    if workflow_sequence and workflow_sequence.requires_transmittal:
+        raise HTTPException(
+            status_code=400, 
+            detail="Документ должен быть отклонен через трансмиттал"
+        )
+    
+    # Проверяем, не находится ли ревизия в активном трансмиттале
+    from app.models.transmittal import TransmittalRevision, Transmittal
+    from app.models.references import TransmittalStatus
+    active_transmittal = db.query(TransmittalRevision).join(
+        Transmittal, Transmittal.id == TransmittalRevision.transmittal_id
+    ).join(
+        TransmittalStatus, TransmittalStatus.id == Transmittal.status_id
+    ).filter(
+        TransmittalRevision.revision_id == latest_revision.id,
+        TransmittalStatus.name.in_(["Draft", "Sent"])  # Активные статусы трансмиттала
+    ).first()
+    
+    if active_transmittal:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Ревизия находится в активном трансмиттале #{active_transmittal.transmittal.transmittal_number}"
+        )
+    
     # Получаем статус "Rejected"
     rejected_status = db.query(WorkflowStatus).filter(
         WorkflowStatus.name == "Rejected"
@@ -241,6 +320,13 @@ async def reject_document(
     
     # Сохраняем старый статус перед обновлением
     old_status_id = latest_revision.workflow_status_id
+    
+    # Валидируем переход статусов
+    from app.utils.workflow_status_validator import WorkflowStatusValidator
+    if not WorkflowStatusValidator.validate_transition(db, old_status_id, rejected_status.id):
+        from_status_name = latest_revision.workflow_status.name if latest_revision.workflow_status else "Draft"
+        error_msg = WorkflowStatusValidator.get_transition_error_message(from_status_name, "Rejected")
+        raise HTTPException(status_code=400, detail=error_msg)
     
     # Обновляем статус ревизии
     latest_revision.workflow_status_id = rejected_status.id

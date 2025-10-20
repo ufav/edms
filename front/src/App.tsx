@@ -16,6 +16,7 @@ import { authApi, setAuthToken, removeAuthToken, setUnauthorizedHandler } from '
 import { projectStore } from './stores/ProjectStore';
 import { userStore } from './stores/UserStore';
 import { settingsStore } from './stores/SettingsStore';
+import referenceDataStore from './stores/ReferenceDataStore';
 import { usePermissions } from './hooks/usePermissions';
 import './i18n';
 
@@ -55,6 +56,8 @@ function App() {
               username: userStore.currentUser.username, 
               role: userStore.currentUser.role 
             });
+            // Загружаем справочные данные после успешной аутентификации
+            referenceDataStore.loadAllReferenceData().catch(console.error);
           }
         } catch (error) {
           // Токен недействителен, очищаем его
@@ -134,6 +137,9 @@ function App() {
       
       // Загружаем проекты после успешной аутентификации
       await projectStore.loadProjects();
+      
+      // Загружаем справочные данные
+      await referenceDataStore.loadAllReferenceData();
       
       // Загружаем настройки пользователя
       await settingsStore.loadSettings('documents');
