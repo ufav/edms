@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { documentStore } from '../../../stores/DocumentStore';
 import { projectStore } from '../../../stores/ProjectStore';
 import { type Document as ApiDocument } from '../../../api/client';
@@ -35,8 +35,9 @@ export const useDocumentFilters = (): UseDocumentFiltersReturn => {
   // Фильтрация документов
   const filteredDocuments = useMemo(() => {
     return documentStore.documents.filter(doc => {
-      // TODO: Обновить фильтр по статусу после внедрения новой системы статусов
-      const statusMatch = filterStatus === 'all'; // Временно отключаем фильтр по статусу
+      // Фильтр по статусу - передается на backend, здесь не фильтруем
+      const statusMatch = true; // Статус фильтруется на backend
+      
       const selectedProjectMatch = !projectStore.hasSelectedProject || doc.project_id === projectStore.selectedProject?.id;
       const disciplineMatch = selectedDisciplineId ? doc.discipline_id === selectedDisciplineId : true;
       const searchMatch = searchTerm === '' || 
@@ -46,6 +47,13 @@ export const useDocumentFilters = (): UseDocumentFiltersReturn => {
       return statusMatch && selectedProjectMatch && disciplineMatch && searchMatch;
     });
   }, [documentStore.documents, filterStatus, searchTerm, selectedDisciplineId, projectStore.selectedProject]);
+
+  // Загружаем документы с фильтром по статусу при изменении filterStatus
+  useEffect(() => {
+    if (projectStore.selectedProject?.id) {
+      documentStore.loadDocuments(projectStore.selectedProject.id, true, filterStatus);
+    }
+  }, [filterStatus, projectStore.selectedProject?.id]);
 
   const resetFilters = () => {
     setFilterStatus('all');

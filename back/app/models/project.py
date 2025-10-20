@@ -144,13 +144,13 @@ class WorkflowPresetSequence(Base):
     
     id = Column(Integer, primary_key=True, index=True)
     preset_id = Column(Integer, ForeignKey("workflow_presets.id", ondelete="CASCADE"))
-    document_type_id = Column(Integer, ForeignKey("document_types.id", ondelete="CASCADE"), nullable=True)
     
     sequence_order = Column(Integer, nullable=False)
     revision_description_id = Column(Integer, ForeignKey("revision_descriptions.id", ondelete="CASCADE"))
     revision_step_id = Column(Integer, ForeignKey("revision_steps.id", ondelete="CASCADE"))
     is_final = Column(Boolean, default=False)
     requires_transmittal = Column(Boolean, default=False)  # Требуется трансмиттал для этой пары (описание, шаг)
+    due_days = Column(Integer, nullable=True)  # Количество дней на выполнение этого шага
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     

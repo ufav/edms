@@ -1,169 +1,271 @@
 """
-Reviews endpoints
+API endpoints for document reviews and approvals
 """
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import List
+from sqlalchemy import func, and_, or_
+from typing import List, Optional
 from pydantic import BaseModel
+
+class ApproveRequest(BaseModel):
+    comments: Optional[str] = None
+
+class RejectRequest(BaseModel):
+    comments: Optional[str] = None
 
 from app.core.database import get_db
 from app.models.user import User
-from app.models.document import Document, DocumentReview
-from app.services.auth import get_current_active_user
+from app.models.document import Document, DocumentRevision
+from app.models.project import Project, WorkflowPresetSequence
+from app.models.references import WorkflowStatus, RevisionStep, RevisionDescription
+from app.api.v1.endpoints.auth import get_current_user
 
 router = APIRouter()
 
-class ReviewCreate(BaseModel):
-    document_id: int
-    reviewer_id: int
-    comments: str = None
-    rating: int = None
-
-class ReviewUpdate(BaseModel):
-    status: str = None
-    comments: str = None
-    rating: int = None
-
-@router.get("/", response_model=List[dict])
+@router.get("/")
 async def get_reviews(
+    project_id: int = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    # Временно возвращаем пустой список
+    return []
+
+
+@router.get("/pending-approvals")
+async def get_pending_approvals(
     skip: int = 0,
     limit: int = 100,
     project_id: int = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_user)
 ):
-    """Получение списка ревью"""
-    query = db.query(DocumentReview)
+    """
+    Получить документы, ожидающие внутреннего утверждения (без трансмиттала)
+    """
+    # Получаем статус "In Review"
+    in_review_status = db.query(WorkflowStatus).filter(
+        WorkflowStatus.name == "In Review"
+    ).first()
     
-    if project_id:
-        # Фильтруем по проекту через документы
-        query = query.join(Document, DocumentReview.document_id == Document.id).filter(Document.project_id == project_id)
+    if not in_review_status:
+        return []
     
-    reviews = query.offset(skip).limit(limit).all()
+    # Создаем подзапрос для получения последней ревизии каждого документа
+    latest_revision_subquery = db.query(
+        DocumentRevision.document_id,
+        func.max(DocumentRevision.created_at).label('max_created_at')
+    ).group_by(DocumentRevision.document_id).subquery()
     
-    return [
-        {
-            "id": review.id,
-            "document_id": review.document_id,
-            "document_title": "Документ",  # TODO: Получить название документа
-            "reviewer_id": review.reviewer_id,
-            "reviewer_name": f"User {review.reviewer_id}",  # TODO: Получить имя из таблицы пользователей
-            "status": review.status,
-            "comments": review.comments,
-            "rating": review.rating,
-            "created_at": review.created_at.isoformat() if review.created_at else None
-        }
-        for review in reviews
-    ]
-
-@router.get("/{review_id}", response_model=dict)
-async def get_review(
-    review_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
-):
-    """Получение ревью по ID"""
-    review = db.query(DocumentReview).filter(DocumentReview.id == review_id).first()
-    if not review:
-        raise HTTPException(status_code=404, detail="Review not found")
-    
-    return {
-        "id": review.id,
-        "document_id": review.document_id,
-        "document_title": "Документ",  # TODO: Получить название документа
-        "reviewer_id": review.reviewer_id,
-        "reviewer_name": f"User {review.reviewer_id}",
-        "status": review.status,
-        "comments": review.comments,
-        "rating": review.rating,
-        "created_at": review.created_at.isoformat() if review.created_at else None,
-    }
-
-@router.post("/", response_model=dict)
-async def create_review(
-    review_data: ReviewCreate,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
-):
-    """Создание нового ревью"""
-    # Проверяем, существует ли документ
-    from app.models.document import Document
-    document = db.query(Document).filter(Document.id == review_data.document_id).first()
-    if not document:
-        raise HTTPException(status_code=404, detail="Document not found")
-    
-    review = DocumentReview(
-        document_id=review_data.document_id,
-        reviewer_id=review_data.reviewer_id,
-        status="pending",
-        comments=review_data.comments,
-        rating=review_data.rating
+    # Запрос с информацией о последовательности для определения доступности кнопок
+    query = db.query(
+        Document,
+        DocumentRevision,
+        Project,
+        WorkflowPresetSequence
+    ).outerjoin(
+        latest_revision_subquery,
+        Document.id == latest_revision_subquery.c.document_id
+    ).outerjoin(
+        DocumentRevision,
+        and_(
+            DocumentRevision.document_id == Document.id,
+            DocumentRevision.created_at == latest_revision_subquery.c.max_created_at
+        )
+    ).join(
+        Project,
+        Project.id == Document.project_id
+    ).join(
+        WorkflowPresetSequence,
+        and_(
+            WorkflowPresetSequence.preset_id == Project.workflow_preset_id,
+            WorkflowPresetSequence.revision_step_id == DocumentRevision.revision_step_id,
+            WorkflowPresetSequence.revision_description_id == DocumentRevision.revision_description_id
+        )
+    ).filter(
+        Document.is_deleted == 0,
+        DocumentRevision.workflow_status_id == in_review_status.id,
+        Project.id == project_id
     )
     
-    db.add(review)
+    # Выполняем запрос с пагинацией
+    results = query.order_by(Document.updated_at.desc()).offset(skip).limit(limit).all()
+    
+    # Формируем результат
+    result = []
+    for row in results:
+        doc, revision, project, sequence = row
+        
+        # Получаем информацию о шаге и описании
+        step_info = None
+        description_info = None
+        
+        if revision:
+            step = db.query(RevisionStep).filter(RevisionStep.id == revision.revision_step_id).first()
+            description = db.query(RevisionDescription).filter(RevisionDescription.id == revision.revision_description_id).first()
+            
+            step_info = {
+                "id": step.id if step else None,
+                "code": step.code if step else None,
+                "description": step.description if step else None,
+                "description_native": step.description_native if step else None
+            } if step else None
+            
+            description_info = {
+                "id": description.id if description else None,
+                "code": description.code if description else None,
+                "description": description.description if description else None,
+                "description_native": description.description_native if description else None
+            } if description else None
+        
+        result.append({
+            "document_id": doc.id,
+            "document_title": doc.title,
+            "document_number": doc.number,
+            "project_id": doc.project_id,
+            "project_name": project.name if project else None,
+            "revision_id": revision.id if revision else None,
+            "revision_number": revision.number if revision else None,
+            "file_name": revision.file_name if revision else None,
+            "file_size": revision.file_size if revision else None,
+            "file_type": revision.file_type if revision else None,
+            "change_description": revision.change_description if revision else None,
+            "created_at": revision.created_at if revision else None,
+            "uploaded_by": revision.uploaded_by if revision else None,
+            "current_step": step_info,
+            "current_description": description_info,
+            "sequence_order": sequence.sequence_order if sequence else None,
+            "is_final": sequence.is_final if sequence else None,
+            "requires_transmittal": sequence.requires_transmittal if sequence else None
+        })
+    
+    return result
+
+
+@router.post("/approve/{document_id}")
+async def approve_document(
+    document_id: int,
+    request: ApproveRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    comments = request.comments
+    """
+    Утвердить документ (внутреннее утверждение)
+    """
+    # Получаем документ
+    document = db.query(Document).filter(Document.id == document_id).first()
+    if not document:
+        raise HTTPException(status_code=404, detail="Документ не найден")
+    
+    # Получаем последнюю ревизию
+    latest_revision = db.query(DocumentRevision).filter(
+        DocumentRevision.document_id == document_id,
+        DocumentRevision.is_deleted == 0
+    ).order_by(DocumentRevision.created_at.desc()).first()
+    
+    if not latest_revision:
+        raise HTTPException(status_code=404, detail="Ревизия документа не найдена")
+    
+    # Получаем статус "Approved"
+    approved_status = db.query(WorkflowStatus).filter(
+        WorkflowStatus.name == "Approved"
+    ).first()
+    
+    if not approved_status:
+        raise HTTPException(status_code=500, detail="Статус 'Approved' не найден")
+    
+    # Сохраняем старый статус перед обновлением
+    old_status_id = latest_revision.workflow_status_id
+    
+    # Обновляем статус ревизии
+    latest_revision.workflow_status_id = approved_status.id
+    
+    # Создаем запись в document_workflow_history
+    from app.models.document_workflow_history import DocumentWorkflowHistory
+    # Используем комментарий только если он не пустой
+    final_comments = comments if comments and comments.strip() else None
+    workflow_history = DocumentWorkflowHistory(
+        revision_id=latest_revision.id,
+        from_status_id=old_status_id,
+        to_status_id=approved_status.id,
+        user_id=current_user.id,
+        action_type="approve",
+        comments=final_comments
+    )
+    db.add(workflow_history)
     db.commit()
-    db.refresh(review)
     
     return {
-        "id": review.id,
-        "document_id": review.document_id,
-        "document_title": document.title,
-        "reviewer_id": review.reviewer_id,
-        "reviewer_name": f"User {review.reviewer_id}",
-        "status": review.status,
-        "comments": review.comments,
-        "rating": review.rating,
-        "created_at": review.created_at.isoformat() if review.created_at else None,
+        "message": "Документ утвержден",
+        "document_id": document_id,
+        "revision_id": latest_revision.id,
+        "approved_by": current_user.id
     }
 
-@router.put("/{review_id}", response_model=dict)
-async def update_review(
-    review_id: int,
-    review_data: ReviewUpdate,
+
+@router.post("/reject/{document_id}")
+async def reject_document(
+    document_id: int,
+    request: RejectRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    current_user: User = Depends(get_current_user)
 ):
-    """Обновление ревью"""
-    review = db.query(DocumentReview).filter(DocumentReview.id == review_id).first()
-    if not review:
-        raise HTTPException(status_code=404, detail="Review not found")
+    comments = request.comments
+    print(f"DEBUG: reject_document called with document_id={document_id}, comments='{comments}'")
+    """
+    Отклонить документ (внутреннее отклонение)
+    """
+    # Получаем документ
+    document = db.query(Document).filter(Document.id == document_id).first()
+    if not document:
+        raise HTTPException(status_code=404, detail="Документ не найден")
     
-    # Обновляем только переданные поля
-    if review_data.status is not None:
-        review.status = review_data.status
-    if review_data.comments is not None:
-        review.comments = review_data.comments
-    if review_data.rating is not None:
-        review.rating = review_data.rating
+    # Получаем последнюю ревизию
+    latest_revision = db.query(DocumentRevision).filter(
+        DocumentRevision.document_id == document_id,
+        DocumentRevision.is_deleted == 0
+    ).order_by(DocumentRevision.created_at.desc()).first()
     
+    if not latest_revision:
+        raise HTTPException(status_code=404, detail="Ревизия документа не найдена")
+    
+    # Получаем статус "Rejected"
+    rejected_status = db.query(WorkflowStatus).filter(
+        WorkflowStatus.name == "Rejected"
+    ).first()
+    
+    if not rejected_status:
+        raise HTTPException(status_code=500, detail="Статус 'Rejected' не найден")
+    
+    # Сохраняем старый статус перед обновлением
+    old_status_id = latest_revision.workflow_status_id
+    
+    # Обновляем статус ревизии
+    latest_revision.workflow_status_id = rejected_status.id
+    
+    # Создаем запись в document_workflow_history
+    from app.models.document_workflow_history import DocumentWorkflowHistory
+    # Используем комментарий только если он не пустой
+    final_comments = comments if comments and comments.strip() else None
+    print(f"DEBUG: Creating reject workflow_history with comments='{final_comments}'")
+    workflow_history = DocumentWorkflowHistory(
+        revision_id=latest_revision.id,
+        from_status_id=old_status_id,
+        to_status_id=rejected_status.id,
+        user_id=current_user.id,
+        action_type="reject",
+        comments=final_comments
+    )
+    db.add(workflow_history)
     db.commit()
-    db.refresh(review)
+    print(f"DEBUG: reject workflow_history created with id={workflow_history.id}")
     
     return {
-        "id": review.id,
-        "document_id": review.document_id,
-        "document_title": "Документ",  # TODO: Получить название документа
-        "reviewer_id": review.reviewer_id,
-        "reviewer_name": f"User {review.reviewer_id}",
-        "status": review.status,
-        "comments": review.comments,
-        "rating": review.rating,
-        "created_at": review.created_at.isoformat() if review.created_at else None,
+        "message": "Документ отклонен",
+        "document_id": document_id,
+        "revision_id": latest_revision.id,
+        "rejected_by": current_user.id,
+        "comments": comments
     }
-
-@router.delete("/{review_id}")
-async def delete_review(
-    review_id: int,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
-):
-    """Удаление ревью"""
-    review = db.query(DocumentReview).filter(DocumentReview.id == review_id).first()
-    if not review:
-        raise HTTPException(status_code=404, detail="Review not found")
-    
-    db.delete(review)
-    db.commit()
-    
-    return {"message": "Review deleted successfully"}

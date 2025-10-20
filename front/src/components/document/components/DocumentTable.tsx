@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect } from 'react';
 import {
   Box,
   Table,
@@ -61,6 +61,7 @@ export interface DocumentTableProps {
     size: boolean;
     revision: boolean;
     status: boolean;
+    review_status: boolean;
     language: boolean;
     drs: boolean;
     date: boolean;
@@ -84,6 +85,7 @@ export interface DocumentTableProps {
   showSelectColumn?: boolean; // Показывать ли колонку с галочками
   selectedDocuments?: number[]; // Массив ID выбранных документов
   onDocumentSelect?: (documentId: number, selected: boolean) => void; // Обработчик выбора документа
+  activeRevisions?: any[]; // Активные ревизии для определения доступности галочек
   
   // Утилиты
   formatFileSize: (bytes: number) => string;
@@ -104,11 +106,49 @@ export const DocumentTable: React.FC<DocumentTableProps> = observer(({
   showSelectColumn = false,
   selectedDocuments = [],
   onDocumentSelect,
+  activeRevisions = [],
   formatFileSize,
   formatDate,
   language,
 }) => {
+  // Загружаем workflow статусы при монтировании компонента
+  useEffect(() => {
+    referencesStore.loadWorkflowStatuses();
+  }, []);
+
+  // Функция для определения цвета workflow статуса
+  const getWorkflowStatusColor = (statusId?: number): "default" | "primary" | "secondary" | "error" | "info" | "success" | "warning" => {
+    if (!statusId) return "default";
+    
+    const status = referencesStore.getWorkflowStatus(statusId);
+    if (!status) return "default";
+    
+    switch (status.name) {
+      case "Draft":
+        return "default"; // серый
+      case "In Review":
+        return "warning"; // оранжевый
+      case "Approved":
+        return "success"; // зеленый
+      case "Rejected":
+        return "error"; // красный
+      case "Approved with Comments":
+        return "success"; // зеленый
+      case "Not Reviewed":
+        return "info"; // синий
+      default:
+        return "default";
+    }
+  };
+
   const { t } = useTranslation();
+
+  // Функция для определения доступности галочки документа
+  const isDocumentSelectable = (documentId: number): boolean => {
+    // Ищем активную ревизию для этого документа
+    const activeRevision = activeRevisions.find(rev => rev.document_id === documentId);
+    return !!activeRevision; // Галочка доступна только если есть активная ревизия
+  };
 
   // Функция для расчета высоты таблицы - всегда 13 строк
   const calculateTableHeight = () => {
@@ -123,17 +163,35 @@ export const DocumentTable: React.FC<DocumentTableProps> = observer(({
     if (columnOrder.length === 0) {
       // Если порядок не задан, используем дефолтный порядок
       return [
-        'number', 'title', 'file', 'size', 'revision', 'status', 
+        'number', 'title', 'file', 'size', 'revision', 'status', 'review_status',
         'language', 'discipline', 'document_type', 'drs', 
         'date', 'updated_at', 'created_by'
       ];
     }
     
-    // Сортируем колонки по порядку, исключая actions (он всегда справа)
-    return columnOrder
-      .filter(col => col.column !== 'actions')
+    // Получаем все видимые колонки (только известные колонки)
+    const knownColumns = [
+      'number', 'title', 'file', 'size', 'revision', 'status', 'review_status',
+      'language', 'discipline', 'document_type', 'drs', 
+      'date', 'updated_at', 'created_by'
+    ];
+    
+    const visibleColumns = knownColumns.filter(key => 
+      visibleCols[key as keyof typeof visibleCols] && key !== 'actions'
+    );
+    
+    // Сортируем колонки по порядку из columnOrder
+    const orderedColumns = columnOrder
+      .filter(col => col.column !== 'actions' && visibleCols[col.column as keyof typeof visibleCols])
       .sort((a, b) => a.order - b.order)
       .map(col => col.column);
+    
+    // Добавляем колонки, которые есть в visibleCols, но нет в columnOrder
+    const unorderedColumns = visibleColumns.filter(col => 
+      !columnOrder.some(orderedCol => orderedCol.column === col)
+    );
+    
+    return [...orderedColumns, ...unorderedColumns];
   };
 
   // Функция для получения ширины колонки
@@ -145,6 +203,7 @@ export const DocumentTable: React.FC<DocumentTableProps> = observer(({
       case 'size': return { width: '83px', minWidth: '83px' };
       case 'revision': return { width: '83px', minWidth: '83px' };
       case 'status': return { width: '103px', minWidth: '103px' };
+      case 'review_status': return { width: '120px', minWidth: '120px' };
       case 'language': return { width: '83px', minWidth: '83px' };
       case 'drs': return { width: '83px', minWidth: '83px' };
       case 'discipline': return { width: '103px', minWidth: '103px' };
@@ -166,6 +225,7 @@ export const DocumentTable: React.FC<DocumentTableProps> = observer(({
         case 'size': return t('documents.columns.size');
         case 'revision': return t('documents.columns.revision');
         case 'status': return t('documents.columns.status');
+        case 'review_status': return t('documents.columns.review_status');
         case 'language': return t('documents.columns.language');
         case 'drs': return 'DRS';
         case 'date': return t('documents.columns.created_at');
@@ -203,6 +263,7 @@ export const DocumentTable: React.FC<DocumentTableProps> = observer(({
         case 'size': return { width: '83px', minWidth: '83px' };
         case 'revision': return { width: '83px', minWidth: '83px' };
         case 'status': return { width: '103px', minWidth: '103px' };
+        case 'review_status': return { width: '120px', minWidth: '120px' };
         case 'language': return { width: '83px', minWidth: '83px' };
         case 'drs': return { width: '83px', minWidth: '83px' };
         case 'discipline': return { width: '103px', minWidth: '103px' };
@@ -288,6 +349,15 @@ export const DocumentTable: React.FC<DocumentTableProps> = observer(({
             <Chip
               label={documentStore.getDocumentStatusLabel(document, referencesStore, language)}
               color={documentStore.getDocumentStatusColor(document, referencesStore) as any}
+              size="small"
+              sx={{ fontSize: '0.75rem', height: '24px' }}
+            />
+          );
+        case 'review_status':
+          return (
+            <Chip
+              label={referencesStore.getWorkflowStatusLabel(document.workflow_status_id, language)}
+              color={getWorkflowStatusColor(document.workflow_status_id) as any}
               size="small"
               sx={{ fontSize: '0.75rem', height: '24px' }}
             />
@@ -615,6 +685,7 @@ export const DocumentTable: React.FC<DocumentTableProps> = observer(({
                     <Checkbox
                       checked={selectedDocuments.includes(document.id)}
                       onChange={(e) => onDocumentSelect?.(document.id, e.target.checked)}
+                      disabled={!isDocumentSelectable(document.id)}
                       size="small"
                       sx={{ padding: 0 }}
                     />

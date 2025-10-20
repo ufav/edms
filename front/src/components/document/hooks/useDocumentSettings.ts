@@ -9,6 +9,7 @@ export interface ColumnVisibility {
   size: boolean;
   revision: boolean;
   status: boolean;
+  review_status: boolean;
   language: boolean;
   drs: boolean;
   date: boolean;
@@ -53,6 +54,7 @@ const defaultColumnVisibility: ColumnVisibility = {
   size: true,
   revision: true,
   status: true,
+  review_status: true,
   language: true,
   drs: false,
   date: true,
@@ -70,14 +72,15 @@ const defaultColumnOrder: ColumnOrder[] = [
   { column: 'size', order: 4 },
   { column: 'revision', order: 5 },
   { column: 'status', order: 6 },
-  { column: 'language', order: 7 },
-  { column: 'discipline', order: 8 },
-  { column: 'document_type', order: 9 },
-  { column: 'drs', order: 10 },
-  { column: 'date', order: 11 },
-  { column: 'updated_at', order: 12 },
-  { column: 'created_by', order: 13 },
-  { column: 'actions', order: 14 },
+  { column: 'review_status', order: 7 },
+  { column: 'language', order: 8 },
+  { column: 'discipline', order: 9 },
+  { column: 'document_type', order: 10 },
+  { column: 'drs', order: 11 },
+  { column: 'date', order: 12 },
+  { column: 'updated_at', order: 13 },
+  { column: 'created_by', order: 14 },
+  { column: 'actions', order: 15 },
 ];
 
 export const useDocumentSettings = (): UseDocumentSettingsReturn => {

@@ -24,6 +24,7 @@ from app.core.database import Base
 from app.models.user import User
 from app.models.project import Project
 from app.models.document import Document
+from app.models.document_workflow_history import DocumentWorkflowHistory
 from app.models.transmittal import Transmittal
 from app.models.workflow import WorkflowTemplate, WorkflowStep, DocumentWorkflow, DocumentApproval, DocumentHistory
 from app.models.notification import Notification

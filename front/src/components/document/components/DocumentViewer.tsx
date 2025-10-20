@@ -46,6 +46,7 @@ interface DocumentViewerProps {
   onCreateDocument?: (documentData: any) => Promise<void>;
   onSaveDocument?: (documentData: any) => Promise<void>;
   onOpenComments?: () => void;
+  onRelease?: (revisionId: number, comment?: string) => void; // Выпустить ревизию
 }
 
 const DocumentViewer: React.FC<DocumentViewerProps> = observer(({
@@ -59,12 +60,14 @@ const DocumentViewer: React.FC<DocumentViewerProps> = observer(({
   onCreateDocument,
   onSaveDocument,
   onOpenComments,
+  onRelease,
 }) => {
   const { t } = useTranslation();
   
   // Локальное состояние для загрузки (как в старом коде)
   const [isUploadingDocument, setIsUploadingDocument] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadComment, setUploadComment] = useState('');
 
   // Используем созданные хуки
   const documentState = useDocumentViewerState({ 
@@ -184,6 +187,9 @@ const DocumentViewer: React.FC<DocumentViewerProps> = observer(({
                   handleFileUpload={fileUpload.handleFileUpload}
                   fileMetadata={fileUpload.fileMetadata}
                   validationErrors={validation.validationErrors}
+                  onFileUploadWithComment={(file, comment) => {
+                    setUploadComment(comment);
+                  }}
                 />
               ) : documentId ? (
                 <Box sx={{ display: 'flex', gap: 1 }}>
@@ -227,6 +233,7 @@ const DocumentViewer: React.FC<DocumentViewerProps> = observer(({
               formatDate={revisions.formatDate}
               getRevisionStatusColor={revisions.getRevisionStatusColor}
               canCancelRevision={permissions.canCancelRevision}
+              onRelease={onRelease}
             />
           </Box>
         </DialogContent>
@@ -244,6 +251,7 @@ const DocumentViewer: React.FC<DocumentViewerProps> = observer(({
                       await onCreateDocument?.({
                         ...documentState.documentData,
                         uploadedFile: fileUpload.uploadedFile,
+                        uploadComment: uploadComment,
                         revisionDescription: projectData.workflowPresetSequence.length > 0 ? projectData.workflowPresetSequence[0].revision_description : null,
                         revisionStep: projectData.workflowPresetSequence.length > 0 ? projectData.workflowPresetSequence[0].revision_step : null,
                         onProgress: (progress: number) => {
@@ -297,7 +305,7 @@ const DocumentViewer: React.FC<DocumentViewerProps> = observer(({
       <ConfirmDialog
         open={revisions.cancelRevisionDialog.isOpen}
         title={t('documents.cancel_revision')}
-        content={t('documents.cancel_revision_confirm')}
+        content={t('documents.cancel_revision_confirm_content')}
         onConfirm={() => revisions.handleCancelRevision(revisions.cancelRevisionDialog.itemToDelete)}
         onClose={revisions.cancelRevisionDialog.closeDeleteDialog}
         loading={revisions.cancelRevisionDialog.isLoading}

@@ -104,6 +104,11 @@ const Layout: React.FC<LayoutProps> = observer(({
     return () => window.removeEventListener('resize', handleResize);
   }, [currentPage]);
 
+  // Обновляем позицию индикатора при смене проекта
+  useEffect(() => {
+    updateIndicator();
+  }, [projectStore.selectedProject]);
+
   const handleClose = () => {
     setAnchorEl(null);
   };
@@ -124,6 +129,13 @@ const Layout: React.FC<LayoutProps> = observer(({
       { id: 'admin', label: 'Админка', icon: <SettingsIcon />, external: true }
     ] : []),
   ];
+
+  // Обновляем заголовок вкладки браузера в зависимости от текущего раздела
+  useEffect(() => {
+    const currentItem = menuItems.find(item => item.id === currentPage);
+    const sectionTitle = currentItem ? currentItem.label : 'Docste';
+    document.title = `${sectionTitle} - Docste`;
+  }, [currentPage, t]);
 
   const drawer = (
     <Box>

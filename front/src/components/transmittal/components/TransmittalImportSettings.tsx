@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useImperativeHandle, forwardRef } from 'react';
 import {
   Box,
   Typography,
@@ -6,9 +6,9 @@ import {
   Button,
   CircularProgress,
   Alert,
+  Snackbar,
   Card,
   CardContent,
-  CardHeader,
   Divider,
   Grid,
   FormControl,
@@ -18,6 +18,8 @@ import {
   IconButton,
   List,
   ListItem,
+  Tabs,
+  Tab,
 } from '@mui/material';
 import { Add as AddIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
@@ -28,15 +30,22 @@ interface TransmittalImportSettingsProps {
   onClose: () => void;
 }
 
-export const TransmittalImportSettings: React.FC<TransmittalImportSettingsProps> = ({ onClose }) => {
+export interface TransmittalImportSettingsHandle {
+  save: () => Promise<void>;
+}
+
+export const TransmittalImportSettings = forwardRef<TransmittalImportSettingsHandle, TransmittalImportSettingsProps>((_props, ref) => {
   const { t } = useTranslation();
   const [settings, setSettings] = useState<TransmittalImportSettingsType[]>([]);
   const [workflowStatuses, setWorkflowStatuses] = useState<WorkflowStatus[]>([]);
   const [workflowStatusesLoading, setWorkflowStatusesLoading] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [saving, setSaving] = useState(false);
+  // no local saving state; handled by parent if needed
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
 
   // Загружаем настройки при монтировании
   useEffect(() => {
@@ -75,6 +84,8 @@ export const TransmittalImportSettings: React.FC<TransmittalImportSettingsProps>
       }));
       
       setSettings(initializedData);
+      // Обнуляем активную вкладку при загрузке/смене проекта
+      setActiveIndex(0);
     } catch (err) {
       setError(t('transmittals.import_settings.loading_error'));
       console.error('Ошибка загрузки настроек импорта:', err);
@@ -193,11 +204,59 @@ export const TransmittalImportSettings: React.FC<TransmittalImportSettingsProps>
   const handleSave = async () => {
     if (!projectStore.selectedProject) return;
     
-    setSaving(true);
     setError(null);
     setSuccess(null);
     
     try {
+      // Валидация настроек перед сохранением
+      for (const setting of settings) {
+        const companyPrefix = setting.company_name ? `${setting.company_name}: ` : '';
+        const sheetName = (setting.settings_value as any)?.sheet_name?.trim?.() || '';
+        const metaLabel = (setting.settings_value as any)?.metadata_fields?.transmittal_number?.label?.trim?.() || '';
+        const tableTransmittal = (setting.settings_value as any)?.table_fields?.transmittal_number_label?.trim?.() || '';
+        const docLabel = (setting.settings_value as any)?.table_fields?.document_number_label?.trim?.() || '';
+        const statusLabel = (setting.settings_value as any)?.table_fields?.status_label?.trim?.() || '';
+        const statusMapping = (setting.settings_value as any)?.status_mapping || [];
+
+        // 1) Имя листа обязательно
+        if (!sheetName) {
+          setSnackbarMessage(`${companyPrefix}${t('transmittals.import_missing_sheet_name') || 'Не указано имя листа'}`);
+          setSnackbarOpen(true);
+          return;
+        }
+
+        // 2) Источник номера трансмиттала: либо метаданные, либо таблица
+        if (!metaLabel && !tableTransmittal) {
+          setSnackbarMessage(`${companyPrefix}${t('transmittals.import_no_source_configured') || 'Укажите источник номера трансмиттала (метаданные или таблица)'}`);
+          setSnackbarOpen(true);
+          return;
+        }
+        if (metaLabel && tableTransmittal) {
+          setSnackbarMessage(`${companyPrefix}${t('transmittals.import_both_sources_configured') || 'Оставьте только один источник номера трансмиттала'}`);
+          setSnackbarOpen(true);
+          return;
+        }
+
+        // 3) Поля таблицы: номер документа и статус обязательны
+        if (!docLabel) {
+          setSnackbarMessage(`${companyPrefix}Заполните поле: ${t('transmittals.import_settings.document_number_label')}`);
+          setSnackbarOpen(true);
+          return;
+        }
+        if (!statusLabel) {
+          setSnackbarMessage(`${companyPrefix}Заполните поле: ${t('transmittals.import_settings.status_label')}`);
+          setSnackbarOpen(true);
+          return;
+        }
+
+        // 4) Наличие маппинга статусов (минимум одна строка)
+        if (!Array.isArray(statusMapping) || statusMapping.length === 0) {
+          setSnackbarMessage(`${companyPrefix}${t('transmittals.import_settings.status_mapping_title')} — ${t('common.fill') || 'заполните'}`);
+          setSnackbarOpen(true);
+          return;
+        }
+      }
+
       // Сохраняем настройки для каждой компании
       for (const setting of settings) {
         await transmittalImportSettingsApi.createOrUpdate({
@@ -214,9 +273,13 @@ export const TransmittalImportSettings: React.FC<TransmittalImportSettingsProps>
       setError(t('transmittals.import_settings.save_error'));
       console.error('Ошибка сохранения настроек импорта:', err);
     } finally {
-      setSaving(false);
+      
     }
   };
+
+  useImperativeHandle(ref, () => ({
+    save: handleSave,
+  }));
 
   if (loading) {
     return (
@@ -234,15 +297,11 @@ export const TransmittalImportSettings: React.FC<TransmittalImportSettingsProps>
     );
   }
 
-  return (
+  return (<>
     <Box sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <Typography variant="h6" gutterBottom>
-        {t('transmittals.import_settings.title')}
-      </Typography>
-      
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
+      <Alert severity="info" sx={{ mb: 3 }}>
         {t('transmittals.import_settings.description')}
-      </Typography>
+      </Alert>
 
       {error && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
@@ -261,42 +320,63 @@ export const TransmittalImportSettings: React.FC<TransmittalImportSettingsProps>
           {t('transmittals.import_settings.no_participants')}
         </Alert>
       ) : (
-        <Box sx={{ flex: 1, overflow: 'auto' }}>
-          {settings.map((setting, index) => (
-            <React.Fragment key={setting.company_id}>
-              <Card sx={{ 
-                mb: 3, 
-                border: '1px solid #e0e0e0',
-                borderRadius: 2,
-                boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-              }}>
-                <CardHeader
-                  title={
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Box sx={{ 
-                        width: 8, 
-                        height: 8, 
-                        borderRadius: '50%', 
-                        backgroundColor: '#1976d2',
-                        flexShrink: 0
-                      }} />
-                      <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                        {setting.company_name}
-                      </Typography>
-                    </Box>
+        <Box sx={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          {/* Мини-вкладки компаний */}
+          <Tabs
+            value={Math.min(activeIndex, Math.max(settings.length - 1, 0))}
+            onChange={(_, v) => setActiveIndex(v)}
+            variant="scrollable"
+            scrollButtons={false}
+            allowScrollButtonsMobile={false}
+            textColor="primary"
+            indicatorColor="primary"
+            sx={{ minHeight: 32, height: 32 }}
+            aria-label="companies-tabs"
+          >
+            {settings.map((s) => (
+              <Tab
+                key={s.company_id}
+                label={s.company_name}
+                sx={{
+                  minHeight: 32,
+                  height: 32,
+                  px: 1.5,
+                  py: 0.25,
+                  fontSize: 12,
+                  textTransform: 'none',
+                  minWidth: 'auto',
+                  border: 'none',
+                  outline: 'none',
+                  boxShadow: 'none',
+                  background: 'transparent',
+                  '&:before': { display: 'none' },
+                  '&:after': { display: 'none' },
+                  '&.Mui-selected': {
+                    border: 'none',
+                    outline: 'none',
+                    boxShadow: 'none',
+                    background: 'transparent',
+                  },
+                  '&.Mui-focusVisible': {
+                    outline: 'none',
+                  },
+                  '&:focus': {
+                    outline: 'none',
                   }
-                  sx={{ 
-                    backgroundColor: '#f5f5f5',
-                    borderBottom: '1px solid #e0e0e0',
-                    '& .MuiCardHeader-title': {
-                      color: '#1976d2'
-                    }
-                  }}
-                />
+                }}
+              />
+            ))}
+          </Tabs>
+
+          <Box sx={{ flex: 1, overflow: 'auto', pt: 2 }}>
+            {settings.length > 0 && (
+              <React.Fragment key={settings[activeIndex]?.company_id}>
+                {(() => { const setting = settings[Math.min(activeIndex, Math.max(settings.length - 1, 0))]; return (
+              <Card elevation={0} sx={{ mb: 2, border: 'none', boxShadow: 'none' }}>
                 <CardContent sx={{ pt: 3 }}>
-                <Grid container spacing={2}>
+                <Grid container spacing={2} columns={{ xs: 12, sm: 24 }}>
                   {/* Название листа */}
-                  <Grid item xs={12} sm={3}>
+                  <Grid item xs={12} sm={8}>
                     <TextField
                       fullWidth
                       label={t('transmittals.import_settings.sheet_name')}
@@ -315,8 +395,8 @@ export const TransmittalImportSettings: React.FC<TransmittalImportSettingsProps>
                   <Typography variant="caption" color="text.secondary" sx={{ mb: 2, display: 'block' }}>
                     {t('transmittals.import_settings.metadata_hint')}
                   </Typography>
-                  <Grid container spacing={2}>
-                    <Grid item xs={12} sm={6}>
+                  <Grid container spacing={2} columns={{ xs: 12, sm: 24 }}>
+                    <Grid item xs={12} sm={8}>
                       <TextField
                         fullWidth
                         label={t('transmittals.import_settings.transmittal_number_label')}
@@ -326,7 +406,7 @@ export const TransmittalImportSettings: React.FC<TransmittalImportSettingsProps>
                         placeholder={t('transmittals.import_settings.transmittal_placeholder')}
                       />
                     </Grid>
-                    <Grid item xs={12} sm={6}>
+                    <Grid item xs={12} sm={3}>
                       <FormControl fullWidth variant="standard">
                         <InputLabel>{t('transmittals.import_settings.position')}</InputLabel>
                         <Select
@@ -406,15 +486,15 @@ export const TransmittalImportSettings: React.FC<TransmittalImportSettingsProps>
                           <Grid item xs={5}>
                             <TextField
                               fullWidth
-                              size="small"
                               label={t('transmittals.import_settings.incoming_status')}
                               value={mapping.incoming_status || ''}
                               onChange={(e) => handleStatusMappingChange(setting.company_id, index, 'incoming_status', e.target.value)}
                               placeholder="Code 1, Code 2, etc."
+                              variant="standard"
                             />
                           </Grid>
                           <Grid item xs={5}>
-                            <FormControl fullWidth size="small">
+                            <FormControl fullWidth variant="standard">
                               <InputLabel>{t('transmittals.import_settings.system_status')}</InputLabel>
                               <Select
                                 value={workflowStatuses.length > 0 ? (mapping.system_status_id || '') : ''}
@@ -440,7 +520,7 @@ export const TransmittalImportSettings: React.FC<TransmittalImportSettingsProps>
                           <Grid item xs={2}>
                             <IconButton
                               onClick={() => handleRemoveStatusMapping(setting.company_id, index)}
-                              color="error"
+                              color="default"
                               size="small"
                             >
                               <DeleteIcon />
@@ -451,65 +531,37 @@ export const TransmittalImportSettings: React.FC<TransmittalImportSettingsProps>
                     ))}
                   </List>
                   
-                  <Button
-                    startIcon={<AddIcon />}
-                    onClick={() => handleAddStatusMapping(setting.company_id)}
-                    size="small"
-                    sx={{ mt: 1 }}
-                    disabled={workflowStatusesLoading || workflowStatuses.length === 0}
-                  >
-                    {t('transmittals.import_settings.add_status_mapping')}
-                  </Button>
+                  <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                    <Button
+                      startIcon={<AddIcon />}
+                      onClick={() => handleAddStatusMapping(setting.company_id)}
+                      sx={{ mt: 1 }}
+                      disabled={workflowStatusesLoading || workflowStatuses.length === 0}
+                    >
+                      {t('common.add') || t('transmittals.import_settings.add') || 'Добавить'}
+                    </Button>
+                  </Box>
                 </Box>
               </CardContent>
             </Card>
-            
-            {/* Разделитель между компаниями (кроме последней) */}
-            {index < settings.length - 1 && (
-              <Box sx={{ 
-                display: 'flex', 
-                alignItems: 'center', 
-                my: 2,
-                '&::before, &::after': {
-                  content: '""',
-                  flex: 1,
-                  height: '1px',
-                  backgroundColor: '#e0e0e0'
-                }
-              }}>
-                <Typography 
-                  variant="caption" 
-                  sx={{ 
-                    mx: 2, 
-                    color: 'text.secondary',
-                    backgroundColor: 'background.paper',
-                    px: 1
-                  }}
-                >
-                  {t('transmittals.import_settings.company_separator')}
-                </Typography>
-              </Box>
+            ); })()}
+              </React.Fragment>
             )}
-          </React.Fragment>
-          ))}
+          </Box>
         </Box>
       )}
 
       <Divider sx={{ my: 3 }} />
-
-      <Box display="flex" justifyContent="flex-end" gap={2} sx={{ mt: 'auto' }}>
-        <Button onClick={onClose} disabled={saving}>
-          {t('common.close')}
-        </Button>
-        <Button
-          variant="contained"
-          onClick={handleSave}
-          disabled={saving || settings.length === 0}
-          startIcon={saving ? <CircularProgress size={20} /> : null}
-        >
-          {saving ? t('transmittals.import_settings.saving') : t('transmittals.import_settings.save')}
-        </Button>
-      </Box>
     </Box>
-  );
-};
+    <Snackbar
+      open={snackbarOpen}
+      autoHideDuration={7000}
+      onClose={() => setSnackbarOpen(false)}
+      anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+    >
+      <Alert onClose={() => setSnackbarOpen(false)} severity="warning" sx={{ width: '100%' }}>
+        {snackbarMessage}
+      </Alert>
+    </Snackbar>
+  </>);
+});

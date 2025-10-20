@@ -36,7 +36,7 @@ class ReviewStore {
     });
     
     try {
-      const apiReviews = await reviewsApi.getAll(projectId);
+      const apiReviews = await reviewsApi.getPendingApprovals(0, 100, projectId);
       runInAction(() => {
         this.reviews = apiReviews.map(apiReview => ({
           id: apiReview.id,

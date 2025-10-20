@@ -8,6 +8,7 @@ from .company_role import CompanyRole
 from .project_role import ProjectRole
 from .document import Document, DocumentRevision, DocumentReview
 from .document_comments import DocumentComment
+from .document_workflow_history import DocumentWorkflowHistory
 from .transmittal import Transmittal, TransmittalRevision
 from .transmittal_import_settings import TransmittalImportSettings
 # Temporarily commented out to avoid circular imports
@@ -32,6 +33,7 @@ __all__ = [
     "ProjectRole",
     "Document", "DocumentRevision", "DocumentReview",
     "DocumentComment",
+    "DocumentWorkflowHistory",
     "Transmittal", "TransmittalRevision",
     "TransmittalImportSettings",
     # "WorkflowTemplate", "WorkflowStep", "DocumentWorkflow", "DocumentApproval", "DocumentHistory",

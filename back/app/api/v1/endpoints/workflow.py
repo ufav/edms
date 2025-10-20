@@ -15,7 +15,9 @@ from app.models.workflow import (
     WorkflowTemplate, WorkflowStep, DocumentWorkflow, DocumentApproval, DocumentHistory,
     DocumentStatus, ApprovalStatus
 )
-from app.models.document import Document
+from app.models.document import Document, DocumentRevision
+from app.models.document_workflow_history import DocumentWorkflowHistory
+from app.models.references import WorkflowStatus
 from app.services.auth import get_current_active_user
 
 router = APIRouter()
@@ -307,6 +309,37 @@ async def approve_document(
     approval.status = ApprovalStatus.APPROVED
     approval.comments = comments
     approval.approved_at = datetime.utcnow()
+    
+    # Создаем запись в document_workflow_history для каждого шага утверждения
+    latest_revision = db.query(DocumentRevision).filter(
+        DocumentRevision.document_id == approval.workflow.document_id,
+        DocumentRevision.is_deleted == 0
+    ).order_by(DocumentRevision.created_at.desc()).first()
+    
+    print(f"DEBUG: latest_revision found: {latest_revision is not None}")
+    if latest_revision:
+        print(f"DEBUG: revision_id: {latest_revision.id}, workflow_status_id: {latest_revision.workflow_status_id}")
+        
+        # Сохраняем старый статус перед обновлением
+        old_status_id = latest_revision.workflow_status_id
+        
+        # Получаем статус "Approved" (id = 3) для финального утверждения
+        approved_status = db.query(WorkflowStatus).filter(WorkflowStatus.id == 3).first()
+        print(f"DEBUG: approved_status found: {approved_status is not None}")
+        if approved_status:
+            print(f"DEBUG: Creating workflow_history with from_status_id={old_status_id}, to_status_id={approved_status.id}")
+            # Создаем запись в document_workflow_history
+            workflow_history = DocumentWorkflowHistory(
+                revision_id=latest_revision.id,
+                from_status_id=old_status_id,
+                to_status_id=approved_status.id,
+                user_id=current_user.id,
+                action_type="approve",
+                comments=comments or "Документ утвержден"
+            )
+            db.add(workflow_history)
+            print(f"DEBUG: workflow_history added to session")
+    
     db.commit()
     
     # Проверяем, нужно ли переходить к следующему шагу
@@ -336,6 +369,10 @@ async def approve_document(
         # Обновляем статус документа
         document = workflow.document
         document.status = DocumentStatus.APPROVED.value
+        
+        # Обновляем workflow_status_id в последней ревизии документа
+        if latest_revision:
+            latest_revision.workflow_status_id = approved_status.id
     
     db.commit()
     
@@ -385,6 +422,32 @@ async def reject_document(
     # Обновляем статус документа
     document = workflow.document
     document.status = DocumentStatus.REJECTED.value
+    
+    # Создаем запись в document_workflow_history для отклонения
+    latest_revision = db.query(DocumentRevision).filter(
+        DocumentRevision.document_id == workflow.document_id,
+        DocumentRevision.is_deleted == 0
+    ).order_by(DocumentRevision.created_at.desc()).first()
+    
+    if latest_revision:
+        # Сохраняем старый статус перед обновлением
+        old_status_id = latest_revision.workflow_status_id
+        
+        # Получаем статус "Rejected" (id = 4)
+        rejected_status = db.query(WorkflowStatus).filter(WorkflowStatus.id == 4).first()
+        if rejected_status:
+            latest_revision.workflow_status_id = rejected_status.id
+            
+            # Создаем запись в document_workflow_history
+            workflow_history = DocumentWorkflowHistory(
+                revision_id=latest_revision.id,
+                from_status_id=old_status_id,  # Старый статус
+                to_status_id=rejected_status.id,
+                user_id=current_user.id,
+                action_type="reject",
+                comments=comments
+            )
+            db.add(workflow_history)
     
     db.commit()
     

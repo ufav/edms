@@ -23,6 +23,7 @@ from app.models.discipline import Discipline, DocumentType
 from app.models.discipline import Discipline, DocumentType
 from app.models.references import Language, WorkflowStatus
 from app.models.project import ProjectDisciplineDocumentType, ProjectMember
+from app.models.document_workflow_history import DocumentWorkflowHistory
 from app.services.auth import get_current_active_user
 
 router = APIRouter()
@@ -76,17 +77,9 @@ class DocumentMetadata(BaseModel):
     title_native: Optional[str] = None  # Переименовано из description
     remarks: Optional[str] = None  # Примечания (текстовое поле)
     discipline_code: Optional[str] = None
-    document_type_code: Optional[str] = None
-    document_code: Optional[str] = None
-    language_id: Optional[int] = None
-    author: Optional[str] = None
-    creation_date: Optional[date] = None
-    revision: Optional[str] = None
-    sheet_number: Optional[str] = None
-    total_sheets: Optional[int] = None
-    scale: Optional[str] = None
-    format: Optional[str] = None
-    confidentiality: str = "internal"
+
+class ReleaseRevisionRequest(BaseModel):
+    comment: Optional[str] = None
 
 
 def _bump_revision_string(current: Optional[str]) -> str:
@@ -100,6 +93,93 @@ def _bump_revision_string(current: Optional[str]) -> str:
     except Exception:
         # Если не удалось распарсить, возвращаем "02"
         return "02"
+
+
+def _get_next_revision_from_sequence(
+    document_id: int, 
+    current_revision_description_id: int, 
+    current_revision_step_id: int,
+    db: Session
+) -> tuple[Optional[int], Optional[int], str]:
+    """
+    Определяет следующую редакцию в последовательности на основе статуса последней ревизии.
+    Возвращает (revision_description_id, revision_step_id, revision_number)
+    """
+    from app.models.project import Project, WorkflowPresetSequence
+    from app.models.references import RevisionDescription, RevisionStep
+    from app.models.document_workflow_history import DocumentWorkflowHistory
+    from app.models.references import WorkflowStatus
+    
+    # Получаем документ и его проект
+    document = db.query(Document).filter(Document.id == document_id).first()
+    if not document or not document.project_id:
+        return None, None, "02"  # Fallback к простому увеличению
+    
+    # Получаем последнюю ревизию документа
+    latest_revision = db.query(DocumentRevision).filter(
+        DocumentRevision.document_id == document_id,
+        DocumentRevision.is_deleted == 0
+    ).order_by(DocumentRevision.created_at.desc()).first()
+    
+    if not latest_revision:
+        return None, None, "01"  # Первая ревизия
+    
+    # Проверяем статус последней ревизии
+    approved_status = db.query(WorkflowStatus).filter(WorkflowStatus.name == "Approved").first()
+    
+    if not approved_status or latest_revision.workflow_status_id != approved_status.id:
+        # Если последняя ревизия не утверждена, просто увеличиваем номер
+        return current_revision_description_id, current_revision_step_id, _bump_revision_string(latest_revision.number)
+    
+    # Если последняя ревизия утверждена, ищем следующую редакцию в последовательности
+    project = db.query(Project).filter(Project.id == document.project_id).first()
+    if not project or not project.workflow_preset_id:
+        return None, None, _bump_revision_string(latest_revision.number)  # Fallback
+    
+    # Получаем текущую редакцию (описание + шаг)
+    current_description = db.query(RevisionDescription).filter(
+        RevisionDescription.id == current_revision_description_id
+    ).first()
+    current_step = db.query(RevisionStep).filter(
+        RevisionStep.id == current_revision_step_id
+    ).first()
+    
+    if not current_description or not current_step:
+        return None, None, _bump_revision_string(latest_revision.number)  # Fallback
+    
+    # Ищем текущую редакцию в последовательности
+    current_sequence = db.query(WorkflowPresetSequence).filter(
+        WorkflowPresetSequence.preset_id == project.workflow_preset_id,
+        WorkflowPresetSequence.revision_description_id == current_revision_description_id,
+        WorkflowPresetSequence.revision_step_id == current_revision_step_id
+    ).first()
+    
+    if not current_sequence:
+        # Если текущая редакция не найдена в последовательности, просто увеличиваем номер
+        return current_revision_description_id, current_revision_step_id, _bump_revision_string(latest_revision.number)
+    
+    # Ищем следующую редакцию в последовательности
+    next_sequence = db.query(WorkflowPresetSequence).filter(
+        WorkflowPresetSequence.preset_id == project.workflow_preset_id,
+        WorkflowPresetSequence.sequence_order > current_sequence.sequence_order
+    ).order_by(WorkflowPresetSequence.sequence_order).first()
+    
+    if next_sequence:
+        # Получаем информацию о следующей редакции
+        next_description = db.query(RevisionDescription).filter(
+            RevisionDescription.id == next_sequence.revision_description_id
+        ).first()
+        next_step = db.query(RevisionStep).filter(
+            RevisionStep.id == next_sequence.revision_step_id
+        ).first()
+        
+        if next_description and next_step:
+            # Генерируем номер ревизии (только номер, без кода описания)
+            revision_number = "01"  # Всегда начинаем с 01 для новой редакции
+            return next_sequence.revision_description_id, next_sequence.revision_step_id, revision_number
+    
+    # Если не найдена следующая редакция, просто увеличиваем номер
+    return current_revision_description_id, current_revision_step_id, _bump_revision_string(latest_revision.number)
 
 
 def _compute_md5(file_path: str) -> Optional[str]:
@@ -117,6 +197,7 @@ async def get_documents(
     skip: int = 0,
     limit: int = 100,
     project_id: int = None,
+    status: str = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -163,6 +244,40 @@ async def get_documents(
     if project_id:
         query = query.filter(Document.project_id == project_id)
     
+    # Фильтрация по статусу workflow
+    if status and status != 'all':
+        from app.models.references import WorkflowStatus
+        
+        # Получаем ID статуса по названию
+        status_mapping = {
+            'draft': 'Draft',
+            'review': 'In Review', 
+            'approved': ['Approved', 'Approved with Comments'],
+            'rejected': 'Rejected'
+        }
+        
+        if status in status_mapping:
+            target_statuses = status_mapping[status]
+            if isinstance(target_statuses, list):
+                # Для approved - несколько статусов
+                workflow_status_ids = db.query(WorkflowStatus.id).filter(
+                    WorkflowStatus.name.in_(target_statuses)
+                ).all()
+                workflow_status_ids = [s[0] for s in workflow_status_ids]
+            else:
+                # Для остальных - один статус
+                workflow_status = db.query(WorkflowStatus).filter(
+                    WorkflowStatus.name == target_statuses
+                ).first()
+                workflow_status_ids = [workflow_status.id] if workflow_status else []
+            
+            if workflow_status_ids:
+                # Фильтруем по workflow_status_id последней ревизии
+                query = query.filter(DocumentRevision.workflow_status_id.in_(workflow_status_ids))
+            else:
+                # Если статус не найден, возвращаем пустой результат
+                return []
+    
     # Выполняем запрос с пагинацией
     results = query.order_by(Document.updated_at.desc()).offset(skip).limit(limit).all()
     
@@ -184,6 +299,7 @@ async def get_documents(
             "revision": latest_revision.number if latest_revision else "01",
             "revision_description_id": latest_revision.revision_description_id if latest_revision else None,
             "revision_status_id": latest_revision.revision_status_id if latest_revision else None,
+            "workflow_status_id": latest_revision.workflow_status_id if latest_revision else None,
             "is_deleted": doc.is_deleted if doc.is_deleted is not None else 0,
             "drs": project_discipline_doc_type.drs if project_discipline_doc_type else None,
             "project_id": doc.project_id,
@@ -258,7 +374,7 @@ async def upload_document(
         file_name=file.filename,
         file_size=file.size,
         file_type=file.content_type,
-        change_description="First revision - Первая ревизия",
+        change_description=change_description or "First revision - Первая ревизия",
         uploaded_by=current_user.id,
         workflow_status_id=draft_workflow_status.id if draft_workflow_status else None,
     )
@@ -304,6 +420,7 @@ async def create_document_with_revision(
     language_id: int = Form(1),
     revision_description_id: int = Form(None),
     revision_step_id: int = Form(None),
+    change_description: str = Form(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -364,7 +481,7 @@ async def create_document_with_revision(
         file_name=file.filename,
         file_size=file.size,
         file_type=file.content_type,
-        change_description="First revision - Первая ревизия",
+        change_description=change_description or "First revision - Первая ревизия",
         uploaded_by=current_user.id,
         revision_status_id=active_status_id,
         revision_description_id=revision_description_id,
@@ -375,6 +492,19 @@ async def create_document_with_revision(
     db.add(revision_row)
     db.commit()
     db.refresh(revision_row)
+    
+    # Создаем запись в истории workflow для первой ревизии
+    if draft_workflow_status:
+        workflow_history = DocumentWorkflowHistory(
+            revision_id=revision_row.id,
+            from_status_id=None,  # Первая ревизия, нет предыдущего статуса
+            to_status_id=draft_workflow_status.id,
+            user_id=current_user.id,
+            action_type="initial_upload",
+            comments=change_description or "Первая загрузка документа"
+        )
+        db.add(workflow_history)
+        db.commit()
     
     return {
         "id": db_document.id,
@@ -658,6 +788,75 @@ async def import_documents_by_paths(
     }
 
 
+@router.post("/revisions/{revision_id}/release", response_model=dict)
+async def release_revision(
+    revision_id: int,
+    request: ReleaseRevisionRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Выпустить ревизию документа (изменить статус с Draft на In Review)
+    """
+    # Получаем ревизию
+    revision = db.query(DocumentRevision).filter(DocumentRevision.id == revision_id).first()
+    if not revision:
+        raise HTTPException(status_code=404, detail="Ревизия не найдена")
+    
+    # Получаем документ
+    document = db.query(Document).filter(Document.id == revision.document_id).first()
+    if not document:
+        raise HTTPException(status_code=404, detail="Документ не найден")
+    
+    # Проверяем права доступа
+    if not current_user.is_admin and document.created_by != current_user.id:
+        raise HTTPException(status_code=403, detail="Нет прав доступа к документу")
+    
+    # Проверяем, что ревизия в статусе Draft
+    draft_status = db.query(WorkflowStatus).filter(WorkflowStatus.name == "Draft").first()
+    if not draft_status:
+        raise HTTPException(status_code=500, detail="Статус 'Draft' не найден в системе")
+    
+    if revision.workflow_status_id != draft_status.id:
+        raise HTTPException(status_code=400, detail="Ревизия не в статусе Draft")
+    
+    # Проверяем, что ревизия активная (не удаленная)
+    if revision.is_deleted == 1:
+        raise HTTPException(status_code=400, detail="Нельзя выпускать удаленную ревизию")
+    
+    # Проверяем, что это последняя активная ревизия документа
+    latest_revision = db.query(DocumentRevision).filter(
+        DocumentRevision.document_id == revision.document_id,
+        DocumentRevision.is_deleted == 0
+    ).order_by(DocumentRevision.created_at.desc()).first()
+    
+    if not latest_revision or latest_revision.id != revision.id:
+        raise HTTPException(status_code=400, detail="Можно выпускать только последнюю активную ревизию документа")
+    
+    # Получаем статус "In Review"
+    in_review_status = db.query(WorkflowStatus).filter(WorkflowStatus.name == "In Review").first()
+    if not in_review_status:
+        raise HTTPException(status_code=500, detail="Статус 'In Review' не найден в системе")
+    
+    # Обновляем статус ревизии
+    revision.workflow_status_id = in_review_status.id
+    db.commit()
+    
+    # Создаем запись в истории workflow
+    workflow_history = DocumentWorkflowHistory(
+        revision_id=revision.id,
+        from_status_id=draft_status.id,
+        to_status_id=in_review_status.id,
+        user_id=current_user.id,
+        action_type="release",
+        comments=request.comment or "Ревизия выпущена для утверждения"
+    )
+    db.add(workflow_history)
+    db.commit()
+    
+    return {"message": "Ревизия успешно выпущена для внутреннего утверждения"}
+
+
 @router.get("/{document_id}/revisions", response_model=List[dict])
 async def list_document_revisions(
     document_id: int,
@@ -668,30 +867,52 @@ async def list_document_revisions(
     if not document:
         raise HTTPException(status_code=404, detail="Документ не найден")
 
+    # Получаем ревизии с комментариями из workflow history
+    # Берем комментарий где to_status_id соответствует текущему workflow_status_id ревизии
+    from sqlalchemy import and_
+    
+    # Сначала проверим все ревизии документа (включая удаленные)
+    all_revisions = db.query(DocumentRevision).filter(
+        DocumentRevision.document_id == document_id
+    ).order_by(DocumentRevision.created_at.desc()).all()
+    
+    print(f"🔍 [API] Все ревизии документа {document_id}:")
+    for rev in all_revisions:
+        print(f"  - ID: {rev.id}, is_deleted: {rev.is_deleted}, workflow_status_id: {rev.workflow_status_id}, created_at: {rev.created_at}")
+    
     versions = (
-        db.query(DocumentRevision)
+        db.query(DocumentRevision, DocumentWorkflowHistory.comments)
+        .outerjoin(DocumentWorkflowHistory, 
+                   and_(
+                       DocumentWorkflowHistory.revision_id == DocumentRevision.id,
+                       DocumentWorkflowHistory.to_status_id == DocumentRevision.workflow_status_id
+                   ))
         .filter(DocumentRevision.document_id == document_id)
         .filter(DocumentRevision.is_deleted == 0)  # Показываем только неудаленные ревизии
         .order_by(DocumentRevision.created_at.desc())
         .all()
     )
+    
+    print(f"📋 [API] Отфильтрованные ревизии (is_deleted == 0): {len(versions)}")
+    for v in versions:
+        print(f"  - ID: {v[0].id}, is_deleted: {v[0].is_deleted}, workflow_status_id: {v[0].workflow_status_id}")
     return [
         {
-            "id": v.id,
-            "document_id": v.document_id,
-            "number": v.number,  # Переименовано с revision на number
-            "file_name": v.file_name,
-            "file_size": v.file_size,
-            "file_type": v.file_type,
-            "change_description": v.change_description,
-            "uploaded_by": v.uploaded_by,
-            "is_deleted": v.is_deleted,
-            "created_at": v.created_at,
+            "id": v[0].id,
+            "document_id": v[0].document_id,
+            "number": v[0].number,  # Переименовано с revision на number
+            "file_name": v[0].file_name,
+            "file_size": v[0].file_size,
+            "file_type": v[0].file_type,
+            "change_description": v[1] if v[1] else "",  # Показываем только комментарий из workflow history, если его нет - пустая строка
+            "uploaded_by": v[0].uploaded_by,
+            "is_deleted": v[0].is_deleted,
+            "created_at": v[0].created_at,
             # Добавляем поля для связи со справочниками
-            "revision_status_id": v.revision_status_id,
-            "revision_description_id": v.revision_description_id,
-            "revision_step_id": v.revision_step_id,
-            "workflow_status_id": v.workflow_status_id,
+            "revision_status_id": v[0].revision_status_id,
+            "revision_description_id": v[0].revision_description_id,
+            "revision_step_id": v[0].revision_step_id,
+            "workflow_status_id": v[0].workflow_status_id,
         }
         for v in versions
     ]
@@ -739,24 +960,42 @@ async def create_document_revision(
         DocumentRevision.is_deleted == 0  # Только не удаленные ревизии
     ).order_by(DocumentRevision.created_at.desc()).first()
     
-    # Если есть отмененная ревизия с тем же номером, используем тот же номер
-    if latest_revision and cancelled_status:
-        # Проверяем, есть ли отмененная ревизия с тем же номером
-        cancelled_revision = db.query(DocumentRevision).filter(
-            DocumentRevision.document_id == document_id,
-            DocumentRevision.number == latest_revision.number,
-            DocumentRevision.revision_status_id == cancelled_status.id  # Отмененная ревизия
-        ).first()
-        
-        if cancelled_revision:
-            # Используем тот же номер, что и у отмененной ревизии
-            new_revision = latest_revision.number
+    # Определяем следующую редакцию
+    if latest_revision:
+        # Если есть отмененная ревизия с тем же номером, используем тот же номер
+        if cancelled_status:
+            cancelled_revision = db.query(DocumentRevision).filter(
+                DocumentRevision.document_id == document_id,
+                DocumentRevision.number == latest_revision.number,
+                DocumentRevision.revision_status_id == cancelled_status.id  # Отмененная ревизия
+            ).first()
+            
+            if cancelled_revision:
+                # Используем тот же номер, что и у отмененной ревизии
+                new_revision = latest_revision.number
+                new_revision_description_id = latest_revision.revision_description_id
+                new_revision_step_id = latest_revision.revision_step_id
+            else:
+                # Определяем следующую редакцию на основе статуса и последовательности
+                new_revision_description_id, new_revision_step_id, new_revision = _get_next_revision_from_sequence(
+                    document_id, 
+                    latest_revision.revision_description_id, 
+                    latest_revision.revision_step_id,
+                    db
+                )
         else:
-            # Генерируем новый номер
-            new_revision = _bump_revision_string(latest_revision.number)
+            # Определяем следующую редакцию на основе статуса и последовательности
+            new_revision_description_id, new_revision_step_id, new_revision = _get_next_revision_from_sequence(
+                document_id, 
+                latest_revision.revision_description_id, 
+                latest_revision.revision_step_id,
+                db
+            )
     else:
         # Если нет ревизий, начинаем с "01"
         new_revision = "01"
+        new_revision_description_id = None
+        new_revision_step_id = None
 
     # Получаем ID статусов из справочника
     from app.models.references import RevisionStatus
@@ -776,7 +1015,7 @@ async def create_document_revision(
         ).update({"revision_status_id": superseded_status.id})
 
     # Создаем запись ревизии с активным статусом
-    # Копируем revision_step_id и revision_description_id из предыдущей ревизии
+    # Создаем новую ревизию с определенными значениями редакции
     revision_row = DocumentRevision(
         document_id=document.id,
         number=new_revision,
@@ -787,13 +1026,28 @@ async def create_document_revision(
         change_description=change_description,
         uploaded_by=current_user.id,
         revision_status_id=active_status.id if active_status else None,
-        revision_step_id=latest_revision.revision_step_id if latest_revision else None,
-        revision_description_id=latest_revision.revision_description_id if latest_revision else None,
+        revision_step_id=new_revision_step_id,
+        revision_description_id=new_revision_description_id,
         workflow_status_id=draft_workflow_status.id if draft_workflow_status else None,
     )
     db.add(revision_row)
     db.commit()
     db.refresh(revision_row)
+    
+    # Создаем запись в document_workflow_history для новой ревизии
+    from app.models.document_workflow_history import DocumentWorkflowHistory
+    if draft_workflow_status:
+        workflow_history = DocumentWorkflowHistory(
+            revision_id=revision_row.id,
+            from_status_id=None,  # Новая ревизия, нет предыдущего статуса
+            to_status_id=draft_workflow_status.id,
+            user_id=current_user.id,
+            action_type="new_revision",
+            comments=change_description or "Новая ревизия документа"
+        )
+        db.add(workflow_history)
+        db.commit()
+    
     db.refresh(document)
 
     return {

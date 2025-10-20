@@ -224,6 +224,7 @@ export interface Document {
   revision: string;  // Номер ревизии (01, 02, 03)
   revision_description_id?: number;  // ID описания ревизии для получения кода (A, B, C, D)
   revision_status_id?: number;  // ID статуса ревизии вместо поля status
+  workflow_status_id?: number;  // ID workflow статуса последней ревизии
   is_deleted: number;
   project_id: number;
   language_id?: number;
@@ -725,9 +726,10 @@ export const projectsApi = {
 // API методы для документов
 export const documentsApi = {
   // Получить все документы
-  getAll: async (projectId?: number): Promise<Document[]> => {
+  getAll: async (projectId?: number, status?: string): Promise<Document[]> => {
     const params: any = {};
     if (projectId) params.project_id = projectId;
+    if (status) params.status = status;
     // Убираем лимит и офсет - загружаем все документы
     const response = await apiClient.get('/documents/', { params });
     return response.data;
@@ -766,6 +768,11 @@ export const documentsApi = {
     return response.data;
   },
 
+  // Создать документ с первой ревизией (алиас)
+  createDocumentWithRevision: async (formData: FormData, config?: { onUploadProgress?: (progressEvent: any) => void }): Promise<any> => {
+    return documentsApi.createWithRevision(formData, config);
+  },
+
   // Обновить документ
   update: async (id: number, documentData: Partial<Document>): Promise<Document> => {
     const response = await apiClient.put(`/documents/${id}`, documentData);
@@ -775,6 +782,14 @@ export const documentsApi = {
   // Удалить документ
   delete: async (id: number): Promise<void> => {
     await apiClient.delete(`/documents/${id}`);
+  },
+
+  // Выпустить ревизию документа (изменить статус с Draft на In Review)
+  releaseRevision: async (revisionId: number, comment?: string): Promise<{ message: string }> => {
+    const response = await apiClient.post(`/documents/revisions/${revisionId}/release`, {
+      comment: comment || ''
+    });
+    return response.data;
   },
 
   // Мягкое удаление документа
@@ -978,6 +993,28 @@ export const reviewsApi = {
   delete: async (id: number): Promise<void> => {
     await apiClient.delete(`/reviews/${id}`);
   },
+
+  // Получить документы, ожидающие утверждения
+  getPendingApprovals: async (skip: number = 0, limit: number = 100, projectId?: number): Promise<any[]> => {
+    const params: any = { skip, limit };
+    if (projectId) params.project_id = projectId;
+    const response = await apiClient.get('/reviews/pending-approvals', { params });
+    return response.data;
+  },
+
+  // Утвердить документ
+  approveDocument: async (documentId: number, comments?: string): Promise<{ message: string }> => {
+    const body = comments && comments.trim() ? { comments } : {};
+    const response = await apiClient.post(`/reviews/approve/${documentId}`, body);
+    return response.data;
+  },
+
+  // Отклонить документ
+  rejectDocument: async (documentId: number, comments?: string): Promise<{ message: string }> => {
+    const body = comments && comments.trim() ? { comments } : {};
+    const response = await apiClient.post(`/reviews/reject/${documentId}`, body);
+    return response.data;
+  }
 };
 
 // API методы для пользователей
@@ -1752,5 +1789,6 @@ export const documentCommentsApi = {
     return response.data;
   }
 };
+
 
 export default apiClient;

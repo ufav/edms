@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   Box,
   Table,
@@ -18,6 +18,7 @@ import {
   Compare as CompareIcon, 
   Cancel as CancelIcon,
   Delete as DeleteIcon,
+  CheckCircle as ReleaseIcon,
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import { observer } from 'mobx-react-lite';
@@ -25,6 +26,8 @@ import { documentRevisionStore } from '../../../stores/DocumentRevisionStore';
 import { referencesStore } from '../../../stores/ReferencesStore';
 import { getFileTypeInfo } from '../utils/fileTypeUtils';
 import RevisionsTableSkeleton from './RevisionsTableSkeleton';
+import ConfirmDialog from '../../ConfirmDialog';
+import DocumentReleaseModal from './DocumentReleaseModal';
 
 interface DocumentRevisionsTableProps {
   documentId: number | null;
@@ -41,6 +44,7 @@ interface DocumentRevisionsTableProps {
   formatDate: (dateString: string) => string;
   getRevisionStatusColor: (statusId: number | null) => string;
   canCancelRevision?: (revision: any) => boolean;
+  onRelease?: (revisionId: number, comment?: string) => void; // Выпустить ревизию
 }
 
 const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer(({
@@ -58,13 +62,114 @@ const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer((
   formatDate,
   getRevisionStatusColor,
   canCancelRevision,
+  onRelease,
 }) => {
   const { t, i18n } = useTranslation();
+  
+  // Состояние для диалога подтверждения выпуска
+  const [releaseConfirmDialog, setReleaseConfirmDialog] = useState({
+    isOpen: false,
+    revisionId: null as number | null,
+  });
+
+  // Состояние для модалки release с комментарием
+  const [releaseModal, setReleaseModal] = useState({
+    isOpen: false,
+    revisionId: null as number | null,
+  });
+
+  // Функция для определения цвета workflow статуса
+  const getWorkflowStatusColor = (statusId?: number): "default" | "primary" | "secondary" | "error" | "info" | "success" | "warning" => {
+    if (!statusId) return "default";
+    
+    const status = referencesStore.getWorkflowStatus(statusId);
+    if (!status) return "default";
+    
+    switch (status.name) {
+      case "Draft":
+        return "default"; // серый
+      case "In Review":
+        return "warning"; // оранжевый
+      case "Approved":
+        return "success"; // зеленый
+      case "Rejected":
+        return "error"; // красный
+      case "Approved with Comments":
+        return "success"; // зеленый
+      case "Not Reviewed":
+        return "info"; // синий
+      default:
+        return "default";
+    }
+  };
 
   // Загружаем workflow статусы при монтировании компонента
   useEffect(() => {
     referencesStore.loadWorkflowStatuses();
   }, []);
+
+  // Функция для определения, можно ли выпустить ревизию
+  const canReleaseRevision = (revision: any) => {
+    // Можно выпускать только активные ревизии (не удаленные)
+    if (revision.is_deleted === 1) {
+      return false;
+    }
+    
+    // Можно выпускать только ревизии в статусе Draft
+    const draftStatus = referencesStore.workflowStatuses.find(status => status.name === 'Draft');
+    if (!draftStatus || revision.workflow_status_id !== draftStatus.id) {
+      return false;
+    }
+    
+    // Можно выпускать только последнюю активную ревизию
+    const latestRevision = getLatestActiveRevision();
+    return latestRevision && latestRevision.id === revision.id;
+  };
+
+  // Функции для управления диалогом подтверждения
+  const handleOpenReleaseConfirm = (revisionId: number) => {
+    setReleaseConfirmDialog({
+      isOpen: true,
+      revisionId,
+    });
+  };
+
+  const handleCloseReleaseConfirm = () => {
+    setReleaseConfirmDialog({
+      isOpen: false,
+      revisionId: null,
+    });
+  };
+
+  const handleConfirmRelease = () => {
+    if (releaseConfirmDialog.revisionId && onRelease) {
+      onRelease(releaseConfirmDialog.revisionId);
+    }
+    handleCloseReleaseConfirm();
+  };
+
+  // Функции для управления модалкой release с комментарием
+  const handleOpenReleaseModal = (revisionId: number) => {
+    setReleaseModal({
+      isOpen: true,
+      revisionId,
+    });
+  };
+
+  const handleCloseReleaseModal = () => {
+    setReleaseModal({
+      isOpen: false,
+      revisionId: null,
+    });
+  };
+
+  const handleReleaseWithComment = (comment: string) => {
+    if (releaseModal.revisionId && onRelease) {
+      // Передаем revisionId и comment в onRelease
+      onRelease(releaseModal.revisionId, comment);
+    }
+    handleCloseReleaseModal();
+  };
 
   const hasRevisions = !isCreating && documentId && documentRevisionStore.getRevisions(documentId || 0).length > 0;
   const hasFile = isCreating && fileMetadata;
@@ -167,7 +272,7 @@ const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer((
                     <Chip 
                       label="Draft" 
                       size="small"
-                      color="default"
+                      color={getWorkflowStatusColor(1) as any}
                     />
                   </TableCell>
                   <TableCell>
@@ -270,7 +375,7 @@ const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer((
                       <Chip 
                         label={referencesStore.getWorkflowStatusLabel(revision.workflow_status_id, i18n.language)} 
                         size="small"
-                        color="default"
+                        color={getWorkflowStatusColor(revision.workflow_status_id) as any}
                       />
                     </TableCell>
                     <TableCell>
@@ -317,6 +422,15 @@ const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer((
                         >
                           <CompareIcon />
                         </IconButton>
+                        {canReleaseRevision(revision) && onRelease && (
+                          <IconButton 
+                            size="small" 
+                            title={t('documents.release')}
+                            onClick={() => handleOpenReleaseModal(revision.id)}
+                          >
+                            <ReleaseIcon />
+                          </IconButton>
+                        )}
                         {revision.revision_status_id === 1 && 
                          revision.id === getLatestActiveRevision()?.id && 
                          canCancelRevision?.(revision) && (
@@ -367,6 +481,13 @@ const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer((
           </Box>
         </TableContainer>
       )}
+
+      {/* Модалка release с комментарием */}
+      <DocumentReleaseModal
+        open={releaseModal.isOpen}
+        onClose={handleCloseReleaseModal}
+        onRelease={handleReleaseWithComment}
+      />
     </Box>
   );
 });

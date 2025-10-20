@@ -121,6 +121,13 @@ const WorkflowTab: React.FC<WorkflowTabProps> = ({
                               size="small"
                             />
                           )}
+                          {seq.requires_transmittal && (
+                            <Chip
+                              label={t('createProject.labels.requires_transmittal')}
+                              color="warning"
+                              size="small"
+                            />
+                          )}
                         </Box>
                       ))}
                     </Box>

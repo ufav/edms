@@ -43,6 +43,7 @@ import { DocumentSettingsDialog } from './document/components/DocumentSettingsDi
 import { DocumentWorkflowDialog } from './document/components/DocumentWorkflowDialog';
 import { TransmittalCartModal, useActiveRevisions } from './transmittal';
 import { transmittalCartStore } from '../stores/TransmittalCartStore';
+import { activeRevisionsStore } from '../stores/ActiveRevisionsStore';
 
 const DocumentsPage: React.FC = observer(() => {
   const { t, i18n } = useTranslation();
@@ -72,8 +73,16 @@ const DocumentsPage: React.FC = observer(() => {
   
   // Активные ревизии автоматически загружаются в useActiveRevisions хуке
   
+  // Принудительная загрузка активных ревизий при монтировании
+  useEffect(() => {
+    if (projectStore.selectedProject?.id) {
+      refreshActiveRevisions();
+    }
+  }, [projectStore.selectedProject?.id, refreshActiveRevisions]);
+  
   // Обновляем showSelectColumn при изменении роли пользователя
   useEffect(() => {
+    console.log(`👤 Роль пользователя:`, { isViewer, showSelectColumn: !isViewer });
     setShowSelectColumn(!isViewer);
   }, [isViewer]);
 
@@ -177,7 +186,7 @@ const DocumentsPage: React.FC = observer(() => {
     successNotification,
     setIsCreatingDocument,
     setSelectedDocument,
-    handleUpload,
+    setSuccessNotification,
     handleCreateDocument,
     handleSaveDocument,
     handleShowDocumentDetails,
@@ -213,6 +222,35 @@ const DocumentsPage: React.FC = observer(() => {
       await refreshDocuments();
     } catch (error) {
       throw error;
+    }
+  };
+
+  // Обработчик выпуска ревизии документа
+  const handleReleaseDocument = async (revisionId: number, comment?: string) => {
+    try {
+      await documentsApi.releaseRevision(revisionId, comment);
+      
+      // Обновляем данные документов
+      await refreshDocuments();
+      
+      // Обновляем данные ревизий для текущего документа
+      if (selectedDocumentId) {
+        await documentRevisionStore.reloadRevisions(selectedDocumentId);
+      }
+      
+      // Обновляем активные ревизии для трансмитталов
+      refreshActiveRevisions();
+      
+      setSuccessNotification({
+        open: true,
+        message: t('documents.release_success')
+      });
+    } catch (error) {
+      console.error('Error releasing revision:', error);
+      setSuccessNotification({
+        open: true,
+        message: t('documents.release_error')
+      });
     }
   };
   
@@ -290,7 +328,8 @@ const DocumentsPage: React.FC = observer(() => {
               variant="contained"
               startIcon={<AddIcon />}
               onClick={() => {
-                handleUpload();
+                setIsCreatingDocument(true);
+                setSelectedDocument(null);
                 handleOpenDocumentDetails();
               }}
               sx={{ backgroundColor: '#1976d2', flex: isMobile ? 1 : 'none' }}
@@ -417,6 +456,7 @@ const DocumentsPage: React.FC = observer(() => {
                 showSelectColumn={showSelectColumn}
                 selectedDocuments={selectedDocuments}
                 onDocumentSelect={handleDocumentSelect}
+                activeRevisions={activeRevisions || []}
                 formatFileSize={formatFileSize}
                 formatDate={formatDate}
                 language={i18n.language}
@@ -494,7 +534,7 @@ const DocumentsPage: React.FC = observer(() => {
         <DocumentSettingsDialog
           open={settingsOpen}
           visibleCols={visibleCols}
-          columnOrder={columnOrder}
+          columnOrder={columnOrder as any}
           onClose={handleSettingsClose}
           onColumnVisibilityChange={handleColumnVisibilityChange}
           onColumnOrderChange={handleColumnOrderChange}
@@ -528,6 +568,7 @@ const DocumentsPage: React.FC = observer(() => {
           onCreateDocument={handleCreateDocument}
           onSaveDocument={handleSaveDocument}
           onOpenComments={handleOpenComments}
+          onRelease={handleReleaseDocument}
         />
 
         <DocumentRevisionDialog

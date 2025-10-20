@@ -42,7 +42,7 @@ import {
   useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { TransmittalImportSettings } from './TransmittalImportSettings';
+import { TransmittalImportSettings, type TransmittalImportSettingsHandle } from './TransmittalImportSettings';
 
 export interface TransmittalColumnVisibility {
   number: boolean;
@@ -187,6 +187,7 @@ export const TransmittalSettingsDialog: React.FC<TransmittalSettingsDialogProps>
 }) => {
   const { t } = useTranslation();
   const [tabValue, setTabValue] = React.useState(0);
+  const importSettingsRef = React.useRef<TransmittalImportSettingsHandle | null>(null);
 
   const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
@@ -352,12 +353,22 @@ export const TransmittalSettingsDialog: React.FC<TransmittalSettingsDialogProps>
 
         {/* Вкладка 2: Настройки импорта трансмитталов */}
         <TabPanel value={tabValue} index={1}>
-          <TransmittalImportSettings onClose={onClose} />
+          <TransmittalImportSettings ref={importSettingsRef} onClose={onClose} />
         </TabPanel>
       </DialogContent>
 
-      <DialogActions>
-        <Button onClick={onClose}>{t('common.cancel')}</Button>
+      <DialogActions sx={{ px: 3, py: 2 }}>
+        <Box sx={{ display: 'flex', width: '100%', justifyContent: 'flex-end', gap: 1.5 }}>
+          <Button
+            variant="contained"
+            onClick={() => importSettingsRef.current?.save()}
+          >
+            {t('common.save')}
+          </Button>
+          <Button onClick={onClose}>
+            {t('common.close')}
+          </Button>
+        </Box>
       </DialogActions>
     </Dialog>
   );

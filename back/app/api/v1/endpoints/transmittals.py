@@ -397,51 +397,64 @@ async def get_active_revisions(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """Получение активных ревизий документов для выбора в трансмиттал"""
+    """Получение ревизий документов со статусом 'Draft' и requires_transmittal = true для выбора в трансмиттал"""
     from sqlalchemy import func, and_
-    from app.models.references import RevisionDescription
+    from app.models.references import RevisionDescription, WorkflowStatus
+    from app.models.transmittal import TransmittalRevision
     
-    # Получаем статус "Active" (используем name вместо code)
-    active_status = db.query(RevisionStatus).filter(
-        RevisionStatus.name == "Active"
+    # Получаем статус "Draft" из workflow_statuses
+    draft_status = db.query(WorkflowStatus).filter(
+        WorkflowStatus.name == "Draft"
     ).first()
     
-    if not active_status:
-        # Если нет статуса "active", используем первый доступный статус
-        active_status = db.query(RevisionStatus).first()
-    
-    if not active_status:
+    if not draft_status:
         return []
     
-    # Создаем подзапрос для получения последней ревизии каждого документа со статусом "active"
-    latest_revision_subquery = db.query(
+    # Получаем ID ревизий, которые уже находятся в трансмитталах
+    used_revision_ids = db.query(TransmittalRevision.revision_id).subquery()
+    
+    # Основной запрос для получения последних активных ревизий со статусом "Draft" и requires_transmittal = true
+    from app.models.project import WorkflowPresetSequence, Project
+    from sqlalchemy import func
+    
+    # Сначала находим последние ревизии для каждого документа
+    latest_revisions_subquery = db.query(
         DocumentRevision.document_id,
-        func.max(DocumentRevision.created_at).label('max_created_at')
+        func.max(DocumentRevision.id).label('latest_revision_id')
     ).filter(
-        DocumentRevision.revision_status_id == active_status.id,
         DocumentRevision.is_deleted == 0
     ).group_by(DocumentRevision.document_id).subquery()
     
-    # Основной запрос с JOIN'ами для получения всех данных за один раз
+    # Основной запрос для получения последних ревизий со статусом "Draft" и requires_transmittal = true
     query = db.query(
         DocumentRevision,
         Document,
-        RevisionDescription
+        RevisionDescription,
+        WorkflowPresetSequence
     ).join(
-        latest_revision_subquery,
-        and_(
-            DocumentRevision.document_id == latest_revision_subquery.c.document_id,
-            DocumentRevision.created_at == latest_revision_subquery.c.max_created_at
-        )
+        latest_revisions_subquery,
+        DocumentRevision.id == latest_revisions_subquery.c.latest_revision_id
     ).join(
         Document,
         Document.id == DocumentRevision.document_id
+    ).join(
+        Project,
+        Project.id == Document.project_id
     ).outerjoin(
         RevisionDescription,
         RevisionDescription.id == DocumentRevision.revision_description_id
+    ).join(
+        WorkflowPresetSequence,
+        and_(
+            WorkflowPresetSequence.preset_id == Project.workflow_preset_id,
+            WorkflowPresetSequence.revision_description_id == DocumentRevision.revision_description_id,
+            WorkflowPresetSequence.revision_step_id == DocumentRevision.revision_step_id
+        )
     ).filter(
-        DocumentRevision.revision_status_id == active_status.id,
-        DocumentRevision.is_deleted == 0
+        DocumentRevision.workflow_status_id == draft_status.id,
+        DocumentRevision.is_deleted == 0,
+        WorkflowPresetSequence.requires_transmittal == True,  # Только те, которые требуют трансмиттал
+        ~DocumentRevision.id.in_(used_revision_ids)  # Исключаем ревизии, уже используемые в трансмитталах
     )
     
     if project_id:
@@ -452,8 +465,8 @@ async def get_active_revisions(
     
     # Формируем результат
     revisions_data = []
-    for revision, document, revision_description in results:
-        revisions_data.append({
+    for revision, document, revision_description, workflow_sequence in results:
+        revision_data = {
             "id": revision.id,
             "document_id": document.id,
             "document_title": document.title,
@@ -465,7 +478,8 @@ async def get_active_revisions(
             "file_size": revision.file_size,
             "created_at": revision.created_at,
             "project_id": document.project_id
-        })
+        }
+        revisions_data.append(revision_data)
     
     return revisions_data
 
@@ -499,6 +513,29 @@ async def send_transmittal(
     transmittal.direction = "out"
     transmittal.transmittal_date = datetime.utcnow()
     transmittal.sender_id = current_user.id  # Кто отправил
+    
+    # Обновляем workflow статусы ревизий документов в трансмиттале
+    from app.models.document import DocumentRevision
+    from app.models.references import WorkflowStatus
+    
+    # Получаем статус "In Review"
+    in_review_status = db.query(WorkflowStatus).filter(WorkflowStatus.name == "In Review").first()
+    if not in_review_status:
+        raise HTTPException(status_code=500, detail="Статус 'In Review' не найден")
+    
+    # Получаем все ревизии документов в этом трансмиттале
+    from app.models.transmittal import TransmittalRevision
+    transmittal_revisions = db.query(TransmittalRevision).filter(
+        TransmittalRevision.transmittal_id == transmittal_id
+    ).all()
+    
+    # Обновляем workflow_status_id для каждой ревизии
+    for transmittal_revision in transmittal_revisions:
+        revision = db.query(DocumentRevision).filter(
+            DocumentRevision.id == transmittal_revision.revision_id
+        ).first()
+        if revision:
+            revision.workflow_status_id = in_review_status.id
     
     db.commit()
     db.refresh(transmittal)

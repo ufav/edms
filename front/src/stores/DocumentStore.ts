@@ -19,7 +19,7 @@ class DocumentStore {
   }
 
   // Загрузка документов из API
-  async loadDocuments(projectId?: number, forceReload = false) {
+  async loadDocuments(projectId?: number, forceReload = false, status?: string) {
     // Если это тот же проект и документы уже загружены - не загружаем повторно (если не принудительная перезагрузка)
     if (projectId && this.currentProjectId === projectId && this.documents.length > 0 && !forceReload) {
       return;
@@ -39,7 +39,7 @@ class DocumentStore {
     });
     
     try {
-      const apiDocuments = await documentsApi.getAll(projectId);
+      const apiDocuments = await documentsApi.getAll(projectId, status);
       
         runInAction(() => {
           this.documents = apiDocuments.map(apiDoc => {
@@ -56,6 +56,7 @@ class DocumentStore {
             revision: apiDoc.revision,
             revision_description_id: apiDoc.revision_description_id,
             revision_status_id: apiDoc.revision_status_id,
+            workflow_status_id: apiDoc.workflow_status_id,
             is_deleted: apiDoc.is_deleted ?? 0,
             drs: apiDoc.drs,
             project_id: apiDoc.project_id,
@@ -162,6 +163,21 @@ class DocumentStore {
       // Обновляем данные документа
       Object.assign(this.documents[documentIndex], updateData);
     }
+  }
+
+  // Получение workflow статуса по ID
+  getWorkflowStatusById(statusId: number): any {
+    // Этот метод должен использовать ReferencesStore для получения статуса
+    // Пока возвращаем заглушку
+    const statusMap: { [key: number]: string } = {
+      1: 'Draft',
+      2: 'In Review', 
+      3: 'Approved',
+      4: 'Rejected',
+      5: 'Approved with Comments',
+      6: 'Not Reviewed'
+    };
+    return { name: statusMap[statusId] || 'Unknown' };
   }
 }
 

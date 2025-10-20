@@ -48,6 +48,7 @@ export interface ColumnVisibility {
   size: boolean;
   revision: boolean;
   status: boolean;
+  review_status: boolean;
   language: boolean;
   drs: boolean;
   date: boolean;
@@ -101,6 +102,7 @@ const SortableColumnItem: React.FC<SortableColumnItemProps> = ({
       case 'size': return t('documents.columns.size');
       case 'revision': return t('documents.columns.revision');
       case 'status': return t('documents.columns.status');
+      case 'review_status': return t('documents.columns.review_status');
       case 'language': return t('documents.columns.language');
       case 'drs': return 'DRS';
       case 'date': return t('documents.columns.created_at');

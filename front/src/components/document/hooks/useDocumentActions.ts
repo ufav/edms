@@ -92,6 +92,11 @@ export const useDocumentActions = ({ t, onCloseDialog, onRefreshActiveRevisions 
         formData.append('revision_step_id', documentData.revisionStep.id.toString());
       }
       
+      // Добавляем комментарий загрузки
+      if (documentData.uploadComment) {
+        formData.append('change_description', documentData.uploadComment);
+      }
+      
       // Отправляем запрос с отслеживанием прогресса
       await (documentsApi.createWithRevision as any)(formData, {
         onUploadProgress: (progressEvent: any) => {

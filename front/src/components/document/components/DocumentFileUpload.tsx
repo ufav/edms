@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import {
   Box,
   Button,
@@ -6,12 +6,14 @@ import {
 } from '@mui/material';
 import { UploadFile as UploadFileIcon } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
+import DocumentFileUploadModal from './DocumentFileUploadModal';
 
 interface DocumentFileUploadProps {
   fileInputRef: React.RefObject<HTMLInputElement | null>;
   handleFileUpload: (event: React.ChangeEvent<HTMLInputElement>) => void;
   fileMetadata: {name: string, size: number, type: string} | null;
   validationErrors: {[key: string]: boolean};
+  onFileUploadWithComment?: (file: File, comment: string) => void;
 }
 
 const DocumentFileUpload: React.FC<DocumentFileUploadProps> = ({
@@ -19,8 +21,26 @@ const DocumentFileUpload: React.FC<DocumentFileUploadProps> = ({
   handleFileUpload,
   fileMetadata,
   validationErrors,
+  onFileUploadWithComment,
 }) => {
   const { t } = useTranslation();
+  const [uploadModalOpen, setUploadModalOpen] = useState(false);
+
+  const handleUploadWithComment = (file: File, comment: string) => {
+    // Создаем событие для совместимости с существующей логикой
+    const mockEvent = {
+      target: {
+        files: [file]
+      }
+    } as React.ChangeEvent<HTMLInputElement>;
+    
+    handleFileUpload(mockEvent);
+    
+    // Вызываем callback с комментарием
+    onFileUploadWithComment?.(file, comment);
+    
+    setUploadModalOpen(false);
+  };
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
@@ -38,7 +58,7 @@ const DocumentFileUpload: React.FC<DocumentFileUploadProps> = ({
           variant="contained"
           startIcon={<UploadFileIcon />}
           onClick={() => {
-            fileInputRef.current?.click();
+            setUploadModalOpen(true);
           }}
           disabled={!!fileMetadata}
           color={validationErrors.file ? 'error' : 'primary'}
@@ -51,6 +71,12 @@ const DocumentFileUpload: React.FC<DocumentFileUploadProps> = ({
           {t('document.file_required')}
         </Typography>
       )}
+      
+      <DocumentFileUploadModal
+        open={uploadModalOpen}
+        onClose={() => setUploadModalOpen(false)}
+        onUpload={handleUploadWithComment}
+      />
     </Box>
   );
 };

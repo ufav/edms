@@ -8,7 +8,7 @@ import Dashboard from './components/Dashboard';
 import ProjectsPage from './components/ProjectsPage';
 import DocumentsPage from './components/DocumentsPage';
 import TransmittalsPage from './components/TransmittalsPage';
-import ReviewsPage from './components/ReviewsPage';
+import ReviewsPage from './components/review/ReviewsPage';
 import UsersPage from './components/UsersPage';
 import WorkflowPresetsPage from './pages/WorkflowPresetsPage';
 import AdminRoutes from './pages/admin/AdminRoutes';

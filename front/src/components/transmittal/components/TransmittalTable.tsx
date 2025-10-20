@@ -127,7 +127,7 @@ export const TransmittalTable: React.FC<TransmittalTableProps> = ({
       height: '100%',
       minHeight: 0,
       marginBottom: 0,
-      paddingBottom: 0
+      paddingBottom: 0,
     }}>
       {/* Заголовок таблицы - зафиксирован */}
       <Box sx={{ 

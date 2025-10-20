@@ -90,7 +90,8 @@ const WorkflowPresetsPage: React.FC = observer(() => {
     revision_description_id: null as number | null,
     revision_step_id: null as number | null,
     is_final: false,
-    requires_transmittal: false
+    requires_transmittal: false,
+    due_days: null as number | null
   });
   const [newRule, setNewRule] = useState({
     current_revision_description_id: null as number | null,
@@ -127,7 +128,8 @@ const WorkflowPresetsPage: React.FC = observer(() => {
       revision_description_id: null,
       revision_step_id: null,
       is_final: false,
-      requires_transmittal: false
+      requires_transmittal: false,
+      due_days: null
     });
     setNewRule({
       current_revision_description_id: null,
@@ -215,7 +217,8 @@ const WorkflowPresetsPage: React.FC = observer(() => {
       revision_description_id: null,
       revision_step_id: null,
       is_final: false,
-      requires_transmittal: false
+      requires_transmittal: false,
+      due_days: null
     });
     setNewRule({
       current_revision_description_id: null,
@@ -244,7 +247,8 @@ const WorkflowPresetsPage: React.FC = observer(() => {
           revision_description_id: seq.revision_description_id,
           revision_step_id: seq.revision_step_id,
           is_final: seq.is_final,
-          requires_transmittal: seq.requires_transmittal
+          requires_transmittal: seq.requires_transmittal,
+          due_days: seq.due_days
         })),
         rules: workflowRules.map(rule => ({
           current_revision_description_id: rule.current_revision_description_id,
@@ -282,7 +286,8 @@ const WorkflowPresetsPage: React.FC = observer(() => {
           revision_description_id: seq.revision_description_id,
           revision_step_id: seq.revision_step_id,
           is_final: seq.is_final,
-          requires_transmittal: seq.requires_transmittal
+          requires_transmittal: seq.requires_transmittal,
+          due_days: seq.due_days
         })),
         rules: workflowRules.map(rule => ({
           current_revision_description_id: rule.current_revision_description_id,
@@ -331,6 +336,7 @@ const WorkflowPresetsPage: React.FC = observer(() => {
       revision_step_id: newSequence.revision_step_id,
       is_final: newSequence.is_final,
       requires_transmittal: newSequence.requires_transmittal,
+      due_days: newSequence.due_days,
       revision_description: workflowStore.revisionDescriptions.find(rd => rd.id === newSequence.revision_description_id),
       revision_step: workflowStore.revisionSteps.find(rs => rs.id === newSequence.revision_step_id)
     };
@@ -340,7 +346,8 @@ const WorkflowPresetsPage: React.FC = observer(() => {
       revision_description_id: null,
       revision_step_id: null,
       is_final: false,
-      requires_transmittal: false
+      requires_transmittal: false,
+      due_days: null
     });
   };
 
@@ -862,6 +869,19 @@ const WorkflowPresetsPage: React.FC = observer(() => {
                       </Select>
                     </FormControl>
                     
+                    <TextField
+                      size="small"
+                      variant="standard"
+                      sx={{ width: '10%' }}
+                      type="text"
+                      label={t('workflows.fields.due_days')}
+                      value={newSequence.due_days || ''}
+                      onChange={(e) => setNewSequence(prev => ({
+                        ...prev,
+                        due_days: e.target.value ? parseInt(e.target.value) : null
+                      }))}
+                    />
+                    
                     <FormControlLabel
                       control={
                         <Checkbox
@@ -932,6 +952,13 @@ const WorkflowPresetsPage: React.FC = observer(() => {
                                 <Chip 
                                   label={t('workflows.fields.requires_transmittal')} 
                                   color="warning" 
+                                  size="small" 
+                                />
+                              )}
+                              {seq.due_days && (
+                                <Chip 
+                                  label={`${seq.due_days} ${t('workflows.fields.days')}`} 
+                                  color="info" 
                                   size="small" 
                                 />
                               )}
@@ -1254,6 +1281,13 @@ const WorkflowPresetsPage: React.FC = observer(() => {
                         <Chip 
                           label={t('workflows.fields.requires_transmittal')} 
                           color="warning" 
+                          size="small" 
+                        />
+                      )}
+                      {seq.due_days && (
+                        <Chip 
+                          label={`${seq.due_days} ${t('workflows.fields.days')}`} 
+                          color="info" 
                           size="small" 
                         />
                       )}

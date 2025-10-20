@@ -584,9 +584,9 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
 
           {/* Поле для добавления документов */}
           {(!readOnly || isEditing) && (
-            <Box sx={{ mb: 2 }}>
+            <Box sx={{ mb: 2, width: { xs: '100%', sm: '50%' } }}>
               <Autocomplete
-                options={availableRevisions}
+                options={availableRevisions.filter((rev) => !selectedRevisionsFromStore.some(sel => sel.id === rev.id))}
                 getOptionLabel={(option) => option.document_number || option.document_title}
                 isOptionEqualToValue={(option, value) => option.id === value?.id}
                 filterOptions={(options, { inputValue }) => {

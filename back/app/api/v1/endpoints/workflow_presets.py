@@ -43,7 +43,8 @@ def load_preset_data(preset_id: int, db: Session):
                 "description_native": rev_step.description_native
             } if rev_step else None,
             "is_final": seq.is_final,
-            "requires_transmittal": seq.requires_transmittal
+            "requires_transmittal": seq.requires_transmittal,
+            "due_days": seq.due_days
         })
     
     # Загружаем правила
@@ -251,7 +252,8 @@ async def create_workflow_preset(
             revision_description_id=sequence_item['revision_description_id'],
             revision_step_id=sequence_item['revision_step_id'],
             is_final=sequence_item.get('is_final', False),
-            requires_transmittal=sequence_item.get('requires_transmittal', False)
+            requires_transmittal=sequence_item.get('requires_transmittal', False),
+            due_days=sequence_item.get('due_days')
         )
         db.add(sequence)
     
@@ -328,7 +330,8 @@ async def update_workflow_preset(
                 revision_description_id=sequence_item['revision_description_id'],
                 revision_step_id=sequence_item['revision_step_id'],
                 is_final=sequence_item.get('is_final', False),
-                requires_transmittal=sequence_item.get('requires_transmittal', False)
+                requires_transmittal=sequence_item.get('requires_transmittal', False),
+                due_days=sequence_item.get('due_days')
             )
             db.add(sequence)
     

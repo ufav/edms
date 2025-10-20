@@ -339,7 +339,7 @@ const TransmittalsPage: React.FC = observer(() => {
           alignItems: isMobile ? 'flex-start' : 'center', 
           mb: 3,
           flexDirection: isMobile ? 'column' : 'row',
-          gap: isMobile ? 2 : 0
+          gap: isMobile ? 2 : 0,
         }}>
           <Typography variant={isMobile ? "h5" : "h4"} component="h1">
             {t('menu.transmittals')} {projectStore.selectedProject && `- ${projectStore.selectedProject.name}`}
@@ -376,7 +376,10 @@ const TransmittalsPage: React.FC = observer(() => {
         />
 
         {/* Контейнер таблицы */}
-        <Box sx={{ flex: 1, minHeight: 0 }}>
+        <Box sx={{ 
+          flex: 1, 
+          minHeight: 0,
+        }}>
           <TransmittalTable
             transmittals={displayedTransmittals}
             totalCount={filteredTransmittals.length}
