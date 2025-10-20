@@ -82,7 +82,7 @@ const DocumentsPage: React.FC = observer(() => {
   
   // Обновляем showSelectColumn при изменении роли пользователя
   useEffect(() => {
-    console.log(`👤 Роль пользователя:`, { isViewer, showSelectColumn: !isViewer });
+    
     setShowSelectColumn(!isViewer);
   }, [isViewer]);
 

@@ -1,6 +1,8 @@
 import psycopg2
 
-DSN = 'postgresql://postgres:123@localhost:5432/edms'
+import os
+
+DSN = os.getenv('DATABASE_URL', os.getenv('ALEMBIC_DB_URL', 'postgresql://postgres:123@localhost:5432/edms'))
 
 def main() -> None:
     conn = psycopg2.connect(DSN)

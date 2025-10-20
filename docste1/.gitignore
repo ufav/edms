@@ -1,0 +1,32 @@
+# Ignoring node_modules for React frontend
+/frontend/node_modules/
+
+# Ignoring build directory for React frontend
+/frontend/build/
+/frontend/dist/
+
+# Ignoring environment files for frontend
+/frontend/.env
+/frontend/.gitignore
+
+# Ignoring Python virtual environment for FastAPI backend
+/backend/venv/
+/backend/.env
+
+# Ignoring __pycache__ directories for FastAPI backend
+/backend/__pycache__/
+/backend/*.pyc
+
+# Ignoring log files
+*.log
+.env
+.env.prod
+.benv.dev
+.benv.prod
+.fenv.prod
+schema_only.sql
+
+# Ignoring OS generated files
+.DS_Store
+Thumbs.db
+"backend/file_storage/X-000-057-16/Folder/Jesse Pinkman/client_secret_222917403005-2ql7b4us7b65au30rfr02da1jcrfs1si.apps.googleusercontent.com.json" 

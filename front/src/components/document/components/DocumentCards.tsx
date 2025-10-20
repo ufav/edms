@@ -263,7 +263,7 @@ export const DocumentCards: React.FC<DocumentCardsProps> = observer(({
             rowsPerPage={rowsPerPage}
             fixedBottom={false}
             align="right"
-            leftInfo={`${t('common.total_documents', { count: totalCount }).replace('{count}', totalCount.toLocaleString(t.i18n.language === 'ru' ? 'ru-RU' : 'en-US'))}`}
+            leftInfo={`${t('common.total_documents', { count: totalCount }).replace('{count}', totalCount.toLocaleString(language === 'ru' ? 'ru-RU' : 'en-US'))}`}
           />
         </Box>
       )}

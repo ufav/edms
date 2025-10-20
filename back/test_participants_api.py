@@ -7,7 +7,9 @@ import requests
 import json
 
 # Базовый URL API
-BASE_URL = "http://localhost:8000/api/v1"
+import os
+
+BASE_URL = os.getenv('BASE_URL', os.getenv('API_BASE_URL', "http://localhost:8000/api/v1"))
 
 def test_participants_api():
     # Получаем список компаний

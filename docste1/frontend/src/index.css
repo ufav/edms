@@ -1,0 +1,125 @@
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+
+:root {
+  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+}
+.hover-cursor:hover {
+  cursor: pointer; /* Изменение курсора на руку при наведении */
+}
+
+/* Применяем стили для неактивного Input */
+.custom-disabled-input {
+  background-color: #9c7979; /* Задаем фоновый цвет для неактивного состояния */
+  cursor: text; /* Устанавливаем стандартный курсор для текста */
+}
+
+.no-wrap td {
+  white-space: nowrap; /* Отключаем автоперенос строк */
+  overflow: hidden;    /* Обрезаем содержимое */
+  text-overflow: ellipsis; /* Добавляем многоточие для обрезанного текста */
+}
+
+.optionContainer {
+  display: grid;
+  grid-template-columns: auto auto; /* Два столбца с автоматической шириной */
+  grid-column-gap: 10px; /* Горизонтальный отступ между столбцами */
+}
+
+.optionCode {
+  margin-left: 10px;
+  color: gray;
+}
+
+.optionName {
+  margin-left: 10px;
+  text-align: left;
+}
+
+.custom-table-row {
+  height: 24px !important; /* Задайте нужную высоту строки */
+}
+
+.custom-table-cell {
+  padding: 4px 8px !important; /* Настройте отступы для ячеек */
+}
+
+.cell-ellipsis {
+  display: inline-block;
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: top;
+}
+
+.ant-table-pagination {
+  position: sticky;
+  bottom: 0;
+  background: #fff;
+  z-index: 1;
+}
+
+.login-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 100vh; /* Занимает всю высоту экрана */
+  background-color: #f0f2f5; /* Светлый фон */
+}
+
+.login-form {
+  background-color: white; /* Белый фон формы */
+  padding: 24px; /* Внутренние отступы */
+  border-radius: 8px; /* Округленные углы */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); /* Тень для придания глубины */
+  max-width: 400px; /* Максимальная ширина формы */
+  width: 100%; /* Ширина формы 100% от родителя */
+}
+
+.hidden-column {
+  display: none;
+}
+
+/* Кастомизация полосы прокрутки для Webkit-браузеров */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px; /* Ширина полосы прокрутки */
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #001529; /* Тёмно-синий фон, как у Sider */
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.65); /* Цвет бегунка, как у шрифта */
+  border-radius: 4px; /* Закругление углов бегунка */
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.85); /* Цвет бегунка при наведении (чуть ярче) */
+}
+
+/* Стили для стрелок (если они видны) */
+.custom-scrollbar::-webkit-scrollbar-button {
+  background: rgba(255, 255, 255, 0.65); /* Цвет стрелок, как у шрифта */
+}
+
+.fixed-height-modal .ant-modal {
+  height: 90vh !important; /* Фиксируем высоту модального окна на 90% viewport */
+  top: 5vh !important; /* Отступ сверху 5% */
+  margin: 0 !important; /* Убираем лишние отступы */
+}
+
+.fixed-height-modal .ant-modal-content {
+  height: 100% !important; /* Контент занимает всю высоту модального окна */
+  display: flex;
+  flex-direction: column;
+}
+
+.fixed-height-modal .ant-modal-body {
+  flex: 1; /* Тело модального окна растягивается, чтобы заполнить доступное пространство */
+  overflow-y: auto; /* Прокрутка по вертикали, если контент превышает высоту */
+}

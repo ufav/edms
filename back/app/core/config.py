@@ -10,35 +10,33 @@ class Settings(BaseSettings):
     # Application
     APP_NAME: str = "EDMS"
     APP_VERSION: str = "1.0.0"
-    DEBUG: bool = True
+    DEBUG: bool = bool(int(os.getenv('DEBUG', '1')))
     API_V1_STR: str = "/api/v1"
     
     # Database
-    DATABASE_URL: str = "postgresql://postgres:123@localhost:5432/edms"
-    DB_HOST: str = "localhost"
-    DB_PORT: int = 5432
-    DB_NAME: str = "edms"
-    DB_USER: str = "postgres"
-    DB_PASSWORD: str = "123"
+    DATABASE_URL: str
+    DB_HOST: str
+    DB_PORT: int
+    DB_NAME: str
+    DB_USER: str
+    DB_PASSWORD: str
     
     # Security
-    SECRET_KEY: str = "your-secret-key-change-in-production"
-    ALGORITHM: str = "HS256"
-    ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-    REFRESH_TOKEN_EXPIRE_DAYS: int = 14
+    SECRET_KEY: str
+    ALGORITHM: str = os.getenv('ALGORITHM', "HS256")
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = int(os.getenv('ACCESS_TOKEN_EXPIRE_MINUTES', '30'))
+    REFRESH_TOKEN_EXPIRE_DAYS: int = int(os.getenv('REFRESH_TOKEN_EXPIRE_DAYS', '14'))
     
     # File Upload
-    UPLOAD_DIR: str = "uploads"
-    MAX_FILE_SIZE: int = 52428800  # 50MB
-    ALLOWED_FILE_TYPES: str = "pdf,doc,docx,xls,xlsx,ppt,pptx,txt,jpg,jpeg,png,gif"
+    UPLOAD_DIR: str = os.getenv('UPLOAD_DIR', "uploads")
+    MAX_FILE_SIZE: int = int(os.getenv('MAX_FILE_SIZE', str(50 * 1024 * 1024)))  # 50MB
+    ALLOWED_FILE_TYPES: str = os.getenv('ALLOWED_FILE_TYPES', "pdf,doc,docx,xls,xlsx,ppt,pptx,txt,jpg,jpeg,png,gif")
     
     # CORS
-    BACKEND_CORS_ORIGINS: List[str] = [
-        "http://localhost:3000",
-        "http://localhost:5173",
-        "http://127.0.0.1:3000",
-        "http://127.0.0.1:5173"
-    ]
+    BACKEND_CORS_ORIGINS: List[str] = [origin.strip() for origin in os.getenv(
+        'BACKEND_CORS_ORIGINS',
+        'http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173'
+    ).split(',') if origin.strip()]
     
     class Config:
         env_file = ".env"

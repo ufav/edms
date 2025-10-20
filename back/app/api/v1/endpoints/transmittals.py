@@ -515,8 +515,10 @@ async def send_transmittal(
     transmittal.sender_id = current_user.id  # Кто отправил
     
     # Обновляем workflow статусы ревизий документов в трансмиттале
-    from app.models.document import DocumentRevision
+    from app.models.document import DocumentRevision, Document
     from app.models.references import WorkflowStatus
+    from app.models.document_workflow_history import DocumentWorkflowHistory
+    from app.models.project import WorkflowPresetSequence, Project
     
     # Получаем статус "In Review"
     in_review_status = db.query(WorkflowStatus).filter(WorkflowStatus.name == "In Review").first()
@@ -529,13 +531,40 @@ async def send_transmittal(
         TransmittalRevision.transmittal_id == transmittal_id
     ).all()
     
-    # Обновляем workflow_status_id для каждой ревизии
+    # Обновляем workflow_status_id для каждой ревизии и создаем записи в истории
     for transmittal_revision in transmittal_revisions:
         revision = db.query(DocumentRevision).filter(
             DocumentRevision.id == transmittal_revision.revision_id
         ).first()
         if revision:
+            # Сохраняем старый статус перед обновлением
+            old_status_id = revision.workflow_status_id
+            
+            # Обновляем статус ревизии
             revision.workflow_status_id = in_review_status.id
+            
+            # Проверяем, требует ли эта ревизия трансмиттал через JOIN запрос
+            workflow_sequence = db.query(WorkflowPresetSequence).join(
+                Project, Project.workflow_preset_id == WorkflowPresetSequence.preset_id
+            ).join(
+                Document, Document.project_id == Project.id
+            ).filter(
+                Document.id == revision.document_id,
+                WorkflowPresetSequence.revision_description_id == revision.revision_description_id,
+                WorkflowPresetSequence.revision_step_id == revision.revision_step_id
+            ).first()
+            
+            # Если требует трансмиттал, создаем запись в истории
+            if workflow_sequence and workflow_sequence.requires_transmittal:
+                workflow_history = DocumentWorkflowHistory(
+                    revision_id=revision.id,
+                    from_status_id=old_status_id,
+                    to_status_id=in_review_status.id,
+                    user_id=current_user.id,
+                    action_type="transmittal_sent",
+                    comments=f"Документ отправлен в трансмиттале #{transmittal.transmittal_number}"
+                )
+                db.add(workflow_history)
     
     db.commit()
     db.refresh(transmittal)
