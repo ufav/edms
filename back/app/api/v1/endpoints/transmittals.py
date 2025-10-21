@@ -527,15 +527,21 @@ async def send_transmittal(
     
     # Получаем все ревизии документов в этом трансмиттале
     from app.models.transmittal import TransmittalRevision
-    transmittal_revisions = db.query(TransmittalRevision).filter(
+    # Получаем все ревизии трансмиттала с JOIN'ом для избежания N+1 запросов
+    from sqlalchemy.orm import joinedload
+    
+    transmittal_revisions_data = db.query(
+        TransmittalRevision,
+        DocumentRevision
+    ).join(
+        DocumentRevision,
+        DocumentRevision.id == TransmittalRevision.revision_id
+    ).filter(
         TransmittalRevision.transmittal_id == transmittal_id
     ).all()
     
     # Обновляем workflow_status_id для каждой ревизии и создаем записи в истории
-    for transmittal_revision in transmittal_revisions:
-        revision = db.query(DocumentRevision).filter(
-            DocumentRevision.id == transmittal_revision.revision_id
-        ).first()
+    for transmittal_revision, revision in transmittal_revisions_data:
         if revision:
             # Сохраняем старый статус перед обновлением
             old_status_id = revision.workflow_status_id

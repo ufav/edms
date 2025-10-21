@@ -58,7 +58,31 @@ const DocumentRevisionDialog: React.FC<DocumentRevisionDialogProps> = ({
       onSuccess();
       handleClose();
     } catch (error: any) {
-      setFileError(error.response?.data?.detail || t('revision.upload_error'));
+      console.log('Error details:', error?.response?.data?.detail);
+      let errorMessage = t('revision.upload_error');
+      
+      // Обрабатываем структурированную ошибку для ревизий
+      if (error?.response?.data?.detail?.error_type === 'revision_status_error') {
+        const { revision, status } = error.response.data.detail;
+        console.log('Revision error details:', { revision, status });
+        // Используем ручную интерполяцию, если t() не работает
+        const template = t('documents.revision_error');
+        const interpolatedMessage = template
+          .replace('{revision}', revision || 'Unknown')
+          .replace('{status}', status || 'Unknown');
+        console.log('Template:', template);
+        console.log('Interpolated message:', interpolatedMessage);
+        errorMessage = interpolatedMessage;
+      } else if (error?.response?.data?.detail) {
+        // Если detail - это строка, используем её
+        if (typeof error.response.data.detail === 'string') {
+          errorMessage = error.response.data.detail;
+        }
+      } else if (error?.message) {
+        errorMessage = error.message;
+      }
+      
+      setFileError(errorMessage);
     } finally {
       setUploading(false);
     }

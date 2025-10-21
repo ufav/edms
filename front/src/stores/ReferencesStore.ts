@@ -162,7 +162,8 @@ class ReferencesStore {
       this.loadRevisionStatuses(),
       this.loadRevisionSteps(),
       this.loadReviewCodes(),
-      this.loadDocumentTypes()
+      this.loadDocumentTypes(),
+      this.loadWorkflowStatuses()
     ]);
   }
 

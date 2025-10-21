@@ -28,6 +28,8 @@ class TransmittalStore {
   selectedTransmittal: Transmittal | null = null;
   selectedRevisions: any[] = [];
   loadedProjectId: number | null = null; // Отслеживаем для какого проекта загружены данные
+  lastLoadedAt: number | null = null; // Время последней загрузки
+  cacheTTL = 3 * 60 * 1000; // 3 минуты TTL для кеша трансмитталов
 
   constructor() {
     makeAutoObservable(this);
@@ -35,9 +37,21 @@ class TransmittalStore {
 
   // Загрузка трансмитталов из API
   async loadTransmittals(projectId?: number, forceReload = false) {
-    // Если данные уже загружены для этого проекта, не загружаем повторно (если не принудительная перезагрузка)
-    if (!forceReload && projectId && this.loadedProjectId === projectId && this.transmittals.length > 0) {
+    // Проверяем TTL кеша
+    const now = Date.now();
+    const isCacheExpired = this.lastLoadedAt && (now - this.lastLoadedAt) > this.cacheTTL;
+    
+    // Если данные уже загружены для этого проекта и кеш не истек, не загружаем повторно (если не принудительная перезагрузка)
+    if (!forceReload && projectId && this.loadedProjectId === projectId && this.transmittals.length > 0 && !isCacheExpired) {
       return;
+    }
+    
+    // Если проект изменился, сбрасываем данные
+    if (projectId && this.loadedProjectId !== projectId) {
+      runInAction(() => {
+        this.transmittals = [];
+        this.loadedProjectId = null;
+      });
     }
 
     runInAction(() => {
@@ -67,6 +81,7 @@ class TransmittalStore {
           }))
           .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
         this.loadedProjectId = projectId || null;
+        this.lastLoadedAt = now;
       });
     } catch (error) {
       runInAction(() => {
@@ -210,6 +225,18 @@ class TransmittalStore {
       console.error('Error removing revision from transmittal:', error);
       throw error;
     }
+  }
+
+  // Принудительное обновление трансмитталов
+  async refreshTransmittals(projectId?: number) {
+    await this.loadTransmittals(projectId, true);
+  }
+
+  // Проверка, устарел ли кеш
+  get isCacheStale(): boolean {
+    if (!this.lastLoadedAt) return true;
+    const now = Date.now();
+    return (now - this.lastLoadedAt) > this.cacheTTL;
   }
 }
 

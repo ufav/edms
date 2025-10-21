@@ -8,6 +8,9 @@ class DocumentStore {
   isLoading = false;
   error: string | null = null;
   currentProjectId: number | null = null;
+  currentStatus: string | null = null; // Текущий статус фильтра
+  lastLoadedAt: number | null = null; // Время последней загрузки
+  cacheTTL = 2 * 60 * 1000; // 2 минуты TTL для кеша документов
 
   constructor() {
     makeAutoObservable(this);
@@ -18,18 +21,31 @@ class DocumentStore {
     return this.loadDocuments(projectId, true);
   }
 
+
+  // Проверка, устарел ли кеш
+  get isCacheStale(): boolean {
+    if (!this.lastLoadedAt) return true;
+    const now = Date.now();
+    return (now - this.lastLoadedAt) > this.cacheTTL;
+  }
+
   // Загрузка документов из API
   async loadDocuments(projectId?: number, forceReload = false, status?: string) {
-    // Если это тот же проект и документы уже загружены - не загружаем повторно (если не принудительная перезагрузка)
-    if (projectId && this.currentProjectId === projectId && this.documents.length > 0 && !forceReload) {
+    // Проверяем TTL кеша
+    const now = Date.now();
+    const isCacheExpired = this.lastLoadedAt && (now - this.lastLoadedAt) > this.cacheTTL;
+    
+    // Если это тот же проект, тот же статус и документы уже загружены и кеш не истек - не загружаем повторно (если не принудительная перезагрузка)
+    if (projectId && this.currentProjectId === projectId && this.currentStatus === status && this.documents.length > 0 && !forceReload && !isCacheExpired) {
       return;
     }
     
-    // Если это новый проект, очищаем старые документы
-    if (projectId && this.currentProjectId !== projectId) {
+    // Если это новый проект или новый статус, очищаем старые документы
+    if (projectId && (this.currentProjectId !== projectId || this.currentStatus !== status)) {
       runInAction(() => {
         this.documents = [];
         this.currentProjectId = projectId;
+        this.currentStatus = status || null;
       });
     }
     
@@ -77,6 +93,7 @@ class DocumentStore {
           };
           });
           this.currentProjectId = projectId || null;
+          this.lastLoadedAt = now;
         });
     } catch (error) {
       runInAction(() => {

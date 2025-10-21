@@ -15,15 +15,33 @@ router = APIRouter()
 
 def load_preset_data(preset_id: int, db: Session):
     """Загружает данные пресета с последовательностями и правилами"""
-    # Загружаем последовательности
+    # Загружаем последовательности с JOIN'ами для избежания N+1 запросов
+    from sqlalchemy.orm import joinedload
+    
     sequences = db.query(WorkflowPresetSequence).filter(
         WorkflowPresetSequence.preset_id == preset_id
     ).order_by(WorkflowPresetSequence.sequence_order).all()
     
+    # Получаем все нужные ID для batch запросов
+    revision_description_ids = [seq.revision_description_id for seq in sequences if seq.revision_description_id]
+    revision_step_ids = [seq.revision_step_id for seq in sequences if seq.revision_step_id]
+    
+    # Загружаем все RevisionDescription одним запросом
+    revision_descriptions = {}
+    if revision_description_ids:
+        for rd in db.query(RevisionDescription).filter(RevisionDescription.id.in_(revision_description_ids)).all():
+            revision_descriptions[rd.id] = rd
+    
+    # Загружаем все RevisionStep одним запросом
+    revision_steps = {}
+    if revision_step_ids:
+        for rs in db.query(RevisionStep).filter(RevisionStep.id.in_(revision_step_ids)).all():
+            revision_steps[rs.id] = rs
+    
     sequences_data = []
     for seq in sequences:
-        rev_desc = db.query(RevisionDescription).filter(RevisionDescription.id == seq.revision_description_id).first()
-        rev_step = db.query(RevisionStep).filter(RevisionStep.id == seq.revision_step_id).first()
+        rev_desc = revision_descriptions.get(seq.revision_description_id)
+        rev_step = revision_steps.get(seq.revision_step_id)
         
         sequences_data.append({
             "id": seq.id,
@@ -52,13 +70,48 @@ def load_preset_data(preset_id: int, db: Session):
         WorkflowPresetRule.preset_id == preset_id
     ).all()
     
+    # Получаем все нужные ID для batch запросов
+    rule_revision_description_ids = []
+    rule_revision_step_ids = []
+    review_code_ids = []
+    
+    for rule in rules:
+        if rule.current_revision_description_id:
+            rule_revision_description_ids.append(rule.current_revision_description_id)
+        if rule.next_revision_description_id:
+            rule_revision_description_ids.append(rule.next_revision_description_id)
+        if rule.current_revision_step_id:
+            rule_revision_step_ids.append(rule.current_revision_step_id)
+        if rule.next_revision_step_id:
+            rule_revision_step_ids.append(rule.next_revision_step_id)
+        if rule.review_code_id:
+            review_code_ids.append(rule.review_code_id)
+    
+    # Загружаем все RevisionDescription одним запросом
+    rule_revision_descriptions = {}
+    if rule_revision_description_ids:
+        for rd in db.query(RevisionDescription).filter(RevisionDescription.id.in_(rule_revision_description_ids)).all():
+            rule_revision_descriptions[rd.id] = rd
+    
+    # Загружаем все RevisionStep одним запросом
+    rule_revision_steps = {}
+    if rule_revision_step_ids:
+        for rs in db.query(RevisionStep).filter(RevisionStep.id.in_(rule_revision_step_ids)).all():
+            rule_revision_steps[rs.id] = rs
+    
+    # Загружаем все ReviewCode одним запросом
+    review_codes = {}
+    if review_code_ids:
+        for rc in db.query(ReviewCode).filter(ReviewCode.id.in_(review_code_ids)).all():
+            review_codes[rc.id] = rc
+    
     rules_data = []
     for rule in rules:
-        current_desc = db.query(RevisionDescription).filter(RevisionDescription.id == rule.current_revision_description_id).first()
-        current_step = db.query(RevisionStep).filter(RevisionStep.id == rule.current_revision_step_id).first()
-        next_desc = db.query(RevisionDescription).filter(RevisionDescription.id == rule.next_revision_description_id).first() if rule.next_revision_description_id else None
-        next_step = db.query(RevisionStep).filter(RevisionStep.id == rule.next_revision_step_id).first() if rule.next_revision_step_id else None
-        review_code = db.query(ReviewCode).filter(ReviewCode.id == rule.review_code_id).first()
+        current_desc = rule_revision_descriptions.get(rule.current_revision_description_id)
+        current_step = rule_revision_steps.get(rule.current_revision_step_id)
+        next_desc = rule_revision_descriptions.get(rule.next_revision_description_id) if rule.next_revision_description_id else None
+        next_step = rule_revision_steps.get(rule.next_revision_step_id) if rule.next_revision_step_id else None
+        review_code = review_codes.get(rule.review_code_id)
         
         rules_data.append({
             "id": rule.id,

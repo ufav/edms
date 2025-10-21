@@ -49,9 +49,11 @@ class DashboardStore {
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       .slice(0, 2);
     
-    recentDocuments.forEach(doc => {
+    recentDocuments.forEach((doc, index) => {
+      // Используем doc.id если он есть, иначе используем индекс
+      const docId = doc.id || `document-${index}`;
       activities.push({
-        id: `doc-${doc.id}`,
+        id: `doc-${docId}`,
         type: 'document',
         title: t ? t('dashboard.activity.document_uploaded') : 'Загружен новый документ',
         description: `"${doc.title}" - ${this.formatTimeAgo(doc.created_at, t)}`,
@@ -66,14 +68,16 @@ class DashboardStore {
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       .slice(0, 2);
     
-    recentTransmittals.forEach(transmittal => {
+    recentTransmittals.forEach((transmittal, index) => {
       const isSent = transmittal.status === 'sent';
       const title = isSent 
         ? (t ? t('dashboard.activity.transmittal_sent') : 'Трансмиттал отправлен')
         : (t ? t('dashboard.activity.transmittal_created') : 'Создан трансмиттал');
       
+      // Используем transmittal.id если он есть, иначе используем индекс
+      const transmittalId = transmittal.id || `transmittal-${index}`;
       activities.push({
-        id: `trans-${transmittal.id}`,
+        id: `trans-${transmittalId}`,
         type: 'transmittal',
         title: title,
         description: `${transmittal.transmittal_number} - ${this.formatTimeAgo(transmittal.created_at, t)}`,
@@ -88,9 +92,11 @@ class DashboardStore {
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       .slice(0, 2);
     
-    recentReviews.forEach(review => {
+    recentReviews.forEach((review, index) => {
+      // Используем review.id если он есть, иначе используем индекс
+      const reviewId = review.id || `review-${index}`;
       activities.push({
-        id: `review-${review.id}`,
+        id: `review-${reviewId}`,
         type: 'review',
         title: t ? t('dashboard.activity.document_approved') : 'Документ одобрен',
         description: `"${review.document_title}" - ${this.formatTimeAgo(review.created_at, t)}`,
@@ -105,9 +111,11 @@ class DashboardStore {
       .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       .slice(0, 2);
     
-    recentProjects.forEach(project => {
+    recentProjects.forEach((project, index) => {
+      // Используем project.id если он есть, иначе используем индекс
+      const projectId = project.id || `project-${index}`;
       activities.push({
-        id: `project-${project.id}`,
+        id: `project-${projectId}`,
         type: 'project',
         title: t ? t('dashboard.activity.project_created') : 'Создан новый проект',
         description: `"${project.name}" - ${this.formatTimeAgo(project.created_at, t)}`,
@@ -161,7 +169,7 @@ class DashboardStore {
       // Store'ы сами проверяют, нужно ли загружать данные повторно
       await Promise.all([
         projectStore.loadProjects(),
-        documentStore.loadDocuments(projectId),
+        documentStore.loadDocuments(projectId, false, 'all'),
         transmittalStore.loadTransmittals(projectId),
         reviewStore.loadReviews(projectId),
         userStore.loadUsers()

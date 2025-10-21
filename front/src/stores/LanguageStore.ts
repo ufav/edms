@@ -21,7 +21,6 @@ class LanguageStore {
 
   // Загрузка языков
   async loadLanguages() {
-    // Если языки уже загружены - не загружаем повторно
     if (this.isLoaded) {
       return;
     }

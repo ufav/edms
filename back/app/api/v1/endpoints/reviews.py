@@ -76,7 +76,7 @@ async def get_pending_approvals(
     ).join(
         Project,
         Project.id == Document.project_id
-    ).join(
+    ).outerjoin(
         WorkflowPresetSequence,
         and_(
             WorkflowPresetSequence.preset_id == Project.workflow_preset_id,
@@ -92,6 +92,29 @@ async def get_pending_approvals(
     # Выполняем запрос с пагинацией
     results = query.order_by(Document.updated_at.desc()).offset(skip).limit(limit).all()
     
+    # Получаем все нужные ID для batch запросов
+    revision_step_ids = []
+    revision_description_ids = []
+    
+    for row in results:
+        doc, revision, project, sequence = row
+        if revision and revision.revision_step_id:
+            revision_step_ids.append(revision.revision_step_id)
+        if revision and revision.revision_description_id:
+            revision_description_ids.append(revision.revision_description_id)
+    
+    # Загружаем все RevisionStep одним запросом
+    revision_steps = {}
+    if revision_step_ids:
+        for rs in db.query(RevisionStep).filter(RevisionStep.id.in_(revision_step_ids)).all():
+            revision_steps[rs.id] = rs
+    
+    # Загружаем все RevisionDescription одним запросом
+    revision_descriptions = {}
+    if revision_description_ids:
+        for rd in db.query(RevisionDescription).filter(RevisionDescription.id.in_(revision_description_ids)).all():
+            revision_descriptions[rd.id] = rd
+    
     # Формируем результат
     result = []
     for row in results:
@@ -102,8 +125,8 @@ async def get_pending_approvals(
         description_info = None
         
         if revision:
-            step = db.query(RevisionStep).filter(RevisionStep.id == revision.revision_step_id).first()
-            description = db.query(RevisionDescription).filter(RevisionDescription.id == revision.revision_description_id).first()
+            step = revision_steps.get(revision.revision_step_id)
+            description = revision_descriptions.get(revision.revision_description_id)
             
             step_info = {
                 "id": step.id if step else None,

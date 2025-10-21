@@ -9,20 +9,20 @@ export interface UseActiveRevisionsReturn {
   error: string | null;
   
   // Обработчики
-  loadActiveRevisions: (projectId?: number) => Promise<void>;
-  refreshActiveRevisions: () => Promise<void>;
+  loadActiveRevisions: (projectId?: number) => void;
+  refreshActiveRevisions: () => void;
 }
 
 export const useActiveRevisions = (): UseActiveRevisionsReturn => {
   // Загрузка активных ревизий
-  const loadActiveRevisions = useCallback(async (projectId?: number) => {
-    await activeRevisionsStore.loadActiveRevisions(projectId);
+  const loadActiveRevisions = useCallback((projectId?: number) => {
+    activeRevisionsStore.loadActiveRevisions(projectId);
   }, []);
 
   // Обновление активных ревизий (принудительная перезагрузка)
-  const refreshActiveRevisions = useCallback(async () => {
+  const refreshActiveRevisions = useCallback(() => {
     const projectId = projectStore.selectedProject?.id;
-    await activeRevisionsStore.refreshActiveRevisions(projectId);
+    activeRevisionsStore.refreshActiveRevisions(projectId);
   }, []);
 
   // Автоматическая загрузка при изменении проекта

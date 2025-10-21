@@ -126,9 +126,29 @@ export const useDocumentActions = ({ t, onCloseDialog, onRefreshActiveRevisions 
         onRefreshActiveRevisions();
       }
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error in handleCreateDocument:', error);
-      alert(t('documents.create_error'));
+      let errorMessage = t('documents.create_error');
+      
+      // Обрабатываем структурированную ошибку для ревизий
+      if (error?.response?.data?.detail?.error_type === 'revision_status_error') {
+        const { revision, status } = error.response.data.detail;
+        console.log('Revision error details in useDocumentActions:', { revision, status });
+        // Используем ручную интерполяцию, если t() не работает
+        const template = t('documents.revision_error');
+        errorMessage = template
+          .replace('{revision}', revision || 'Unknown')
+          .replace('{status}', status || 'Unknown');
+      } else if (error?.response?.data?.detail) {
+        // Если detail - это строка, используем её
+        if (typeof error.response.data.detail === 'string') {
+          errorMessage = error.response.data.detail;
+        }
+      } else if (error?.message) {
+        errorMessage = error.message;
+      }
+      
+      alert(errorMessage);
     } finally {
       // Сбрасываем состояние загрузки в любом случае
       setIsCreatingDocument(false);
@@ -171,9 +191,19 @@ export const useDocumentActions = ({ t, onCloseDialog, onRefreshActiveRevisions 
           onRefreshActiveRevisions();
         }
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving document:', error);
-      alert(t('documents.update_error'));
+      let errorMessage = t('documents.update_error');
+      
+      if (error?.response?.data?.detail) {
+        if (typeof error.response.data.detail === 'string') {
+          errorMessage = error.response.data.detail;
+        }
+      } else if (error?.message) {
+        errorMessage = error.message;
+      }
+      
+      alert(errorMessage);
       throw error;
     }
   };
@@ -187,8 +217,18 @@ export const useDocumentActions = ({ t, onCloseDialog, onRefreshActiveRevisions 
       setSelectedDocumentId(documentId);
       try {
         await documentRevisionStore.loadRevisions(documentId);
-      } catch (error) {
-        alert(t('documents.load_revisions_error'));
+    } catch (error: any) {
+      let errorMessage = t('documents.load_revisions_error');
+      
+      if (error?.response?.data?.detail) {
+        if (typeof error.response.data.detail === 'string') {
+          errorMessage = error.response.data.detail;
+        }
+      } else if (error?.message) {
+        errorMessage = error.message;
+      }
+      
+      alert(errorMessage);
       }
     }
   };
@@ -217,8 +257,18 @@ export const useDocumentActions = ({ t, onCloseDialog, onRefreshActiveRevisions 
       
       // Очищаем URL
       URL.revokeObjectURL(url);
-    } catch (error) {
-      alert(t('documents.download_error'));
+    } catch (error: any) {
+      let errorMessage = t('documents.download_error');
+      
+      if (error?.response?.data?.detail) {
+        if (typeof error.response.data.detail === 'string') {
+          errorMessage = error.response.data.detail;
+        }
+      } else if (error?.message) {
+        errorMessage = error.message;
+      }
+      
+      alert(errorMessage);
     }
   };
 
@@ -244,8 +294,18 @@ export const useDocumentActions = ({ t, onCloseDialog, onRefreshActiveRevisions 
       }
       
       setDocumentToDelete(null);
-    } catch (error) {
-      alert(t('documents.delete_error'));
+    } catch (error: any) {
+      let errorMessage = t('documents.delete_error');
+      
+      if (error?.response?.data?.detail) {
+        if (typeof error.response.data.detail === 'string') {
+          errorMessage = error.response.data.detail;
+        }
+      } else if (error?.message) {
+        errorMessage = error.message;
+      }
+      
+      alert(errorMessage);
     } finally {
       setDeleting(false);
     }

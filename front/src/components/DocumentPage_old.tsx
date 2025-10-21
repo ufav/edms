@@ -206,7 +206,7 @@ const DocumentsPage: React.FC = observer(() => {
       const result = await documentsApi.importByPaths(formData);
         
         // Обновляем список документов
-        documentStore.loadDocuments(projectStore.selectedProject.id);
+        documentStore.loadDocuments(projectStore.selectedProject.id, false, 'all');
         
         // Закрываем диалог и очищаем состояние
         setBatchUploadOpen(false);
@@ -294,7 +294,7 @@ const DocumentsPage: React.FC = observer(() => {
       setWorkflowOpen(false);
       
       // Обновляем статус документа
-      documentStore.loadDocuments(projectStore.selectedProject!.id);
+      documentStore.loadDocuments(projectStore.selectedProject!.id, false, 'all');
     } catch (error) {
       alert('Ошибка запуска маршрута согласования');
     }
@@ -321,7 +321,7 @@ const DocumentsPage: React.FC = observer(() => {
       
       // Обновляем список документов
       if (projectStore.selectedProject) {
-        documentStore.loadDocuments(projectStore.selectedProject.id);
+        documentStore.loadDocuments(projectStore.selectedProject.id, false, 'all');
       }
       
       setNewRevisionOpen(false);

@@ -28,7 +28,6 @@ class UserStore {
 
   // Загрузка текущего пользователя
   async loadCurrentUser() {
-    // Если пользователь уже загружен - не загружаем повторно
     if (this.isCurrentUserLoaded) {
       return;
     }
@@ -49,7 +48,6 @@ class UserStore {
 
   // Загрузка пользователей из API
   async loadUsers() {
-    // Если пользователи уже загружены - не загружаем повторно
     if (this.isUsersLoaded) {
       return;
     }

@@ -30,13 +30,13 @@ class Settings(BaseSettings):
     # File Upload
     UPLOAD_DIR: str = os.getenv('UPLOAD_DIR', "uploads")
     MAX_FILE_SIZE: int = int(os.getenv('MAX_FILE_SIZE', str(50 * 1024 * 1024)))  # 50MB
-    ALLOWED_FILE_TYPES: str = os.getenv('ALLOWED_FILE_TYPES', "pdf,doc,docx,xls,xlsx,ppt,pptx,txt,jpg,jpeg,png,gif")
+    ALLOWED_FILE_TYPES: str = os.getenv('ALLOWED_FILE_TYPES', "pdf,doc,docx,xls,xlsx,ppt,pptx,txt,jpg,jpeg,png,gif,dwg,dxf,step,stp,iges,igs,stl,obj,3ds,fbx,skp")
     
     # MinIO/S3 Storage
-    MINIO_ENDPOINT: str = os.getenv('MINIO_ENDPOINT', 'http://localhost:9000')
-    MINIO_ACCESS_KEY: str = os.getenv('MINIO_ACCESS_KEY', 'admin')
-    MINIO_SECRET_KEY: str = os.getenv('MINIO_SECRET_KEY', 'adminpassword')
-    MINIO_BUCKET: str = os.getenv('MINIO_BUCKET', 'docste-files')
+    MINIO_ENDPOINT: str = os.getenv('MINIO_ENDPOINT', '')
+    MINIO_ACCESS_KEY: str = os.getenv('MINIO_ACCESS_KEY', '')
+    MINIO_SECRET_KEY: str = os.getenv('MINIO_SECRET_KEY', '')
+    MINIO_BUCKET: str = os.getenv('MINIO_BUCKET', '')
     USE_MINIO: bool = os.getenv('USE_MINIO', 'false').lower() == 'true'
     
     # CORS

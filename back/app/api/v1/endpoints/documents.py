@@ -405,10 +405,8 @@ async def upload_document(
     content = await file.read()
     
     # Определяем способ хранения файла
-    print(f"DEBUG: USE_MINIO = {settings.USE_MINIO}")
     if settings.USE_MINIO:
         # Используем MinIO для хранения
-        print(f"DEBUG: Uploading to MinIO - project_code: {project.project_code}, document_number: {document_number}")
         try:
             # Генерируем ключ для MinIO
             minio_key = generate_minio_key(
@@ -565,14 +563,12 @@ async def create_document_with_revision(
     db.refresh(revision_row)
     
     # Определяем способ хранения файла
-    print(f"DEBUG: USE_MINIO = {settings.USE_MINIO}")
     if settings.USE_MINIO:
         # Используем MinIO для хранения (как в docste1)
-        print(f"DEBUG: Starting MinIO upload...")
         try:
             # Генерируем ключ для MinIO
             document_number = number or f"DOC-{db_document.id:04d}"
-            revision_key_prefix = f"{project.project_code}/{document_number}/A01_{revision_description_id or 1}_{revision_row.id}"
+            revision_key_prefix = f"{project.project_code}/{document_number}/{revision_row.number}_{revision_description_id or 1}_{revision_row.id}"
             file_key = f"{revision_key_prefix}/{file.filename}"
             
             # Загружаем файл в MinIO напрямую
@@ -589,7 +585,6 @@ async def create_document_with_revision(
                     Key=file_key,
                     Body=content
                 )
-                print(f"DEBUG: File uploaded to MinIO: {file_key}")
             
             # Обновляем путь к файлу в базе данных
             revision_row.file_path = file_key
@@ -598,15 +593,13 @@ async def create_document_with_revision(
             # Удаляем временный локальный файл
             if os.path.exists(temp_file_path):
                 os.remove(temp_file_path)
-                print(f"DEBUG: Removed temporary file: {temp_file_path}")
             
         except Exception as e:
-            print(f"DEBUG: MinIO upload error: {str(e)}")
             # Если MinIO недоступен, оставляем локальный файл
-            print(f"DEBUG: Keeping local file: {temp_file_path}")
+            pass
     else:
         # Используем локальное хранение (файл уже сохранен)
-        print(f"DEBUG: Using local storage: {temp_file_path}")
+        pass
     
     # Создаем запись в истории workflow для первой ревизии
     if draft_workflow_status:
@@ -998,9 +991,6 @@ async def list_document_revisions(
         DocumentRevision.document_id == document_id
     ).order_by(DocumentRevision.created_at.desc()).all()
     
-    print(f"🔍 [API] Все ревизии документа {document_id}:")
-    for rev in all_revisions:
-        print(f"  - ID: {rev.id}, is_deleted: {rev.is_deleted}, workflow_status_id: {rev.workflow_status_id}, created_at: {rev.created_at}")
     
     versions = (
         db.query(DocumentRevision, DocumentWorkflowHistory.comments)
@@ -1015,9 +1005,6 @@ async def list_document_revisions(
         .all()
     )
     
-    print(f"📋 [API] Отфильтрованные ревизии (is_deleted == 0): {len(versions)}")
-    for v in versions:
-        print(f"  - ID: {v[0].id}, is_deleted: {v[0].is_deleted}, workflow_status_id: {v[0].workflow_status_id}")
     return [
         {
             "id": v[0].id,
@@ -1049,6 +1036,8 @@ async def create_document_revision(
     current_user: User = Depends(get_current_active_user)
 ):
     """Загрузить новый файл как новую версию документа."""
+    from app.models.references import RevisionDescription
+    
     document = db.query(Document).filter(Document.id == document_id).first()
     if not document:
         raise HTTPException(status_code=404, detail="Документ не найден")
@@ -1082,6 +1071,39 @@ async def create_document_revision(
         DocumentRevision.is_deleted == 0  # Только не удаленные ревизии
     ).order_by(DocumentRevision.created_at.desc()).first()
     
+    # Проверяем, можно ли загружать новую ревизию
+    if latest_revision:
+        # Получаем статусы для проверки
+        draft_status = db.query(WorkflowStatus).filter(WorkflowStatus.name == "Draft").first()
+        in_review_status = db.query(WorkflowStatus).filter(WorkflowStatus.name == "In Review").first()
+        
+        # Проверяем статус последней ревизии
+        if latest_revision.workflow_status_id in [draft_status.id if draft_status else None, in_review_status.id if in_review_status else None]:
+            # Получаем название статуса
+            status_name = 'Unknown'
+            if latest_revision.workflow_status_id == draft_status.id if draft_status else None:
+                status_name = 'Draft'
+            elif latest_revision.workflow_status_id == in_review_status.id if in_review_status else None:
+                status_name = 'In Review'
+            
+            # Формируем полный код ревизии (код описания + номер)
+            full_revision_code = latest_revision.number
+            if latest_revision.revision_description_id:
+                revision_description = db.query(RevisionDescription).filter(
+                    RevisionDescription.id == latest_revision.revision_description_id
+                ).first()
+                if revision_description:
+                    full_revision_code = f"{revision_description.code}{latest_revision.number}"
+            
+            raise HTTPException(
+                status_code=400, 
+                detail={
+                    "error_type": "revision_status_error",
+                    "revision": full_revision_code,
+                    "status": status_name
+                }
+            )
+    
     # Определяем следующую редакцию
     if latest_revision:
         # Если есть отмененная ревизия с тем же номером, используем тот же номер
@@ -1093,10 +1115,23 @@ async def create_document_revision(
             ).first()
             
             if cancelled_revision:
-                # Используем тот же номер, что и у отмененной ревизии
-                new_revision = latest_revision.number
-                new_revision_description_id = latest_revision.revision_description_id
-                new_revision_step_id = latest_revision.revision_step_id
+                # Если есть отмененная ревизия, проверяем статус последней НЕ отмененной ревизии
+                
+                # Проверяем, утверждена ли последняя ревизия
+                approved_status = db.query(WorkflowStatus).filter(WorkflowStatus.name == "Approved").first()
+                if approved_status and latest_revision.workflow_status_id == approved_status.id:
+                    # Если последняя ревизия утверждена, переходим к следующей последовательности
+                    new_revision_description_id, new_revision_step_id, new_revision = _get_next_revision_from_sequence(
+                        document_id, 
+                        latest_revision.revision_description_id, 
+                        latest_revision.revision_step_id,
+                        db
+                    )
+                else:
+                    # Если не утверждена, используем тот же номер
+                    new_revision = latest_revision.number
+                    new_revision_description_id = latest_revision.revision_description_id
+                    new_revision_step_id = latest_revision.revision_step_id
             else:
                 # Определяем следующую редакцию на основе статуса и последовательности
                 new_revision_description_id, new_revision_step_id, new_revision = _get_next_revision_from_sequence(
@@ -1157,10 +1192,8 @@ async def create_document_revision(
     db.refresh(revision_row)
     
     # Определяем способ хранения файла
-    print(f"DEBUG: USE_MINIO = {settings.USE_MINIO}")
     if settings.USE_MINIO:
         # Используем MinIO для хранения
-        print(f"DEBUG: Starting MinIO upload for revision...")
         try:
             # Получаем информацию о проекте
             project = db.query(Project).filter(Project.id == document.project_id).first()
@@ -1169,7 +1202,7 @@ async def create_document_revision(
             
             # Генерируем ключ для MinIO
             document_number = document.number or f"DOC-{document.id:04d}"
-            revision_key_prefix = f"{project.project_code}/{document_number}/A01_{new_revision_description_id or 1}_{revision_row.id}"
+            revision_key_prefix = f"{project.project_code}/{document_number}/{revision_row.number}_{new_revision_description_id or 1}_{revision_row.id}"
             file_key = f"{revision_key_prefix}/{file.filename}"
             
             # Загружаем файл в MinIO напрямую
@@ -1186,7 +1219,6 @@ async def create_document_revision(
                     Key=file_key,
                     Body=content
                 )
-                print(f"DEBUG: File uploaded to MinIO: {file_key}")
             
             # Обновляем путь к файлу в базе данных
             revision_row.file_path = file_key
@@ -1195,15 +1227,13 @@ async def create_document_revision(
             # Удаляем временный локальный файл
             if os.path.exists(temp_file_path):
                 os.remove(temp_file_path)
-                print(f"DEBUG: Removed temporary file: {temp_file_path}")
             
         except Exception as e:
-            print(f"DEBUG: MinIO upload error: {str(e)}")
             # Если MinIO недоступен, оставляем локальный файл
-            print(f"DEBUG: Keeping local file: {temp_file_path}")
+            pass
     else:
         # Используем локальное хранение (файл уже сохранен)
-        print(f"DEBUG: Using local storage: {temp_file_path}")
+        pass
     
     # Создаем запись в document_workflow_history для новой ревизии
     from app.models.document_workflow_history import DocumentWorkflowHistory
@@ -1305,7 +1335,6 @@ async def download_document(
     # Определяем способ получения файла
     if settings.USE_MINIO:
         # Получаем файл из MinIO
-        print(f"DEBUG: Downloading from MinIO - file_path: {latest_revision.file_path}")
         try:
             # Получаем файл напрямую из MinIO через S3 клиент
             from fastapi.responses import StreamingResponse

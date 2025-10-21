@@ -38,6 +38,7 @@ import { useTranslation } from 'react-i18next';
 import { observer } from 'mobx-react-lite';
 import { reviewsApi } from '../../api/client';
 import { projectStore } from '../../stores/ProjectStore';
+import { reviewStore } from '../../stores/ReviewStore';
 import { formatFileSize } from '../document/utils/fileTypeUtils';
 import AppPagination from '../AppPagination';
 import ProjectRequired from '../ProjectRequired';
@@ -467,9 +468,6 @@ const ReviewsPage: React.FC = observer(() => {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   
-  const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   
   // Пагинация
   const [page, setPage] = useState(1);
@@ -497,26 +495,22 @@ const ReviewsPage: React.FC = observer(() => {
     severity: 'success' as 'success' | 'error' | 'warning' | 'info'
   });
 
-  // Загружаем документы, ожидающие утверждения
+  // Загрузка данных
   const loadPendingApprovals = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-      const data = await reviewsApi.getPendingApprovals(0, 100, projectStore.selectedProject?.id);
-      setPendingApprovals(data);
-    } catch (err: any) {
-      setError(err.message || t('reviews.load_error'));
-    } finally {
-      setLoading(false);
+    if (projectStore.selectedProject) {
+      await reviewStore.loadReviews(projectStore.selectedProject.id);
     }
   };
 
   useEffect(() => {
-    loadPendingApprovals();
+    // Дополнительная загрузка при изменении проекта
+    if (projectStore.selectedProject) {
+      reviewStore.loadReviews(projectStore.selectedProject.id);
+    }
   }, [projectStore.selectedProject]);
 
   // Фильтрация документов
-  const filteredApprovals = pendingApprovals.filter(approval => {
+  const filteredApprovals = reviewStore.reviews.filter(approval => {
     const searchMatch = searchTerm === '' || 
       approval.document_title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       approval.document_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -578,8 +572,8 @@ const ReviewsPage: React.FC = observer(() => {
         });
       }
 
-      // Обновляем список
-      await loadPendingApprovals();
+      // Обновляем список с принудительной перезагрузкой
+      await reviewStore.loadReviews(projectStore.selectedProject?.id, true);
       
       setApprovalDialog({ open: false, document: null, action: 'approve' });
     } catch (err: any) {
@@ -643,15 +637,15 @@ const ReviewsPage: React.FC = observer(() => {
         <ReviewTable
           approvals={displayedApprovals}
           totalCount={filteredApprovals.length}
-          isLoading={loading}
-          error={error}
+          isLoading={reviewStore.isLoading}
+          error={reviewStore.error}
           onApprove={handleApprove}
           onReject={handleReject}
         />
       </Box>
 
       {/* Фиксированная пагинация без выбора кол-ва строк */}
-      {!loading && (
+      {!reviewStore.isLoading && (
         <AppPagination
           count={filteredApprovals.length}
           page={Math.min(page, totalPages)}

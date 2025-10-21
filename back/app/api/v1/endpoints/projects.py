@@ -162,12 +162,20 @@ async def get_projects(
             user_role = 'member'
         
         # Получаем участников проекта (компании) с контактами
-        participants = db.query(ProjectParticipant).filter(ProjectParticipant.project_id == project.id).all()
+        # Получаем участников с JOIN'ом для избежания N+1 запросов
+        from app.models.references import Company
+        participants_data = db.query(
+            ProjectParticipant,
+            Company
+        ).outerjoin(
+            Company,
+            Company.id == ProjectParticipant.company_id
+        ).filter(
+            ProjectParticipant.project_id == project.id
+        ).all()
+        
         participants_data = []
-        for participant in participants:
-            # Получаем данные компании
-            from app.models.references import Company
-            company = db.query(Company).filter(Company.id == participant.company_id).first()
+        for participant, company in participants_data:
             
             
             participants_data.append({
@@ -314,13 +322,22 @@ async def create_project(
     
     # Добавляем участников-пользователей, если переданы
     if project_data.members:
+        # Получаем все нужные user_id для batch запроса
+        user_ids = [member_data.user_id for member_data in project_data.members if member_data.user_id != current_user.id]
+        
+        # Загружаем всех пользователей одним запросом
+        users = {}
+        if user_ids:
+            for user in db.query(User).filter(User.id.in_(user_ids)).all():
+                users[user.id] = user
+        
         for member_data in project_data.members:
             # Пропускаем создателя проекта, он уже добавлен
             if member_data.user_id == current_user.id:
                 continue
                 
             # Проверяем, что пользователь существует
-            user = db.query(User).filter(User.id == member_data.user_id).first()
+            user = users.get(member_data.user_id)
             if user:
                 project_member = ProjectMember(
                     project_id=db_project.id,
@@ -331,10 +348,19 @@ async def create_project(
     
     # Добавляем участников-компаний, если переданы
     if project_data.participants:
+        # Получаем все нужные company_id для batch запроса
+        company_ids = [participant_data.company_id for participant_data in project_data.participants]
+        
+        # Загружаем все компании одним запросом
+        from app.models.references import Company
+        companies = {}
+        if company_ids:
+            for company in db.query(Company).filter(Company.id.in_(company_ids)).all():
+                companies[company.id] = company
+        
         for participant_data in project_data.participants:
             # Проверяем, что компания существует
-            from app.models.references import Company
-            company = db.query(Company).filter(Company.id == participant_data.company_id).first()
+            company = companies.get(participant_data.company_id)
             if company:
                 project_participant = ProjectParticipant(
                     project_id=db_project.id,
@@ -838,6 +864,7 @@ async def get_project_disciplines(
             "id": discipline.id,
             "code": discipline.code,
             "name": discipline.name,
+            "name_en": discipline.name_en,
             "description": discipline.description
         }
         for discipline in disciplines
@@ -876,6 +903,7 @@ async def get_project_document_types(
             "id": doc_type.id,
             "code": doc_type.code,
             "name": doc_type.name,
+            "name_en": doc_type.name_en,
             "description": doc_type.description,
             "drs": pddt.drs  # Добавляем DRS из project_discipline_document_types
         }
@@ -915,6 +943,7 @@ async def get_all_project_document_types(
                 "id": doc_type.id,
                 "code": doc_type.code,
                 "name": doc_type.name,
+                "name_en": doc_type.name_en,
                 "description": doc_type.description,
                 "drs": pddt.drs
             })

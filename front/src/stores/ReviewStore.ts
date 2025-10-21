@@ -2,15 +2,25 @@ import { makeAutoObservable, runInAction } from 'mobx';
 import { reviewsApi, type Review as ApiReview } from '../api/client';
 
 export interface Review {
-  id: number;
   document_id: number;
   document_title: string;
-  reviewer_id: number;
-  reviewer_name: string;
-  status: string;
-  comments: string;
-  rating: number;
+  document_number: string;
+  project_id: number;
+  project_name: string;
+  revision_id: number;
+  revision_number: string;
+  file_name: string;
+  file_size: number;
+  file_type: string;
+  change_description: string;
   created_at: string;
+  uploaded_by: number;
+  current_step: {
+    id: number;
+    code: string;
+    description: string;
+    description_native: string;
+  } | null;
 }
 
 class ReviewStore {
@@ -18,16 +28,30 @@ class ReviewStore {
   isLoading = false;
   error: string | null = null;
   loadedProjectId: number | null = null; // Отслеживаем для какого проекта загружены данные
+  lastLoadedAt: number | null = null; // Время последней загрузки
+  cacheTTL = 3 * 60 * 1000; // 3 минуты TTL для кеша ревью
 
   constructor() {
     makeAutoObservable(this);
   }
 
   // Загрузка ревью из API
-  async loadReviews(projectId?: number) {
-    // Если данные уже загружены для этого проекта, не загружаем повторно
-    if (projectId && this.loadedProjectId === projectId && this.reviews.length > 0) {
+  async loadReviews(projectId?: number, forceReload = false) {
+    // Проверяем TTL кеша
+    const now = Date.now();
+    const isCacheExpired = this.lastLoadedAt && (now - this.lastLoadedAt) > this.cacheTTL;
+    
+    // Если данные уже загружены для этого проекта и кеш не истек, не загружаем повторно
+    if (projectId && this.loadedProjectId === projectId && this.reviews.length > 0 && !forceReload && !isCacheExpired) {
       return;
+    }
+    
+    // Если проект изменился, сбрасываем данные
+    if (projectId && this.loadedProjectId !== projectId) {
+      runInAction(() => {
+        this.reviews = [];
+        this.loadedProjectId = null;
+      });
     }
 
     runInAction(() => {
@@ -38,18 +62,10 @@ class ReviewStore {
     try {
       const apiReviews = await reviewsApi.getPendingApprovals(0, 100, projectId);
       runInAction(() => {
-        this.reviews = apiReviews.map(apiReview => ({
-          id: apiReview.id,
-          document_id: apiReview.document_id,
-          document_title: apiReview.document_title,
-          reviewer_id: apiReview.reviewer_id,
-          reviewer_name: apiReview.reviewer_name,
-          status: apiReview.status,
-          comments: apiReview.comments,
-          rating: apiReview.rating,
-          created_at: apiReview.created_at
-        }));
+        // Сохраняем оригинальные данные без маппинга
+        this.reviews = apiReviews;
         this.loadedProjectId = projectId || null;
+        this.lastLoadedAt = now;
       });
     } catch (error) {
       runInAction(() => {
@@ -61,6 +77,11 @@ class ReviewStore {
         this.isLoading = false;
       });
     }
+  }
+
+  // Принудительное обновление ревью
+  async refreshReviews(projectId?: number) {
+    await this.loadReviews(projectId, true);
   }
 
   // Получение ревью по ID

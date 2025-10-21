@@ -62,20 +62,15 @@ const TransmittalsPage: React.FC = observer(() => {
   const transmittalSettings = useTransmittalSettings();
 
   // Загружаем трансмитталы при монтировании компонента
-  useEffect(() => {
-    const loadData = async () => {
-      // Загружаем справочные данные для отображения названий компаний
-      await referenceDataStore.loadAllReferenceData();
-      
-      if (projectStore.hasSelectedProject) {
-        // Перезагружаем трансмитталы после загрузки справочных данных
-        await transmittalStore.loadTransmittals(projectStore.selectedProject!.id, true);
-      }
-    };
-    
-    loadData();
-  }, [projectStore.selectedProject]);
 
+  useEffect(() => {
+    // Дополнительная загрузка при изменении проекта
+    if (projectStore.hasSelectedProject) {
+      referenceDataStore.loadAllReferenceData();
+      transmittalStore.loadTransmittals(projectStore.selectedProject.id);
+    }
+  }, [projectStore.selectedProject]);
+  
   // Фильтрация трансмитталов
   const filteredTransmittals = transmittalStore.transmittals.filter(t => {
     const statusMatch = filterStatus === 'all' || t.status?.toLowerCase() === filterStatus.toLowerCase();
@@ -384,7 +379,7 @@ const TransmittalsPage: React.FC = observer(() => {
           <TransmittalTable
             transmittals={displayedTransmittals}
             totalCount={filteredTransmittals.length}
-            isLoading={transmittalStore.isLoading}
+            isLoading={transmittalStore.isLoading && transmittalStore.transmittals.length === 0}
             error={transmittalStore.error}
             visibleCols={transmittalSettings.visibleCols}
             columnOrder={transmittalSettings.columnOrder}

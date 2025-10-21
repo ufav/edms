@@ -6,6 +6,7 @@ class ReferenceDataStore {
   contacts: Contact[] = [];
   companyRoles: CompanyRole[] = [];
   users: User[] = [];
+  transmittalStatuses: any[] = [];
   
   isLoading = false;
   error: string | null = null;
@@ -15,6 +16,7 @@ class ReferenceDataStore {
   isContactsLoaded = false;
   isCompanyRolesLoaded = false;
   isUsersLoaded = false;
+  isTransmittalStatusesLoaded = false;
 
   constructor() {
     makeAutoObservable(this);
@@ -57,7 +59,7 @@ class ReferenceDataStore {
     } catch (error) {
       console.error('Error loading reference data:', error);
       runInAction(() => {
-        this.error = `Ошибка загрузки справочных данных: ${error.message || 'Неизвестная ошибка'}`;
+        this.error = `Ошибка загрузки справочных данных: ${error instanceof Error ? error.message : 'Неизвестная ошибка'}`;
       });
     } finally {
       runInAction(() => {
@@ -100,16 +102,26 @@ class ReferenceDataStore {
     return user?.full_name || 'Неизвестный пользователь';
   }
 
+  // Установить статусы трансмитталов
+  setTransmittalStatuses(statuses: any[]) {
+    runInAction(() => {
+      this.transmittalStatuses = statuses;
+      this.isTransmittalStatusesLoaded = true;
+    });
+  }
+
   // Очистка данных
   clearAll() {
     this.companies = [];
     this.contacts = [];
     this.companyRoles = [];
     this.users = [];
+    this.transmittalStatuses = [];
     this.isCompaniesLoaded = false;
     this.isContactsLoaded = false;
     this.isCompanyRolesLoaded = false;
     this.isUsersLoaded = false;
+    this.isTransmittalStatusesLoaded = false;
     this.error = null;
   }
 }

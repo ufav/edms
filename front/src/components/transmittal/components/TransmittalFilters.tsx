@@ -18,6 +18,7 @@ import {
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import { transmittalsApi } from '../../../api/client';
+import referenceDataStore from '../../../stores/ReferenceDataStore';
 
 export interface TransmittalFiltersProps {
   searchTerm: string;
@@ -42,12 +43,22 @@ export const TransmittalFilters: React.FC<TransmittalFiltersProps> = ({
   const [statuses, setStatuses] = useState<any[]>([]);
   const [statusesLoading, setStatusesLoading] = useState(true);
 
-  // Загружаем статусы при монтировании компонента
+  // Загружаем статусы при монтировании компонента с кешированием
   useEffect(() => {
     const loadStatuses = async () => {
       try {
+        // Проверяем, есть ли уже загруженные статусы в referenceDataStore
+        if (referenceDataStore.transmittalStatuses && referenceDataStore.transmittalStatuses.length > 0) {
+          setStatuses(referenceDataStore.transmittalStatuses);
+          setStatusesLoading(false);
+          return;
+        }
+        
         const statusesData = await transmittalsApi.getStatuses();
         setStatuses(statusesData);
+        
+        // Сохраняем в referenceDataStore для кеширования
+        referenceDataStore.setTransmittalStatuses(statusesData);
       } catch (error) {
         console.error('Error loading transmittal statuses:', error);
       } finally {

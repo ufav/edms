@@ -21,8 +21,8 @@ export const useDocumentDataLoading = (): UseDocumentDataLoadingReturn => {
     if (projectStore.hasSelectedProject && projectStore.selectedProject) {
       const projectId = projectStore.selectedProject.id;
       
-      // Загружаем документы
-      documentStore.loadDocuments(projectId);
+      // Загружаем документы с кешированием (без статуса, чтобы получить все документы)
+      documentStore.loadDocuments(projectId, false, 'all');
       
       // Загружаем дисциплины проекта для боковой панели
       disciplineStore.loadDisciplines(projectId);

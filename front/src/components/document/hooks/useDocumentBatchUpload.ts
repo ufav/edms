@@ -54,7 +54,7 @@ export const useDocumentBatchUpload = ({
       const result = await documentsApi.importByPaths(formData);
         
       // Обновляем список документов
-      documentStore.loadDocuments(projectStore.selectedProject.id);
+      documentStore.loadDocuments(projectStore.selectedProject.id, false, 'all');
       
       // Закрываем диалог и очищаем состояние
       handleClose();

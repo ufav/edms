@@ -73,8 +73,9 @@ const DocumentsPage: React.FC = observer(() => {
   
   // Активные ревизии автоматически загружаются в useActiveRevisions хуке
   
-  // Принудительная загрузка активных ревизий при монтировании
+
   useEffect(() => {
+    // Дополнительная загрузка при изменении проекта
     if (projectStore.selectedProject?.id) {
       refreshActiveRevisions();
     }
@@ -127,8 +128,15 @@ const DocumentsPage: React.FC = observer(() => {
     filterStatus,
     searchTerm,
     selectedDisciplineId,
+    selectedDocumentTypeId,
+    selectedRevisionDescriptionId,
+    dateRange,
     setFilterStatus,
     setSearchTerm,
+    setSelectedDisciplineId,
+    setSelectedDocumentTypeId,
+    setSelectedRevisionDescriptionId,
+    setDateRange,
     filteredDocuments,
   } = useDocumentFilters();
 
@@ -264,7 +272,7 @@ const DocumentsPage: React.FC = observer(() => {
       alert(t('documents.workflow_started'));
       handleCloseWorkflow();
       
-      documentStore.loadDocuments(projectStore.selectedProject!.id);
+      documentStore.loadDocuments(projectStore.selectedProject!.id, false, 'all');
     } catch (error) {
       alert(t('documents.workflow_error'));
     }
@@ -381,8 +389,16 @@ const DocumentsPage: React.FC = observer(() => {
         <DocumentFilters
           searchTerm={searchTerm}
           filterStatus={filterStatus}
+          selectedDisciplineId={selectedDisciplineId}
+          selectedDocumentTypeId={selectedDocumentTypeId}
+          selectedRevisionDescriptionId={selectedRevisionDescriptionId}
+          dateRange={dateRange}
           onSearchChange={setSearchTerm}
           onStatusChange={setFilterStatus}
+          onDisciplineChange={setSelectedDisciplineId}
+          onDocumentTypeChange={setSelectedDocumentTypeId}
+          onRevisionDescriptionChange={setSelectedRevisionDescriptionId}
+          onDateRangeChange={setDateRange}
           onSettingsClick={() => setSettingsOpen(true)}
         />
 

@@ -25,6 +25,8 @@ class ProjectStore {
   isLoading = false;
   error: string | null = null;
   isLoaded = false; // Флаг для отслеживания загрузки
+  lastLoadedAt: number | null = null; // Время последней загрузки
+  cacheTTL = 5 * 60 * 1000; // 5 минут TTL для кеша
 
   constructor() {
     makeAutoObservable(this);
@@ -33,10 +35,15 @@ class ProjectStore {
 
   // Загрузка проектов из API
   async loadProjects(force = false) {
-    // Если проекты уже загружены, не загружаем повторно (если не принудительная загрузка)
-    if (this.isLoaded && !force) {
+    // Проверяем TTL кеша
+    const now = Date.now();
+    const isCacheExpired = this.lastLoadedAt && (now - this.lastLoadedAt) > this.cacheTTL;
+    
+    // Если проекты уже загружены и кеш не истек, не загружаем повторно (если не принудительная загрузка)
+    if (this.isLoaded && !force && !isCacheExpired) {
       return;
     }
+    
     
     // Принудительная очистка кэша
     if (force) {
@@ -85,6 +92,7 @@ class ProjectStore {
           return dateB - dateA; // Убывающий порядок (новые сверху)
         });
         this.isLoaded = true;
+        this.lastLoadedAt = now;
       });
     } catch (error) {
       runInAction(() => {
@@ -152,6 +160,19 @@ class ProjectStore {
     this.selectedProject = null;
     this.error = null;
     this.isLoaded = false;
+    this.lastLoadedAt = null;
+  }
+
+  // Принудительное обновление проектов
+  async refreshProjects() {
+    await this.loadProjects(true);
+  }
+
+  // Проверка, устарел ли кеш
+  get isCacheStale(): boolean {
+    if (!this.lastLoadedAt) return true;
+    const now = Date.now();
+    return (now - this.lastLoadedAt) > this.cacheTTL;
   }
 }
 
