@@ -488,7 +488,9 @@ const WorkflowPresetsPage: React.FC = observer(() => {
                       }))}
                       label={t('workflows.fields.revision_description')}
                     >
-                      {workflowStore.revisionDescriptions.map((rd) => (
+                      {workflowStore.revisionDescriptions
+                        .sort((a, b) => a.code.localeCompare(b.code))
+                        .map((rd) => (
                         <MenuItem key={rd.id} value={rd.id}>
                           {rd.code} - {rd.description_native || rd.description}
                         </MenuItem>

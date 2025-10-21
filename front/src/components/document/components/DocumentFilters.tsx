@@ -217,7 +217,9 @@ export const DocumentFilters: React.FC<DocumentFiltersProps> = ({
           }}
         >
           <MenuItem value="all">{t('filter.all')}</MenuItem>
-          {disciplineStore.disciplines.map((discipline) => (
+          {disciplineStore.disciplines
+            .sort((a, b) => a.code.localeCompare(b.code))
+            .map((discipline) => (
             <MenuItem key={discipline.id} value={discipline.id}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
                 <Box sx={{ minWidth: '60px' }}>
@@ -267,7 +269,9 @@ export const DocumentFilters: React.FC<DocumentFiltersProps> = ({
           }}
         >
           <MenuItem value="all">{t('filter.all')}</MenuItem>
-          {documentTypes.map((type) => (
+          {documentTypes
+            .sort((a, b) => a.code.localeCompare(b.code))
+            .map((type) => (
             <MenuItem key={type.id} value={type.id}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
                 <Box sx={{ minWidth: '60px' }}>
@@ -296,7 +300,9 @@ export const DocumentFilters: React.FC<DocumentFiltersProps> = ({
           }}
         >
           <MenuItem value="all">{t('filter.all')}</MenuItem>
-          {revisionDescriptions.map((description) => (
+          {revisionDescriptions
+            .sort((a, b) => a.code.localeCompare(b.code))
+            .map((description) => (
             <MenuItem key={description.id} value={description.id}>
               {description.code} - {i18n.language === 'en' && description.description && description.description.trim() ? description.description : description.description_native}
             </MenuItem>

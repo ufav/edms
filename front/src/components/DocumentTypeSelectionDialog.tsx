@@ -98,7 +98,9 @@ const DocumentTypeSelectionDialog: React.FC<DocumentTypeSelectionDialogProps> = 
             <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
               Выберите один или несколько типов документов:
             </Typography>
-            {documentTypes.map((docType) => (
+            {documentTypes
+              .sort((a, b) => a.code.localeCompare(b.code))
+              .map((docType) => (
               <FormControlLabel
                 key={docType.id}
                 control={

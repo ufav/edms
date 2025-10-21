@@ -41,7 +41,9 @@ const RevisionsTab: React.FC<RevisionsTabProps> = ({
         />
         <CardContent>
           <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, maxHeight: 200, overflow: 'auto' }}>
-            {revisionDescriptions.map((revisionDescription) => (
+            {revisionDescriptions
+              .sort((a, b) => a.code.localeCompare(b.code))
+              .map((revisionDescription) => (
               <Chip
                 key={revisionDescription.id}
                 label={`${revisionDescription.code} - ${getRevisionDescriptionName(revisionDescription)}`}

@@ -534,7 +534,9 @@ const DocumentsPage: React.FC = observer(() => {
                 <ListItemButton selected={selectedDisciplineId === null} onClick={() => setSelectedDisciplineId(null)}>
                   {t('filter.all')}
                 </ListItemButton>
-                {disciplineStore.disciplines.map((d) => (
+                {disciplineStore.disciplines
+                  .sort((a, b) => a.code.localeCompare(b.code))
+                  .map((d) => (
                   <ListItemButton key={d.id} selected={selectedDisciplineId === d.id} onClick={() => setSelectedDisciplineId(d.id)}>
                     {d.code} - {(d.name_en && i18n.language === 'en') ? d.name_en : d.name}
                   </ListItemButton>

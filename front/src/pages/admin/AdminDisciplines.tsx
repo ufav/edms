@@ -267,7 +267,7 @@ const AdminDisciplines: React.FC = () => {
               </TableRow>
             </TableHead>
             <TableBody>
-              {disciplines.map((discipline) => (
+              {disciplines.sort((a, b) => a.code.localeCompare(b.code)).map((discipline) => (
                 <TableRow key={discipline.id}>
                   <TableCell>
                     <Typography variant="subtitle2" fontWeight="bold">
@@ -332,7 +332,7 @@ const AdminDisciplines: React.FC = () => {
           </Button>
         </Box>
 
-        {disciplines.map((discipline) => {
+        {disciplines.sort((a, b) => a.code.localeCompare(b.code)).map((discipline) => {
           const disciplineDocumentTypes = getDocumentTypesForDiscipline(discipline.id);
           if (disciplineDocumentTypes.length === 0) return null;
 
@@ -458,7 +458,7 @@ const AdminDisciplines: React.FC = () => {
               required
             >
               <MenuItem value="">Выберите дисциплину</MenuItem>
-              {disciplines.map((discipline) => (
+              {disciplines.sort((a, b) => a.code.localeCompare(b.code)).map((discipline) => (
                 <MenuItem key={discipline.id} value={discipline.id}>
                   {discipline.name}
                 </MenuItem>
