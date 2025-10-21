@@ -32,6 +32,13 @@ class Settings(BaseSettings):
     MAX_FILE_SIZE: int = int(os.getenv('MAX_FILE_SIZE', str(50 * 1024 * 1024)))  # 50MB
     ALLOWED_FILE_TYPES: str = os.getenv('ALLOWED_FILE_TYPES', "pdf,doc,docx,xls,xlsx,ppt,pptx,txt,jpg,jpeg,png,gif")
     
+    # MinIO/S3 Storage
+    MINIO_ENDPOINT: str = os.getenv('MINIO_ENDPOINT', 'http://localhost:9000')
+    MINIO_ACCESS_KEY: str = os.getenv('MINIO_ACCESS_KEY', 'admin')
+    MINIO_SECRET_KEY: str = os.getenv('MINIO_SECRET_KEY', 'adminpassword')
+    MINIO_BUCKET: str = os.getenv('MINIO_BUCKET', 'docste-files')
+    USE_MINIO: bool = os.getenv('USE_MINIO', 'false').lower() == 'true'
+    
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = [origin.strip() for origin in os.getenv(
         'BACKEND_CORS_ORIGINS',

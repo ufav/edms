@@ -73,8 +73,7 @@ class DocumentStore {
             discipline_name: apiDoc.discipline_name,
             discipline_code: apiDoc.discipline_code,
             document_type_name: apiDoc.document_type_name,
-            document_type_code: apiDoc.document_type_code,
-            drs: apiDoc.drs
+            document_type_code: apiDoc.document_type_code
           };
           });
           this.currentProjectId = projectId || null;

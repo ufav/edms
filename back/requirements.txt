@@ -27,3 +27,7 @@ httpx==0.25.2
 # Excel processing
 pandas==2.1.4
 openpyxl==3.1.2
+
+# MinIO/S3 storage
+aiobotocore==2.21.1
+boto3==1.37.1

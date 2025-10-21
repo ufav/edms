@@ -22,11 +22,32 @@ from app.models.document import Document, DocumentRevision
 from app.models.discipline import Discipline, DocumentType
 from app.models.discipline import Discipline, DocumentType
 from app.models.references import Language, WorkflowStatus
-from app.models.project import ProjectDisciplineDocumentType, ProjectMember
+from app.models.project import Project, ProjectDisciplineDocumentType, ProjectMember
 from app.models.document_workflow_history import DocumentWorkflowHistory
 from app.services.auth import get_current_active_user
+from app.services.minio_service import minio_service
 
 router = APIRouter()
+
+def generate_minio_key(
+    project_code: str,
+    document_number: str,
+    revision_code: str,
+    revision_number: str,
+    revision_description_id: int,
+    revision_id: int,
+    filename: str
+) -> str:
+    """Generate MinIO key for file storage"""
+    return minio_service.generate_file_key(
+        project_code,
+        document_number,
+        revision_code,
+        revision_number,
+        revision_description_id,
+        revision_id,
+        filename
+    )
 
 class DocumentCreate(BaseModel):
     title: str
@@ -340,23 +361,18 @@ async def upload_document(
         if file_extension not in allowed:
             raise HTTPException(status_code=400, detail="Неподдерживаемый тип файла")
     
-    # Генерируем уникальное имя файла
-    file_uuid = str(uuid.uuid4())
-    file_extension = file.filename.split('.')[-1] if '.' in file.filename else ''
-    new_filename = f"{file_uuid}.{file_extension}"
-    
-    # Сохраняем файл
-    file_path = os.path.join(settings.UPLOAD_DIR, new_filename)
-    with open(file_path, "wb") as buffer:
-        content = await file.read()
-        buffer.write(content)
+    # Получаем информацию о проекте
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Проект не найден")
     
     # Создаем запись в базе данных
     db_document = Document(
         title=title or file.filename,
         title_native=title_native,  # Переименовано из description
         remarks=None,  # Примечания (можно добавить в будущем)
-        project_id=project_id
+        project_id=project_id,
+        created_by=current_user.id
     )
     
     db.add(db_document)
@@ -366,15 +382,17 @@ async def upload_document(
     # Получаем ID статуса "Draft" из workflow_statuses
     draft_workflow_status = db.query(WorkflowStatus).filter(WorkflowStatus.name == "Draft").first()
     
+    # Генерируем номер документа (если не задан)
+    document_number = db_document.number or f"DOC-{db_document.id:04d}"
+    
     # Создаем первую ревизию документа
     revision_row = DocumentRevision(
         document_id=db_document.id,
-        revision="1.0",
-        file_path=file_path,
+        number="01",  # Первая ревизия
         file_name=file.filename,
         file_size=file.size,
         file_type=file.content_type,
-        change_description=change_description or "First revision - Первая ревизия",
+        change_description="First revision - Первая ревизия",
         uploaded_by=current_user.id,
         workflow_status_id=draft_workflow_status.id if draft_workflow_status else None,
     )
@@ -383,16 +401,63 @@ async def upload_document(
     db.commit()
     db.refresh(revision_row)
     
-    # Попытаемся получить DRS из project_discipline_document_types
-    drs_value = None
-    if document.project_id and document.discipline_id and document.document_type_id:
-        pddt = db.query(ProjectDisciplineDocumentType).filter(
-            ProjectDisciplineDocumentType.project_id == document.project_id,
-            ProjectDisciplineDocumentType.discipline_id == document.discipline_id,
-            ProjectDisciplineDocumentType.document_type_id == document.document_type_id,
-        ).first()
-        if pddt:
-            drs_value = pddt.drs
+    # Читаем содержимое файла один раз
+    content = await file.read()
+    
+    # Определяем способ хранения файла
+    print(f"DEBUG: USE_MINIO = {settings.USE_MINIO}")
+    if settings.USE_MINIO:
+        # Используем MinIO для хранения
+        print(f"DEBUG: Uploading to MinIO - project_code: {project.project_code}, document_number: {document_number}")
+        try:
+            # Генерируем ключ для MinIO
+            minio_key = generate_minio_key(
+                project_code=project.project_code,
+                document_number=document_number,
+                revision_code="A",  # По умолчанию
+                revision_number="01",
+                revision_description_id=1,  # По умолчанию
+                revision_id=revision_row.id,
+                filename=file.filename
+            )
+            
+            # Загружаем в MinIO
+            success = await minio_service.upload_file(
+                file_content=content,
+                file_key=minio_key,
+                content_type=file.content_type
+            )
+            
+            if not success:
+                raise HTTPException(status_code=500, detail="Ошибка загрузки файла в MinIO")
+            
+            # Сохраняем ключ MinIO в базе данных
+            revision_row.file_path = minio_key
+            db.commit()
+            
+        except Exception as e:
+            # Если MinIO недоступен, удаляем созданные записи
+            db.delete(revision_row)
+            db.delete(db_document)
+            db.commit()
+            raise HTTPException(status_code=500, detail=f"Ошибка MinIO: {str(e)}")
+    else:
+        # Используем локальное хранение
+        file_uuid = str(uuid.uuid4())
+        file_extension = file.filename.split('.')[-1] if '.' in file.filename else ''
+        new_filename = f"{file_uuid}.{file_extension}"
+        
+        # Создаем директорию если не существует
+        os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
+        
+        # Сохраняем файл локально
+        file_path = os.path.join(settings.UPLOAD_DIR, new_filename)
+        with open(file_path, "wb") as buffer:
+            buffer.write(content)
+        
+        # Сохраняем путь к файлу в базе данных
+        revision_row.file_path = file_path
+        db.commit()
 
     return {
         "id": db_document.id,
@@ -437,16 +502,13 @@ async def create_document_with_revision(
         if file_extension not in allowed:
             raise HTTPException(status_code=400, detail="Неподдерживаемый тип файла")
     
-    # Генерируем уникальное имя файла
-    file_uuid = str(uuid.uuid4())
-    file_extension = file.filename.split('.')[-1] if '.' in file.filename else ''
-    new_filename = f"{file_uuid}.{file_extension}"
+    # Получаем информацию о проекте
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Проект не найден")
     
-    # Сохраняем файл
-    file_path = os.path.join(settings.UPLOAD_DIR, new_filename)
-    with open(file_path, "wb") as buffer:
-        content = await file.read()
-        buffer.write(content)
+    # Читаем содержимое файла один раз
+    content = await file.read()
     
     # Создаем запись документа в базе данных
     db_document = Document(
@@ -473,13 +535,22 @@ async def create_document_with_revision(
     # Получаем ID статуса "Draft" из workflow_statuses
     draft_workflow_status = db.query(WorkflowStatus).filter(WorkflowStatus.name == "Draft").first()
     
+    # Временно сохраняем файл локально для определения пути
+    upload_dir = os.path.join(settings.UPLOAD_DIR, f"project_{project_id}")
+    os.makedirs(upload_dir, exist_ok=True)
+    file_extension = file.filename.split('.')[-1] if '.' in file.filename else ''
+    unique_filename = f"{uuid.uuid4()}.{file_extension}" if file_extension else str(uuid.uuid4())
+    temp_file_path = os.path.join(upload_dir, unique_filename)
+    with open(temp_file_path, "wb") as buffer:
+        buffer.write(content)
+    
     # Создаем первую ревизию документа
     revision_row = DocumentRevision(
         document_id=db_document.id,
         number="01",
-        file_path=file_path,
+        file_path=temp_file_path,  # Временно используем локальный путь
         file_name=file.filename,
-        file_size=file.size,
+        file_size=len(content),
         file_type=file.content_type,
         change_description=change_description or "First revision - Первая ревизия",
         uploaded_by=current_user.id,
@@ -492,6 +563,50 @@ async def create_document_with_revision(
     db.add(revision_row)
     db.commit()
     db.refresh(revision_row)
+    
+    # Определяем способ хранения файла
+    print(f"DEBUG: USE_MINIO = {settings.USE_MINIO}")
+    if settings.USE_MINIO:
+        # Используем MinIO для хранения (как в docste1)
+        print(f"DEBUG: Starting MinIO upload...")
+        try:
+            # Генерируем ключ для MinIO
+            document_number = number or f"DOC-{db_document.id:04d}"
+            revision_key_prefix = f"{project.project_code}/{document_number}/A01_{revision_description_id or 1}_{revision_row.id}"
+            file_key = f"{revision_key_prefix}/{file.filename}"
+            
+            # Загружаем файл в MinIO напрямую
+            import aiobotocore.session
+            session = aiobotocore.session.get_session()
+            async with session.create_client(
+                's3',
+                endpoint_url=settings.MINIO_ENDPOINT,
+                aws_access_key_id=settings.MINIO_ACCESS_KEY,
+                aws_secret_access_key=settings.MINIO_SECRET_KEY
+            ) as client:
+                await client.put_object(
+                    Bucket=settings.MINIO_BUCKET,
+                    Key=file_key,
+                    Body=content
+                )
+                print(f"DEBUG: File uploaded to MinIO: {file_key}")
+            
+            # Обновляем путь к файлу в базе данных
+            revision_row.file_path = file_key
+            db.commit()
+            
+            # Удаляем временный локальный файл
+            if os.path.exists(temp_file_path):
+                os.remove(temp_file_path)
+                print(f"DEBUG: Removed temporary file: {temp_file_path}")
+            
+        except Exception as e:
+            print(f"DEBUG: MinIO upload error: {str(e)}")
+            # Если MinIO недоступен, оставляем локальный файл
+            print(f"DEBUG: Keeping local file: {temp_file_path}")
+    else:
+        # Используем локальное хранение (файл уже сохранен)
+        print(f"DEBUG: Using local storage: {temp_file_path}")
     
     # Создаем запись в истории workflow для первой ревизии
     if draft_workflow_status:
@@ -946,15 +1061,15 @@ async def create_document_revision(
         if file_extension not in allowed:
             raise HTTPException(status_code=400, detail="Неподдерживаемый тип файла")
 
-    # Куда сохраняем
+    # Читаем содержимое файла один раз
+    content = await file.read()
+    
+    # Временно сохраняем файл локально для определения пути
     upload_dir = os.path.join(settings.UPLOAD_DIR, f"project_{document.project_id}")
     os.makedirs(upload_dir, exist_ok=True)
-
-    # Сохраняем файл
     unique_filename = f"{uuid.uuid4()}.{file_extension}" if file_extension else str(uuid.uuid4())
-    file_path = os.path.join(upload_dir, unique_filename)
-    content = await file.read()
-    with open(file_path, "wb") as buffer:
+    temp_file_path = os.path.join(upload_dir, unique_filename)
+    with open(temp_file_path, "wb") as buffer:
         buffer.write(content)
 
     # Получаем ID статуса "Cancelled"
@@ -1026,7 +1141,7 @@ async def create_document_revision(
     revision_row = DocumentRevision(
         document_id=document.id,
         number=new_revision,
-        file_path=file_path,
+        file_path=temp_file_path,  # Временно используем локальный путь
         file_name=file.filename,
         file_size=len(content),
         file_type=file.content_type or file_extension,
@@ -1040,6 +1155,55 @@ async def create_document_revision(
     db.add(revision_row)
     db.commit()
     db.refresh(revision_row)
+    
+    # Определяем способ хранения файла
+    print(f"DEBUG: USE_MINIO = {settings.USE_MINIO}")
+    if settings.USE_MINIO:
+        # Используем MinIO для хранения
+        print(f"DEBUG: Starting MinIO upload for revision...")
+        try:
+            # Получаем информацию о проекте
+            project = db.query(Project).filter(Project.id == document.project_id).first()
+            if not project:
+                raise HTTPException(status_code=404, detail="Проект не найден")
+            
+            # Генерируем ключ для MinIO
+            document_number = document.number or f"DOC-{document.id:04d}"
+            revision_key_prefix = f"{project.project_code}/{document_number}/A01_{new_revision_description_id or 1}_{revision_row.id}"
+            file_key = f"{revision_key_prefix}/{file.filename}"
+            
+            # Загружаем файл в MinIO напрямую
+            import aiobotocore.session
+            session = aiobotocore.session.get_session()
+            async with session.create_client(
+                's3',
+                endpoint_url=settings.MINIO_ENDPOINT,
+                aws_access_key_id=settings.MINIO_ACCESS_KEY,
+                aws_secret_access_key=settings.MINIO_SECRET_KEY
+            ) as client:
+                await client.put_object(
+                    Bucket=settings.MINIO_BUCKET,
+                    Key=file_key,
+                    Body=content
+                )
+                print(f"DEBUG: File uploaded to MinIO: {file_key}")
+            
+            # Обновляем путь к файлу в базе данных
+            revision_row.file_path = file_key
+            db.commit()
+            
+            # Удаляем временный локальный файл
+            if os.path.exists(temp_file_path):
+                os.remove(temp_file_path)
+                print(f"DEBUG: Removed temporary file: {temp_file_path}")
+            
+        except Exception as e:
+            print(f"DEBUG: MinIO upload error: {str(e)}")
+            # Если MinIO недоступен, оставляем локальный файл
+            print(f"DEBUG: Keeping local file: {temp_file_path}")
+    else:
+        # Используем локальное хранение (файл уже сохранен)
+        print(f"DEBUG: Using local storage: {temp_file_path}")
     
     # Создаем запись в document_workflow_history для новой ревизии
     from app.models.document_workflow_history import DocumentWorkflowHistory
@@ -1138,16 +1302,58 @@ async def download_document(
     if not latest_revision or not latest_revision.file_path:
         raise HTTPException(status_code=404, detail="Файл не найден")
     
-    # Проверяем существование файла
-    if not os.path.exists(latest_revision.file_path):
-        raise HTTPException(status_code=404, detail="Файл не найден")
-    
-    # Возвращаем файл
-    return FileResponse(
-        path=latest_revision.file_path,
-        filename=latest_revision.file_name,
-        media_type='application/octet-stream'
-    )
+    # Определяем способ получения файла
+    if settings.USE_MINIO:
+        # Получаем файл из MinIO
+        print(f"DEBUG: Downloading from MinIO - file_path: {latest_revision.file_path}")
+        try:
+            # Получаем файл напрямую из MinIO через S3 клиент
+            from fastapi.responses import StreamingResponse
+            from app.services.minio_service import get_s3_client
+            import mimetypes
+            import aiobotocore.session
+            
+            session = aiobotocore.session.get_session()
+            async with session.create_client(
+                's3',
+                endpoint_url=settings.MINIO_ENDPOINT,
+                aws_access_key_id=settings.MINIO_ACCESS_KEY,
+                aws_secret_access_key=settings.MINIO_SECRET_KEY
+            ) as client:
+                response = await client.get_object(
+                    Bucket=settings.MINIO_BUCKET,
+                    Key=latest_revision.file_path
+                )
+                content = response['Body']
+                
+                # Определяем MIME тип
+                mime_type, _ = mimetypes.guess_type(latest_revision.file_name)
+                media_type = mime_type or 'application/octet-stream'
+                
+                # Правильно кодируем имя файла для HTTP заголовков
+                import urllib.parse
+                encoded_filename = urllib.parse.quote(latest_revision.file_name.encode('utf-8'))
+                
+                return StreamingResponse(
+                    content,
+                    media_type=media_type,
+                    headers={
+                        "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}",
+                        "Content-Type": media_type
+                    }
+                )
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Ошибка получения файла из MinIO: {str(e)}")
+    else:
+        # Используем локальное хранение
+        if not os.path.exists(latest_revision.file_path):
+            raise HTTPException(status_code=404, detail="Файл не найден")
+        
+        return FileResponse(
+            path=latest_revision.file_path,
+            filename=latest_revision.file_name,
+            media_type='application/octet-stream'
+        )
 
 
 @router.get("/{document_id}/revisions/{revision_id}/download")
@@ -1184,16 +1390,56 @@ async def download_document_revision(
     if not revision.file_path:
         raise HTTPException(status_code=404, detail="Файл не найден")
     
-    # Проверяем существование файла
-    if not os.path.exists(revision.file_path):
-        raise HTTPException(status_code=404, detail="Файл не найден")
-    
-    # Возвращаем файл
-    return FileResponse(
-        path=revision.file_path,
-        filename=revision.file_name,
-        media_type='application/octet-stream'
-    )
+    # Определяем способ получения файла
+    if settings.USE_MINIO:
+        # Получаем файл из MinIO
+        try:
+            # Получаем файл напрямую из MinIO через S3 клиент
+            from fastapi.responses import StreamingResponse
+            import mimetypes
+            import aiobotocore.session
+            
+            session = aiobotocore.session.get_session()
+            async with session.create_client(
+                's3',
+                endpoint_url=settings.MINIO_ENDPOINT,
+                aws_access_key_id=settings.MINIO_ACCESS_KEY,
+                aws_secret_access_key=settings.MINIO_SECRET_KEY
+            ) as client:
+                response = await client.get_object(
+                    Bucket=settings.MINIO_BUCKET,
+                    Key=revision.file_path
+                )
+                content = response['Body']
+                
+                # Определяем MIME тип
+                mime_type, _ = mimetypes.guess_type(revision.file_name)
+                media_type = mime_type or 'application/octet-stream'
+                
+                # Правильно кодируем имя файла для HTTP заголовков
+                import urllib.parse
+                encoded_filename = urllib.parse.quote(revision.file_name.encode('utf-8'))
+                
+                return StreamingResponse(
+                    content,
+                    media_type=media_type,
+                    headers={
+                        "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}",
+                        "Content-Type": media_type
+                    }
+                )
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Ошибка получения файла из MinIO: {str(e)}")
+    else:
+        # Используем локальное хранение
+        if not os.path.exists(revision.file_path):
+            raise HTTPException(status_code=404, detail="Файл не найден")
+        
+        return FileResponse(
+            path=revision.file_path,
+            filename=revision.file_name,
+            media_type='application/octet-stream'
+        )
 
 
 @router.patch("/{document_id}/soft-delete")
