@@ -231,6 +231,7 @@
   "documents.load_revisions_error": "Ошибка загрузки ревизий",
   "documents.not_found": "Документ не найден",
   "documents.download_error": "Ошибка при скачивании документа",
+  "documents.file_not_found": "Файл не найден",
   "documents.workflow_started": "Маршрут согласования запущен",
   "documents.workflow_error": "Ошибка запуска маршрута согласования",
   "documents.delete_error": "Ошибка удаления документа",

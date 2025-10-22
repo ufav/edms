@@ -231,6 +231,7 @@
   "documents.load_revisions_error": "Error loading revisions",
   "documents.not_found": "Document not found",
   "documents.download_error": "Error downloading document",
+  "documents.file_not_found": "File not found",
   "documents.workflow_started": "Approval workflow started",
   "documents.workflow_error": "Error starting approval workflow",
   "documents.delete_error": "Error deleting document",

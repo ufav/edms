@@ -200,6 +200,8 @@ const DocumentsPage: React.FC = observer(() => {
     handleShowDocumentDetails,
     handleDownload,
     handleCloseNotification,
+    errorNotification,
+    handleCloseErrorNotification,
   } = useDocumentActions({ 
     t, 
     onCloseDialog: handleCloseDocumentDetails,
@@ -646,6 +648,14 @@ const DocumentsPage: React.FC = observer(() => {
           message={transmittalNotification.message}
           severity={transmittalNotification.severity}
           onClose={handleCloseTransmittalNotification}
+        />
+
+        {/* Уведомления об ошибках скачивания */}
+        <NotificationSnackbar
+          open={errorNotification.open}
+          message={errorNotification.message}
+          severity="error"
+          onClose={handleCloseErrorNotification}
         />
       </Box>
     </ProjectRequired>

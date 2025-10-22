@@ -70,3 +70,22 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 }
+
+/* Стили для полос прокрутки Autocomplete */
+.MuiAutocomplete-listbox::-webkit-scrollbar {
+  width: 8px;
+}
+
+.MuiAutocomplete-listbox::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+.MuiAutocomplete-listbox::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 4px;
+}
+
+.MuiAutocomplete-listbox::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}

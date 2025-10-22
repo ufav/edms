@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import {
   Box,
   Typography,
@@ -44,6 +44,17 @@ const DisciplinesTypesTab: React.FC<DisciplinesTypesTabProps> = ({
   
   const getDisciplineName = (d: any) => (i18n.language === 'en' && d.name_en) ? d.name_en : d.name;
   const getDocTypeName = (dt: any) => (i18n.language === 'en' && dt.name_en) ? dt.name_en : dt.name;
+
+  // Мемоизируем отсортированные массивы, чтобы избежать мутации MobX observable
+  const sortedDisciplines = useMemo(() => 
+    [...disciplines].sort((a, b) => a.code.localeCompare(b.code)), 
+    [disciplines]
+  );
+  
+  const sortedDocumentTypes = useMemo(() => 
+    [...documentTypes].sort((a, b) => a.code.localeCompare(b.code)), 
+    [documentTypes]
+  );
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
@@ -109,9 +120,7 @@ const DisciplinesTypesTab: React.FC<DisciplinesTypesTabProps> = ({
           <Typography>{t('createProject.messages.loading_disciplines')}</Typography>
         ) : (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {disciplines
-              .sort((a, b) => a.code.localeCompare(b.code))
-              .map((discipline) => (
+            {sortedDisciplines.map((discipline) => (
               <Card key={discipline.id} variant="outlined">
                 <CardContent>
                   <FormControlLabel
@@ -139,9 +148,7 @@ const DisciplinesTypesTab: React.FC<DisciplinesTypesTabProps> = ({
                         {t('createProject.types_for_discipline', { name: getDisciplineName(discipline) })}
                       </Typography>
                       <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                        {documentTypes
-                          .sort((a, b) => a.code.localeCompare(b.code))
-                          .map((docType) => (
+                        {sortedDocumentTypes.map((docType) => (
                           <Chip
                             key={docType.id}
                             label={`${docType.code} - ${getDocTypeName(docType)}`}

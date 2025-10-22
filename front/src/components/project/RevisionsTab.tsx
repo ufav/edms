@@ -40,7 +40,27 @@ const RevisionsTab: React.FC<RevisionsTabProps> = ({
           title={t('createProject.sections.revision_descriptions')}
         />
         <CardContent>
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, maxHeight: 200, overflow: 'auto' }}>
+          <Box sx={{ 
+            display: 'flex', 
+            flexWrap: 'wrap', 
+            gap: 1, 
+            maxHeight: 200, 
+            overflow: 'auto',
+            '&::-webkit-scrollbar': {
+              width: '8px',
+            },
+            '&::-webkit-scrollbar-track': {
+              background: '#f1f1f1',
+              borderRadius: '4px',
+            },
+            '&::-webkit-scrollbar-thumb': {
+              background: '#c1c1c1',
+              borderRadius: '4px',
+              '&:hover': {
+                background: '#a8a8a8',
+              },
+            },
+          }}>
             {revisionDescriptions
               .sort((a, b) => a.code.localeCompare(b.code))
               .map((revisionDescription) => (
@@ -71,7 +91,27 @@ const RevisionsTab: React.FC<RevisionsTabProps> = ({
           title={t('createProject.sections.revision_steps')}
         />
         <CardContent>
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, maxHeight: 200, overflow: 'auto' }}>
+          <Box sx={{ 
+            display: 'flex', 
+            flexWrap: 'wrap', 
+            gap: 1, 
+            maxHeight: 200, 
+            overflow: 'auto',
+            '&::-webkit-scrollbar': {
+              width: '8px',
+            },
+            '&::-webkit-scrollbar-track': {
+              background: '#f1f1f1',
+              borderRadius: '4px',
+            },
+            '&::-webkit-scrollbar-thumb': {
+              background: '#c1c1c1',
+              borderRadius: '4px',
+              '&:hover': {
+                background: '#a8a8a8',
+              },
+            },
+          }}>
             {revisionSteps.map((revisionStep) => (
               <Chip
                 key={revisionStep.id}

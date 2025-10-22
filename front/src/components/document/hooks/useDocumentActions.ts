@@ -56,6 +56,12 @@ export const useDocumentActions = ({ t, onCloseDialog, onRefreshActiveRevisions 
     message: string;
   }>({ open: false, message: '' });
 
+  // Состояние для уведомлений об ошибках
+  const [errorNotification, setErrorNotification] = useState<{
+    open: boolean;
+    message: string;
+  }>({ open: false, message: '' });
+
   // Обработчик загрузки документа
   const handleUpload = () => {
     setIsCreatingDocument(true);
@@ -236,39 +242,89 @@ export const useDocumentActions = ({ t, onCloseDialog, onRefreshActiveRevisions 
   // Обработчик скачивания документа
   const handleDownload = async (documentId: number) => {
     try {
+      console.log(`Starting download for document ${documentId}`);
+      
       // Получаем информацию о документе
       const doc = documentStore.documents.find((d: ApiDocument) => d.id === documentId);
       if (!doc) {
+        console.error('Document not found in store:', documentId);
         alert(t('documents.not_found'));
         return;
       }
 
+      console.log('Document found:', doc.file_name);
+      
       // Скачиваем файл
+      console.log('Calling documentsApi.download...');
       const blob = await documentsApi.download(documentId);
+      console.log('Download completed, blob size:', blob.size);
       
       // Создаем ссылку для скачивания
       const url = URL.createObjectURL(blob);
       const link = window.document.createElement('a');
       link.href = url;
       link.download = doc.file_name || `document_${documentId}`;
-      window.document.body.appendChild(link);
-      link.click();
-      window.document.body.removeChild(link);
+      link.style.display = 'none'; // Скрываем ссылку
       
-      // Очищаем URL
-      URL.revokeObjectURL(url);
+      window.document.body.appendChild(link);
+      
+      // Используем setTimeout для асинхронного клика
+      setTimeout(() => {
+        try {
+          link.click();
+          console.log('Download link clicked');
+        } catch (clickError) {
+          console.error('Error clicking download link:', clickError);
+        }
+        
+        // Очищаем через небольшую задержку
+        setTimeout(() => {
+          try {
+            window.document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+            console.log('Download cleanup completed');
+          } catch (cleanupError) {
+            console.error('Error during cleanup:', cleanupError);
+          }
+        }, 100);
+      }, 10);
+      
     } catch (error: any) {
+      console.error('Download error details:', {
+        error,
+        message: error?.message,
+        response: error?.response,
+        status: error?.response?.status,
+        data: error?.response?.data
+      });
+      
       let errorMessage = t('documents.download_error');
       
       if (error?.response?.data?.detail) {
         if (typeof error.response.data.detail === 'string') {
-          errorMessage = error.response.data.detail;
+          const detail = error.response.data.detail.toLowerCase();
+          if (detail.includes('файл не найден')) {
+            errorMessage = t('documents.file_not_found');
+          } else {
+            errorMessage = error.response.data.detail;
+          }
         }
       } else if (error?.message) {
-        errorMessage = error.message;
+        const lower = String(error.message).toLowerCase();
+        if (lower.includes('file not found') || lower.includes('файл не найден')) {
+          errorMessage = t('documents.file_not_found');
+        } else {
+          errorMessage = error.message;
+        }
       }
       
-      alert(errorMessage);
+      console.error('Final error message:', errorMessage);
+      
+      // Показываем уведомление об ошибке
+      setErrorNotification({
+        open: true,
+        message: errorMessage
+      });
     }
   };
 
@@ -316,6 +372,11 @@ export const useDocumentActions = ({ t, onCloseDialog, onRefreshActiveRevisions 
     setSuccessNotification({ open: false, message: '' });
   };
 
+  // Обработчик закрытия уведомления об ошибке
+  const handleCloseErrorNotification = () => {
+    setErrorNotification({ open: false, message: '' });
+  };
+
   return {
     // Состояния
     isCreatingDocument,
@@ -324,6 +385,7 @@ export const useDocumentActions = ({ t, onCloseDialog, onRefreshActiveRevisions 
     documentToDelete,
     deleting,
     successNotification,
+    errorNotification,
     
     // Сеттеры
     setIsCreatingDocument,
@@ -332,6 +394,7 @@ export const useDocumentActions = ({ t, onCloseDialog, onRefreshActiveRevisions 
     setDocumentToDelete,
     setDeleting,
     setSuccessNotification,
+    setErrorNotification,
     
     // Обработчики
     handleUpload,
@@ -342,5 +405,6 @@ export const useDocumentActions = ({ t, onCloseDialog, onRefreshActiveRevisions 
     handleSoftDelete,
     handleConfirmDelete,
     handleCloseNotification,
+    handleCloseErrorNotification,
   };
 };

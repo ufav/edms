@@ -1337,8 +1337,6 @@ async def download_document(
         # Получаем файл из MinIO
         try:
             # Получаем файл напрямую из MinIO через S3 клиент
-            from fastapi.responses import StreamingResponse
-            from app.services.minio_service import get_s3_client
             import mimetypes
             import aiobotocore.session
             
@@ -1353,7 +1351,9 @@ async def download_document(
                     Bucket=settings.MINIO_BUCKET,
                     Key=latest_revision.file_path
                 )
-                content = response['Body']
+                
+                # Читаем весь контент в память для правильной передачи
+                content_bytes = await response['Body'].read()
                 
                 # Определяем MIME тип
                 mime_type, _ = mimetypes.guess_type(latest_revision.file_name)
@@ -1363,16 +1363,26 @@ async def download_document(
                 import urllib.parse
                 encoded_filename = urllib.parse.quote(latest_revision.file_name.encode('utf-8'))
                 
-                return StreamingResponse(
-                    content,
+                # Используем Response вместо StreamingResponse для стабильности
+                from fastapi.responses import Response
+                return Response(
+                    content=content_bytes,
                     media_type=media_type,
                     headers={
                         "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}",
-                        "Content-Type": media_type
+                        "Content-Type": media_type,
+                        "Content-Length": str(len(content_bytes))
                     }
                 )
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Ошибка получения файла из MinIO: {str(e)}")
+            # Проверяем, является ли ошибка "файл не найден"
+            error_str = str(e).lower()
+            if any(keyword in error_str for keyword in ["nosuchkey", "404", "not found", "no such key"]):
+                raise HTTPException(status_code=404, detail="Файл не найден в хранилище")
+            elif "access denied" in error_str or "forbidden" in error_str:
+                raise HTTPException(status_code=403, detail="Нет доступа к файлу в хранилище")
+            else:
+                raise HTTPException(status_code=500, detail=f"Ошибка получения файла из MinIO: {str(e)}")
     else:
         # Используем локальное хранение
         if not os.path.exists(latest_revision.file_path):
@@ -1424,7 +1434,6 @@ async def download_document_revision(
         # Получаем файл из MinIO
         try:
             # Получаем файл напрямую из MinIO через S3 клиент
-            from fastapi.responses import StreamingResponse
             import mimetypes
             import aiobotocore.session
             
@@ -1439,7 +1448,9 @@ async def download_document_revision(
                     Bucket=settings.MINIO_BUCKET,
                     Key=revision.file_path
                 )
-                content = response['Body']
+                
+                # Читаем весь контент в память для правильной передачи
+                content_bytes = await response['Body'].read()
                 
                 # Определяем MIME тип
                 mime_type, _ = mimetypes.guess_type(revision.file_name)
@@ -1449,16 +1460,26 @@ async def download_document_revision(
                 import urllib.parse
                 encoded_filename = urllib.parse.quote(revision.file_name.encode('utf-8'))
                 
-                return StreamingResponse(
-                    content,
+                # Используем Response вместо StreamingResponse для стабильности
+                from fastapi.responses import Response
+                return Response(
+                    content=content_bytes,
                     media_type=media_type,
                     headers={
                         "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}",
-                        "Content-Type": media_type
+                        "Content-Type": media_type,
+                        "Content-Length": str(len(content_bytes))
                     }
                 )
         except Exception as e:
-            raise HTTPException(status_code=500, detail=f"Ошибка получения файла из MinIO: {str(e)}")
+            # Проверяем, является ли ошибка "файл не найден"
+            error_str = str(e).lower()
+            if any(keyword in error_str for keyword in ["nosuchkey", "404", "not found", "no such key"]):
+                raise HTTPException(status_code=404, detail="Файл не найден в хранилище")
+            elif "access denied" in error_str or "forbidden" in error_str:
+                raise HTTPException(status_code=403, detail="Нет доступа к файлу в хранилище")
+            else:
+                raise HTTPException(status_code=500, detail=f"Ошибка получения файла из MinIO: {str(e)}")
     else:
         # Используем локальное хранение
         if not os.path.exists(revision.file_path):

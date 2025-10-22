@@ -804,10 +804,37 @@ export const documentsApi = {
 
   // Скачать документ
   download: async (id: number): Promise<Blob> => {
-    const response = await apiClient.get(`/documents/${id}/download`, {
-      responseType: 'blob',
-    });
-    return response.data;
+    try {
+      const response = await apiClient.get(`/documents/${id}/download`, {
+        responseType: 'blob',
+      });
+      return response.data;
+    } catch (error: any) {
+      console.error('Download error in API client:', error);
+      
+      // Если ошибка 404, проверяем, является ли response.data JSON с сообщением об ошибке
+      if (error.response?.status === 404 && error.response?.data) {
+        try {
+          // Пытаемся прочитать JSON из blob
+          const text = await error.response.data.text();
+          console.log('404 response text:', text);
+          const errorData = JSON.parse(text);
+          console.log('404 error data:', errorData);
+          throw new Error(errorData.detail || 'Файл не найден');
+        } catch (parseError) {
+          console.error('Error parsing 404 response:', parseError);
+          // Если не удалось распарсить JSON, используем стандартное сообщение
+          throw new Error('Файл не найден');
+        }
+      }
+      
+      // Для других ошибок
+      if (error.response?.status) {
+        throw new Error(`Ошибка сервера: ${error.response.status}`);
+      }
+      
+      throw error;
+    }
   },
   
   // Импорт документов по путям из Excel
@@ -871,10 +898,37 @@ export const documentsApi = {
 
   // Скачать ревизию документа
   downloadRevision: async (documentId: number, revisionId: number): Promise<Blob> => {
-    const response = await apiClient.get(`/documents/${documentId}/revisions/${revisionId}/download`, {
-      responseType: 'blob',
-    });
-    return response.data;
+    try {
+      const response = await apiClient.get(`/documents/${documentId}/revisions/${revisionId}/download`, {
+        responseType: 'blob',
+      });
+      return response.data;
+    } catch (error: any) {
+      console.error('Download revision error in API client:', error);
+      
+      // Если ошибка 404, проверяем, является ли response.data JSON с сообщением об ошибке
+      if (error.response?.status === 404 && error.response?.data) {
+        try {
+          // Пытаемся прочитать JSON из blob
+          const text = await error.response.data.text();
+          console.log('404 response text:', text);
+          const errorData = JSON.parse(text);
+          console.log('404 error data:', errorData);
+          throw new Error(errorData.detail || 'Файл не найден');
+        } catch (parseError) {
+          console.error('Error parsing 404 response:', parseError);
+          // Если не удалось распарсить JSON, используем стандартное сообщение
+          throw new Error('Файл не найден');
+        }
+      }
+      
+      // Для других ошибок
+      if (error.response?.status) {
+        throw new Error(`Ошибка сервера: ${error.response.status}`);
+      }
+      
+      throw error;
+    }
   },
 };
 

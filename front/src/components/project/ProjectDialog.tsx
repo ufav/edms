@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { observer } from 'mobx-react-lite';
 import {
   Dialog,
@@ -178,6 +178,9 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
     notes: ''
   });
 
+  // Мемоизированные функции для локализации
+  const getDisciplineDescription = useMemo(() => (d: any) => (i18n.language === 'en' && d.description_en) ? d.description_en : d.description, [i18n.language]);
+  const getRoleName = useMemo(() => (role: any) => (i18n.language === 'en' && role.name_en) ? role.name_en : role.name, [i18n.language]);
 
   // Загружаем данные при открытии диалога
   useEffect(() => {
@@ -889,6 +892,20 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
           height: 700,
           p: 0,
           display: 'flex',
+          '&::-webkit-scrollbar': {
+            width: '8px',
+          },
+          '&::-webkit-scrollbar-track': {
+            background: '#f1f1f1',
+            borderRadius: '4px',
+          },
+          '&::-webkit-scrollbar-thumb': {
+            background: '#c1c1c1',
+            borderRadius: '4px',
+            '&:hover': {
+              background: '#a8a8a8',
+            },
+          },
           flexDirection: 'column'
         }}>
           {error && (
@@ -945,7 +962,21 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
             flex: 1,
             overflow: 'auto',
             p: isMobile ? 1 : 3,
-            pt: 2
+            pt: 2,
+            '&::-webkit-scrollbar': {
+              width: '8px',
+            },
+            '&::-webkit-scrollbar-track': {
+              background: '#f1f1f1',
+              borderRadius: '4px',
+            },
+            '&::-webkit-scrollbar-thumb': {
+              background: '#c1c1c1',
+              borderRadius: '4px',
+              '&:hover': {
+                background: '#a8a8a8',
+              },
+            },
           }}>
 
           {/* Tab 0: Основное */}
@@ -971,7 +1002,7 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
               onDocumentTypeToggle={handleDocumentTypeToggle}
               onImportExcel={handleImportExcel}
               onClearWarnings={clearWarnings}
-              getDisciplineDescription={(d) => (i18n.language === 'en' && d.description_en) ? d.description_en : d.description}
+              getDisciplineDescription={getDisciplineDescription}
             />
           )}
 
@@ -1010,7 +1041,7 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
               onCompanyChange={handleCompanyChange}
               getCompanyName={(company) => referenceDataStore.getCompanyName(company.id)}
               getContactName={(contact) => referenceDataStore.getContactName(contact.id)}
-              getRoleName={(role) => (i18n.language === 'en' && role.name_en) ? role.name_en : role.name}
+              getRoleName={getRoleName}
             />
           )}
 
@@ -1104,7 +1135,22 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
         <DialogTitle>
           {isEditingParticipant ? t('createProject.buttons.edit_participant') : t('createProject.buttons.add_participant')}
         </DialogTitle>
-        <DialogContent>
+        <DialogContent sx={{
+          '&::-webkit-scrollbar': {
+            width: '8px',
+          },
+          '&::-webkit-scrollbar-track': {
+            background: '#f1f1f1',
+            borderRadius: '4px',
+          },
+          '&::-webkit-scrollbar-thumb': {
+            background: '#c1c1c1',
+            borderRadius: '4px',
+            '&:hover': {
+              background: '#a8a8a8',
+            },
+          },
+        }}>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
             <FormControl fullWidth required variant="standard">
               <InputLabel>{t('createProject.fields.company')}</InputLabel>
@@ -1209,7 +1255,22 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
         <DialogTitle>
           {isEditingProjectMember ? t('createProject.buttons.edit_user') : t('createProject.buttons.add_user')}
         </DialogTitle>
-        <DialogContent>
+        <DialogContent sx={{
+          '&::-webkit-scrollbar': {
+            width: '8px',
+          },
+          '&::-webkit-scrollbar-track': {
+            background: '#f1f1f1',
+            borderRadius: '4px',
+          },
+          '&::-webkit-scrollbar-thumb': {
+            background: '#c1c1c1',
+            borderRadius: '4px',
+            '&:hover': {
+              background: '#a8a8a8',
+            },
+          },
+        }}>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
             {error && <Alert severity="error">{error}</Alert>}
             
@@ -1271,6 +1332,44 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
                     },
                   ],
                 },
+                listbox: {
+                  sx: {
+                    '&::-webkit-scrollbar': {
+                      width: '8px',
+                    },
+                    '&::-webkit-scrollbar-track': {
+                      background: '#f1f1f1',
+                      borderRadius: '4px',
+                    },
+                    '&::-webkit-scrollbar-thumb': {
+                      background: '#c1c1c1',
+                      borderRadius: '4px',
+                      '&:hover': {
+                        background: '#a8a8a8',
+                      },
+                    },
+                  }
+                }
+              }}
+              componentsProps={{
+                listbox: {
+                  sx: {
+                    '&::-webkit-scrollbar': {
+                      width: '8px',
+                    },
+                    '&::-webkit-scrollbar-track': {
+                      background: '#f1f1f1',
+                      borderRadius: '4px',
+                    },
+                    '&::-webkit-scrollbar-thumb': {
+                      background: '#c1c1c1',
+                      borderRadius: '4px',
+                      '&:hover': {
+                        background: '#a8a8a8',
+                      },
+                    },
+                  }
+                }
               }}
             />
 
