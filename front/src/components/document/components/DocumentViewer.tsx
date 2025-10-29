@@ -242,35 +242,75 @@ const DocumentViewer: React.FC<DocumentViewerProps> = observer(({
           {isCreating ? (
             <>
               <Button onClick={handleClose}>{t('common.cancel')}</Button>
-              <Button 
-                onClick={async () => {
-                  if (validation.validate()) {
-                    setIsUploadingDocument(true);
-                    setUploadProgress(0);
-                    try {
-                      await onCreateDocument?.({
-                        ...documentState.documentData,
-                        uploadedFile: fileUpload.uploadedFile,
-                        uploadComment: uploadComment,
-                        revisionDescription: projectData.workflowPresetSequence.length > 0 ? projectData.workflowPresetSequence[0].revision_description : null,
-                        revisionStep: projectData.workflowPresetSequence.length > 0 ? projectData.workflowPresetSequence[0].revision_step : null,
-                        onProgress: (progress: number) => {
-                          setUploadProgress(progress);
+              {/* Проверяем, требует ли первая ревизия трансмиттал */}
+              {(() => {
+                // Ждем загрузки данных проекта
+                if (projectData.loadingProjectData) {
+                  console.log('Project data loading...');
+                  return (
+                    <Button 
+                      variant="contained" 
+                      disabled={true}
+                    >
+                      {t('common.loading')}
+                    </Button>
+                  );
+                }
+                
+                const firstSequence = projectData.workflowPresetSequence.length > 0 ? projectData.workflowPresetSequence[0] : null;
+                const requiresTransmittal = firstSequence && firstSequence.requires_transmittal;
+                
+                console.log('Button state check:', {
+                  loadingProjectData: projectData.loadingProjectData,
+                  workflowPresetSequence: projectData.workflowPresetSequence,
+                  firstSequence,
+                  requiresTransmittal
+                });
+                
+                if (requiresTransmittal) {
+                  return (
+                    <Button 
+                      variant="contained" 
+                      disabled={true}
+                      title={t('document.requires_transmittal')}
+                    >
+                      {t('document.requires_transmittal')}
+                    </Button>
+                  );
+                }
+                
+                return (
+                  <Button 
+                    onClick={async () => {
+                      if (validation.validate()) {
+                        setIsUploadingDocument(true);
+                        setUploadProgress(0);
+                        try {
+                          await onCreateDocument?.({
+                            ...documentState.documentData,
+                            uploadedFile: fileUpload.uploadedFile,
+                            uploadComment: uploadComment,
+                            revisionDescription: projectData.workflowPresetSequence.length > 0 ? projectData.workflowPresetSequence[0].revision_description : null,
+                            revisionStep: projectData.workflowPresetSequence.length > 0 ? projectData.workflowPresetSequence[0].revision_step : null,
+                            onProgress: (progress: number) => {
+                              setUploadProgress(progress);
+                            }
+                          });
+                        } catch (error) {
+                          console.error('Error creating document:', error);
+                        } finally {
+                          setIsUploadingDocument(false);
+                          setUploadProgress(0);
                         }
-                      });
-                    } catch (error) {
-                      console.error('Error creating document:', error);
-                    } finally {
-                      setIsUploadingDocument(false);
-                      setUploadProgress(0);
-                    }
-                  }
-                }}
-                variant="contained" 
-                disabled={isUploadingDocument}
-              >
-                {isUploadingDocument ? t('document.creating') : t('document.create_document')}
-              </Button>
+                      }
+                    }}
+                    variant="contained" 
+                    disabled={isUploadingDocument}
+                  >
+                    {isUploadingDocument ? t('document.creating') : t('document.create_document')}
+                  </Button>
+                );
+              })()}
             </>
           ) : (
             <>

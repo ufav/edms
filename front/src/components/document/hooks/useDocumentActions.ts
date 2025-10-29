@@ -9,6 +9,7 @@ export interface UseDocumentActionsProps {
   t: (key: string) => string;
   onCloseDialog?: () => void;
   onRefreshActiveRevisions?: () => void;
+  onRefreshDocuments?: () => Promise<void>; // Добавляем функцию обновления документов
 }
 
 export interface UseDocumentActionsReturn {
@@ -42,7 +43,7 @@ export interface UseDocumentActionsReturn {
   handleCloseNotification: () => void;
 }
 
-export const useDocumentActions = ({ t, onCloseDialog, onRefreshActiveRevisions }: UseDocumentActionsProps): UseDocumentActionsReturn => {
+export const useDocumentActions = ({ t, onCloseDialog, onRefreshActiveRevisions, onRefreshDocuments }: UseDocumentActionsProps): UseDocumentActionsReturn => {
   const { refreshDocuments } = useRefreshStore();
   
   // Состояния для действий
@@ -114,7 +115,11 @@ export const useDocumentActions = ({ t, onCloseDialog, onRefreshActiveRevisions 
       });
       
       // Обновляем список документов
-      refreshDocuments();
+      if (onRefreshDocuments) {
+        await onRefreshDocuments();
+      } else {
+        refreshDocuments();
+      }
       
       // Очищаем ревизии после успешного создания документа
       if (selectedDocumentId) {
@@ -178,12 +183,18 @@ export const useDocumentActions = ({ t, onCloseDialog, onRefreshActiveRevisions 
         await documentsApi.update(selectedDocumentId, documentData);
         
         // Обновляем список документов
-        await refreshDocuments();
+        if (onRefreshDocuments) {
+          await onRefreshDocuments();
+        } else {
+          await refreshDocuments();
+        }
         
-        // Загружаем обновленный документ из списка
-        const updatedDocument = documentStore.documents.find((d: any) => d.id === selectedDocumentId);
-        if (updatedDocument) {
+        // Загружаем обновленный документ через API
+        try {
+          const updatedDocument = await documentsApi.getById(selectedDocumentId);
           setSelectedDocument(updatedDocument);
+        } catch (error) {
+          console.error('Error loading updated document:', error);
         }
         
         // Показываем сообщение об успехе
@@ -217,14 +228,29 @@ export const useDocumentActions = ({ t, onCloseDialog, onRefreshActiveRevisions 
   // Обработчик показа деталей документа
   const handleShowDocumentDetails = async (documentId: number) => {
     setIsCreatingDocument(false); // Сбрасываем флаг создания
-    const document = documentStore.documents.find((d: ApiDocument) => d.id === documentId);
-    if (document) {
+    try {
+      // Получаем данные документа через API
+      const document = await documentsApi.getById(documentId);
       setSelectedDocument(document);
       setSelectedDocumentId(documentId);
+      
       try {
         await documentRevisionStore.loadRevisions(documentId);
+      } catch (error: any) {
+        let errorMessage = t('documents.load_revisions_error');
+        
+        if (error?.response?.data?.detail) {
+          if (typeof error.response.data.detail === 'string') {
+            errorMessage = error.response.data.detail;
+          }
+        } else if (error?.message) {
+          errorMessage = error.message;
+        }
+        
+        alert(errorMessage);
+      }
     } catch (error: any) {
-      let errorMessage = t('documents.load_revisions_error');
+      let errorMessage = t('documents.load_document_error');
       
       if (error?.response?.data?.detail) {
         if (typeof error.response.data.detail === 'string') {
@@ -235,7 +261,6 @@ export const useDocumentActions = ({ t, onCloseDialog, onRefreshActiveRevisions 
       }
       
       alert(errorMessage);
-      }
     }
   };
 
@@ -244,10 +269,12 @@ export const useDocumentActions = ({ t, onCloseDialog, onRefreshActiveRevisions 
     try {
       console.log(`Starting download for document ${documentId}`);
       
-      // Получаем информацию о документе
-      const doc = documentStore.documents.find((d: ApiDocument) => d.id === documentId);
-      if (!doc) {
-        console.error('Document not found in store:', documentId);
+      // Получаем информацию о документе через API
+      let doc: ApiDocument;
+      try {
+        doc = await documentsApi.getById(documentId);
+      } catch (error) {
+        console.error('Document not found:', documentId, error);
         alert(t('documents.not_found'));
         return;
       }
@@ -341,8 +368,12 @@ export const useDocumentActions = ({ t, onCloseDialog, onRefreshActiveRevisions 
     try {
       await documentsApi.softDelete(documentToDelete.id);
       
-      // Обновляем список документов в store
-      await refreshDocuments();
+      // Обновляем список документов
+      if (onRefreshDocuments) {
+        await onRefreshDocuments();
+      } else {
+        await refreshDocuments();
+      }
       
       // Перезагружаем активные ревизии для обновления данных в корзине
       if (onRefreshActiveRevisions) {

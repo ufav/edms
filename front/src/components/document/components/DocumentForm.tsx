@@ -8,6 +8,7 @@ import {
   Select,
   MenuItem,
   Typography,
+  Skeleton,
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { languageStore } from '../../../stores/LanguageStore';
@@ -52,9 +53,33 @@ const DocumentForm: React.FC<DocumentFormProps> = ({
 }) => {
   const { t } = useTranslation();
 
-  // Если документ не загружен и не создается, не рендерим форму
+  // Если документ не загружен и не создается, показываем скелетон
   if (!isCreating && !document) {
-    return null;
+    return (
+      <Box sx={{ flexShrink: 0, mb: 3, mt: 2 }}>
+        <Grid container spacing={3}>
+          <Grid item xs={6}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Box sx={{ display: 'flex', gap: 2 }}>
+                <Skeleton variant="rectangular" width="50%" height="56px" />
+                <Skeleton variant="rectangular" width="50%" height="56px" />
+              </Box>
+              <Skeleton variant="rectangular" width="100%" height="56px" />
+              <Skeleton variant="rectangular" width="100%" height="56px" />
+              <Skeleton variant="rectangular" width="100%" height="56px" />
+            </Box>
+          </Grid>
+          <Grid item xs={6}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              <Skeleton variant="rectangular" width="100%" height="56px" />
+              <Skeleton variant="rectangular" width="100%" height="56px" />
+              <Skeleton variant="rectangular" width="100%" height="56px" />
+              <Skeleton variant="rectangular" width="100%" height="56px" />
+            </Box>
+          </Grid>
+        </Grid>
+      </Box>
+    );
   }
 
   return (

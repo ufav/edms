@@ -7,12 +7,13 @@ from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from pydantic import BaseModel
+from fastapi_pagination import Page, Params, create_page
 import os
 import shutil
 import hashlib
 import uuid
 from datetime import datetime, date
-# import pandas as pd  # Temporarily disabled
+import pandas as pd
 import io
 
 from app.core.database import get_db
@@ -26,6 +27,9 @@ from app.models.project import Project, ProjectDisciplineDocumentType, ProjectMe
 from app.models.document_workflow_history import DocumentWorkflowHistory
 from app.services.auth import get_current_active_user
 from app.services.minio_service import minio_service
+from fastapi import Query
+from fastapi_pagination import Page, Params, create_page
+from fastapi_pagination.ext.sqlalchemy import paginate as sa_paginate
 
 router = APIRouter()
 
@@ -136,10 +140,14 @@ def _get_next_revision_from_sequence(
     if not document or not document.project_id:
         return None, None, "02"  # Fallback к простому увеличению
     
-    # Получаем последнюю ревизию документа
+    # Получаем последнюю НЕ отмененную ревизию документа
+    from app.models.references import RevisionStatus
+    cancelled_status = db.query(RevisionStatus).filter(RevisionStatus.name == "Cancelled").first()
+    
     latest_revision = db.query(DocumentRevision).filter(
         DocumentRevision.document_id == document_id,
-        DocumentRevision.is_deleted == 0
+        DocumentRevision.is_deleted == 0,
+        DocumentRevision.revision_status_id != cancelled_status.id if cancelled_status else True  # Исключаем отмененные ревизии
     ).order_by(DocumentRevision.created_at.desc()).first()
     
     if not latest_revision:
@@ -148,8 +156,11 @@ def _get_next_revision_from_sequence(
     # Проверяем статус последней ревизии
     approved_status = db.query(WorkflowStatus).filter(WorkflowStatus.name == "Approved").first()
     
+    print(f"DEBUG: _get_next_revision_from_sequence - latest_revision: {latest_revision.number}, workflow_status_id: {latest_revision.workflow_status_id}, approved_status_id: {approved_status.id if approved_status else None}")
+    
     if not approved_status or latest_revision.workflow_status_id != approved_status.id:
         # Если последняя ревизия не утверждена, просто увеличиваем номер
+        print(f"DEBUG: Last revision not approved, using same sequence: {current_revision_description_id}, {current_revision_step_id}, {_bump_revision_string(latest_revision.number)}")
         return current_revision_description_id, current_revision_step_id, _bump_revision_string(latest_revision.number)
     
     # Если последняя ревизия утверждена, ищем следующую редакцию в последовательности
@@ -213,12 +224,19 @@ def _compute_md5(file_path: str) -> Optional[str]:
     except Exception:
         return None
 
-@router.get("/", response_model=List[dict])
+@router.get("/", response_model=Page[dict])
 async def get_documents(
-    skip: int = 0,
-    limit: int = 100,
-    project_id: int = None,
-    status: str = None,
+    project_id: Optional[int] = None,
+    status: Optional[str] = None,
+    search: Optional[str] = None,
+    discipline_id: Optional[int] = None,
+    document_type_id: Optional[int] = None,
+    revision_description_id: Optional[int] = None,
+    date_from: Optional[date] = Query(default=None),
+    date_to: Optional[date] = Query(default=None),
+    sort_by: Optional[str] = Query(default="updated_at"),
+    sort_dir: Optional[str] = Query(default="desc"),
+    params: Params = Depends(),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -299,8 +317,49 @@ async def get_documents(
                 # Если статус не найден, возвращаем пустой результат
                 return []
     
+    # Поисковая строка по номеру/названию/примечаниям
+    if search:
+        like = f"%{search}%"
+        query = query.filter(
+            (Document.title.ilike(like)) |
+            (Document.title_native.ilike(like)) |
+            (Document.number.ilike(like)) |
+            (Document.remarks.ilike(like))
+        )
+
+    # Фильтры по дисциплине / типу / описанию ревизии
+    if discipline_id:
+        query = query.filter(Document.discipline_id == discipline_id)
+    if document_type_id:
+        query = query.filter(Document.document_type_id == document_type_id)
+    if revision_description_id:
+        query = query.filter(DocumentRevision.revision_description_id == revision_description_id)
+
+    # Фильтр по датам создания документа
+    if date_from:
+        query = query.filter(Document.created_at >= date_from)
+    if date_to:
+        # включительно конец дня
+        query = query.filter(Document.created_at <= date_to)
+
+    # Сортировка
+    sort_field_map = {
+        "updated_at": Document.updated_at,
+        "created_at": Document.created_at,
+        "number": Document.number,
+        "title": Document.title,
+    }
+    sort_field = sort_field_map.get((sort_by or "").lower(), Document.updated_at)
+    if (sort_dir or "").lower() == "asc":
+        query = query.order_by(sort_field.asc())
+    else:
+        query = query.order_by(sort_field.desc())
+
     # Выполняем запрос с пагинацией
-    results = query.order_by(Document.updated_at.desc()).offset(skip).limit(limit).all()
+    results = query.offset((params.page - 1) * params.size).limit(params.size).all()
+    
+    # Подсчитываем общее количество записей
+    total_count = query.count()
     
     # Формируем результат
     result = []
@@ -336,7 +395,7 @@ async def get_documents(
             "created_by": doc.created_by
         })
     
-    return result
+    return create_page(result, total=total_count, params=params)
 
 @router.post("/upload", response_model=dict)
 async def upload_document(
@@ -698,45 +757,95 @@ async def import_documents_by_paths(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """Импорт документов по путям из Excel метаданных (без загрузки файлов).
-
-    Ожидаемые колонки Excel (минимум):
-    - file_path: абсолютный или относительный путь к исходному файлу
-    - title: заголовок документа
-    Необязательные: description, discipline_code, document_type_code, document_code, language,
-      author, creation_date, revision, sheet_number, total_sheets, scale, format, confidentiality
-    """
+    """Импорт документов по путям из Excel метаданных с прогрессом в реальном времени."""
 
     try:
         metadata_content = await metadata_file.read()
-        # df = pd.read_excel(io.BytesIO(metadata_content))  # Temporarily disabled
-        # TODO: Re-enable pandas functionality
-        raise HTTPException(status_code=501, detail="Excel import temporarily disabled")
+        
+        # Пробуем разные движки для чтения Excel файла
+        try:
+            df = pd.read_excel(io.BytesIO(metadata_content), engine='openpyxl', header=None)
+        except Exception as e1:
+            try:
+                df = pd.read_excel(io.BytesIO(metadata_content), engine='xlrd', header=None)
+            except Exception as e2:
+                # Пробуем без указания движка
+                df = pd.read_excel(io.BytesIO(metadata_content), header=None)
+        
+        
+        # Ищем строку с заголовками (аналогично клиентскому коду)
+        header_row_index = None
+        required_fields = ['file_path', 'title', 'discipline', 'document_type', 'language']
+        
+        for row_idx in range(len(df)):
+            row_values = df.iloc[row_idx].astype(str).str.strip().str.lower().str.replace('*', '').str.replace(' ', '_').tolist()
+            
+            found_fields = 0
+            for field in required_fields:
+                if any(field in val for val in row_values if val and val != 'nan'):
+                    found_fields += 1
+            
+            
+            if found_fields >= len(required_fields):
+                header_row_index = row_idx
+                break
+        
+        if header_row_index is None:
+            raise HTTPException(
+                status_code=400,
+                detail="Не найдена строка с заголовками. Проверьте, что файл содержит все обязательные колонки."
+            )
+        
+        # Читаем файл заново с правильной строкой заголовков
+        try:
+            df = pd.read_excel(io.BytesIO(metadata_content), engine='openpyxl', header=header_row_index)
+        except Exception as e1:
+            try:
+                df = pd.read_excel(io.BytesIO(metadata_content), engine='xlrd', header=header_row_index)
+            except Exception as e2:
+                df = pd.read_excel(io.BytesIO(metadata_content), header=header_row_index)
 
+        # Нормализуем названия колонок (убираем пробелы, звездочки, приводим к нижнему регистру)
+        df.columns = df.columns.str.strip().str.replace('*', '').str.lower().str.replace(' ', '_')
+        
+        # Проверяем наличие обязательных колонок
         required_columns = ['file_path', 'title']
         missing_columns = [col for col in required_columns if col not in df.columns]
         if missing_columns:
             raise HTTPException(
                 status_code=400,
-                detail=f"Отсутствуют обязательные колонки: {', '.join(missing_columns)}"
+                detail=f"Отсутствуют обязательные колонки: {', '.join(missing_columns)}. Доступные колонки: {', '.join(df.columns)}"
             )
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Ошибка чтения файла метаданных: {str(e)}")
 
-    disciplines = {d.code: d.id for d in db.query(Discipline).all()}
-    document_types = {dt.code: dt.id for dt in db.query(DocumentType).all()}
+    # Получаем информацию о проекте
+    project = db.query(Project).filter(Project.id == project_id).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Проект не найден")
+
+    # Получаем только дисциплины и типы документов, прикрепленные к проекту
+    project_disciplines = db.query(Discipline).join(ProjectDisciplineDocumentType).filter(
+        ProjectDisciplineDocumentType.project_id == project_id
+    ).all()
+    disciplines = {d.code: d.id for d in project_disciplines}
+    
+    project_document_types = db.query(DocumentType).join(ProjectDisciplineDocumentType).filter(
+        ProjectDisciplineDocumentType.project_id == project_id
+    ).all()
+    document_types = {dt.code: dt.id for dt in project_document_types}
 
     imported_documents = []
     errors = []
+    total_rows = len(df.index)
 
     upload_dir = os.path.join(settings.UPLOAD_DIR, f"project_{project_id}")
     os.makedirs(upload_dir, exist_ok=True)
 
-    for _, row in df.iterrows():
+    for idx, row in df.iterrows():
         try:
             src_path_raw = row['file_path']
-            # if pd.isna(src_path_raw) or not str(src_path_raw).strip():  # Temporarily disabled
-            if not src_path_raw or not str(src_path_raw).strip():
+            if pd.isna(src_path_raw) or not str(src_path_raw).strip():
                 errors.append("Строка без file_path пропущена")
                 continue
 
@@ -762,14 +871,107 @@ async def import_documents_by_paths(
                     errors.append(f"Неподдерживаемый тип файла: .{file_extension} ({original_name})")
                     continue
 
-            # Копируем файл в каталог загрузок проекта с уникальным именем
+            # Определяем путь для файла
             unique_filename = f"{uuid.uuid4()}.{file_extension}" if file_extension else str(uuid.uuid4())
             dst_path = os.path.join(upload_dir, unique_filename)
-            try:
-                shutil.copy2(src_path, dst_path)
-            except Exception as copy_err:
-                errors.append(f"Ошибка копирования '{src_path}': {copy_err}")
-                continue
+            
+            # Карта метаданных (определяем функции заранее)
+            def get_str(name: str, default: str = None):
+                val = row.get(name)
+                return str(val).strip() if val is not None else default
+
+            def get_int(name: str):
+                val = row.get(name)
+                try:
+                    return int(val) if val is not None else None
+                except (ValueError, TypeError):
+                    return None
+
+            def get_date(name: str):
+                val = row.get(name)
+                if val is None:
+                    return None
+                try:
+                    if isinstance(val, str):
+                        # Пробуем разные форматы дат
+                        for fmt in ['%Y-%m-%d', '%d.%m.%Y', '%m/%d/%Y']:
+                            try:
+                                return datetime.strptime(val, fmt).date()
+                            except ValueError:
+                                continue
+                    return None
+                except (ValueError, TypeError):
+                    return None
+            
+            # Сохраняем файл (локально или в MinIO)
+            if settings.USE_MINIO:
+                try:
+                    # Генерируем ключ для MinIO
+                    minio_key = generate_minio_key(
+                        project_code=project.project_code,
+                        document_number=get_str('document_id', 'UNKNOWN'),
+                        revision_code="A",  # По умолчанию
+                        revision_number="01",
+                        revision_description_id=1,  # По умолчанию
+                        revision_id=0,  # Временно, будет обновлен после создания ревизии
+                        filename=unique_filename
+                    )
+                    
+                    # Загружаем файл в MinIO
+                    with open(src_path, 'rb') as file_data:
+                        file_content = file_data.read()
+                        
+                        # Определяем content_type по расширению файла
+                        content_type = 'application/octet-stream'  # По умолчанию
+                        if file_extension:
+                            content_type_map = {
+                                'pdf': 'application/pdf',
+                                'dwg': 'application/dwg',
+                                'doc': 'application/msword',
+                                'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                                'xls': 'application/vnd.ms-excel',
+                                'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                                'jpg': 'image/jpeg',
+                                'jpeg': 'image/jpeg',
+                                'png': 'image/png',
+                                'gif': 'image/gif',
+                                'tiff': 'image/tiff',
+                                'txt': 'text/plain',
+                                'rtf': 'application/rtf'
+                            }
+                            content_type = content_type_map.get(file_extension.lower(), 'application/octet-stream')
+                        
+                        success = await minio_service.upload_file(
+                            file_content=file_content,
+                            file_key=minio_key,
+                            content_type=content_type
+                        )
+                    
+                    if not success:
+                        # Переключаемся на локальное хранение
+                        try:
+                            shutil.copy2(src_path, dst_path)
+                        except Exception as copy_err:
+                            errors.append(f"Ошибка копирования '{src_path}': {copy_err}")
+                            continue
+                    else:
+                        # MinIO успешно загружен, используем ключ MinIO как путь
+                        dst_path = minio_key
+                    
+                except Exception as minio_err:
+                    # Переключаемся на локальное хранение (dst_path уже установлен как локальный путь)
+                    try:
+                        shutil.copy2(src_path, dst_path)
+                    except Exception as copy_err:
+                        errors.append(f"Ошибка копирования '{src_path}': {copy_err}")
+                        continue
+            else:
+                # Локальное сохранение
+                try:
+                    shutil.copy2(src_path, dst_path)
+                except Exception as copy_err:
+                    errors.append(f"Ошибка копирования '{src_path}': {copy_err}")
+                    continue
 
             # Карта метаданных
             def get_str(name: str, default: str = None):
@@ -797,77 +999,115 @@ async def import_documents_by_paths(
             discipline_id = None
             document_type_id = None
 
-            discipline_code = get_str('discipline_code')
+            discipline_code = get_str('discipline')  # Исправлено: было 'discipline_code'
             if discipline_code:
                 discipline_id = disciplines.get(discipline_code)
                 if not discipline_id:
-                    errors.append(f"Дисциплина не найдена по коду: {discipline_code} (файл {original_name})")
+                    errors.append(f"Дисциплина '{discipline_code}' не прикреплена к проекту '{project.project_code}' (файл {original_name})")
                     # не прерываем — можно продолжить без дисциплины
 
-            document_type_code = get_str('document_type_code')
+            document_type_code = get_str('document_type')  # Исправлено: было 'document_type_code'
             if document_type_code:
                 document_type_id = document_types.get(document_type_code)
                 if not document_type_id:
-                    errors.append(f"Тип документа не найден по коду: {document_type_code} (файл {original_name})")
+                    errors.append(f"Тип документа '{document_type_code}' не прикреплен к проекту '{project.project_code}' (файл {original_name})")
 
             title = get_str('title', original_name)
             description = get_str('description')
 
             # Получаем language_id по коду языка
             language_id = None
-            language_code = get_str('language_code')
+            language_code = get_str('content_language')  # Исправлено: было 'language_code'
             if language_code:
                 language = db.query(Language).filter(Language.code == language_code).first()
                 if language:
                     language_id = language.id
                 else:
                     errors.append(f"Язык не найден по коду: {language_code} (файл {original_name})")
+            
 
             db_document = Document(
                 title=title,
-                title_native=description,  # Переименовано из description
+                title_native=get_str('secondary_title'),  # Используем secondary_title для title_native
                 remarks=None,  # Примечания (можно добавить в будущем)
-                number=get_str('number'),
+                number=get_str('document_id'),  # document_id из Excel -> number в БД
                 project_id=project_id,
                 discipline_id=discipline_id,
                 document_type_id=document_type_id,
                 language_id=language_id,
-                document_code=get_str('document_code'),
-                author=get_str('author'),
+                # document_code=get_str('document_code'),  # Это поле number
+                # author=get_str('author'),  # Это поле created_by
                 creation_date=get_date('creation_date'),
-                revision=get_str('revision'),
+                # revision=get_str('revision'),  # Поле отсутствует в модели Document
                 sheet_number=get_str('sheet_number'),
                 total_sheets=get_int('total_sheets'),
                 scale=get_str('scale'),
                 format=get_str('format'),
                 confidentiality=get_str('confidentiality', 'internal'),
-                drs=None  # DRS moved to project_discipline_document_types
+                # drs=None,  # Поле отсутствует в модели Document
+                created_by=current_user.id  # author это created_by
             )
 
             db.add(db_document)
             db.commit()
             db.refresh(db_document)
             
+            # Получаем ID статуса "Active" для первой ревизии (как в одиночном создании)
+            from app.models.references import RevisionStatus
+            active_status = db.query(RevisionStatus).filter(RevisionStatus.id == 1).first()
+            active_status_id = active_status.id if active_status else None
+            
             # Получаем ID статуса "Draft" из workflow_statuses
             draft_workflow_status = db.query(WorkflowStatus).filter(WorkflowStatus.name == "Draft").first()
             
-            # Создаем первую ревизию документа
+            # Получаем первую ревизию из workflow preset проекта
+            first_revision_description_id = None
+            first_revision_step_id = None
+            
+            if project.workflow_preset_id:
+                from app.models.project import WorkflowPresetSequence
+                first_sequence = db.query(WorkflowPresetSequence).filter(
+                    WorkflowPresetSequence.preset_id == project.workflow_preset_id
+                ).order_by(WorkflowPresetSequence.sequence_order).first()
+                
+                if first_sequence:
+                    first_revision_description_id = first_sequence.revision_description_id
+                    first_revision_step_id = first_sequence.revision_step_id
+            
+            # Создаем первую ревизию документа (точно как в одиночном создании)
             revision_row = DocumentRevision(
                 document_id=db_document.id,
-                revision="1.0",
+                number="01",  # Первая ревизия всегда "01"
                 file_path=dst_path,
                 file_name=original_name,
-                file_size=os.path.getsize(dst_path),
+                file_size=os.path.getsize(src_path),  # Используем исходный файл для размера
                 file_type=file_extension,
                 change_description="Импорт по пути",
                 uploaded_by=current_user.id,
+                revision_status_id=active_status_id,  # Добавляем как в одиночном создании
+                revision_description_id=first_revision_description_id,  # Первая ревизия из workflow preset
+                revision_step_id=first_revision_step_id,  # Первая ревизия из workflow preset
                 workflow_status_id=draft_workflow_status.id if draft_workflow_status else None,
             )
             
             db.add(revision_row)
             db.commit()
             db.refresh(revision_row)
-
+            
+            # Создаем запись в истории workflow для первой ревизии (как в одиночном создании)
+            if draft_workflow_status:
+                workflow_history = DocumentWorkflowHistory(
+                    revision_id=revision_row.id,
+                    from_status_id=None,  # Первая ревизия, нет предыдущего статуса
+                    to_status_id=draft_workflow_status.id,
+                    user_id=current_user.id,
+                    action_type="initial_upload",
+                    comments="Импорт по пути"
+                )
+                db.add(workflow_history)
+                db.commit()
+            
+            # Добавляем документ в список только после успешного сохранения в БД
             imported_documents.append({
                 "id": db_document.id,
                 "title": db_document.title,
@@ -879,19 +1119,21 @@ async def import_documents_by_paths(
                 "discipline_id": db_document.discipline_id,
                 "document_type_id": db_document.document_type_id,
                 "language_id": db_document.language_id,
-                "document_code": db_document.document_code,
-                "author": db_document.author,
+                "document_code": db_document.number,  # document_code это number
+                "author": db_document.created_by,  # author это created_by (ID текущего пользователя)
                 "revision": "01",  # Заглушка, так как поле revision больше не существует
                 "confidentiality": db_document.confidentiality
             })
 
         except Exception as e:
-            errors.append(str(e))
+            errors.append(f"Строка {idx}: {str(e)}")
 
     return {
         "imported_documents": imported_documents,
         "total_imported": len(imported_documents),
-        "total_rows": len(df.index),
+        "total_rows": total_rows,
+        "processed_rows": len(imported_documents) + len(errors),
+        "progress": 100,  # Завершено
         "errors": errors
     }
 
@@ -1068,11 +1310,14 @@ async def create_document_revision(
     # Получаем текущую ревизию из последней НЕ отмененной ревизии
     latest_revision = db.query(DocumentRevision).filter(
         DocumentRevision.document_id == document_id,
-        DocumentRevision.is_deleted == 0  # Только не удаленные ревизии
+        DocumentRevision.is_deleted == 0,  # Только не удаленные ревизии
+        DocumentRevision.revision_status_id != cancelled_status.id if cancelled_status else True  # Исключаем отмененные ревизии
     ).order_by(DocumentRevision.created_at.desc()).first()
     
     # Проверяем, можно ли загружать новую ревизию
     if latest_revision:
+        print(f"DEBUG: create_document_revision - latest_revision: {latest_revision.number}, revision_status_id: {latest_revision.revision_status_id}, workflow_status_id: {latest_revision.workflow_status_id}")
+        
         # Получаем статусы для проверки
         draft_status = db.query(WorkflowStatus).filter(WorkflowStatus.name == "Draft").first()
         in_review_status = db.query(WorkflowStatus).filter(WorkflowStatus.name == "In Review").first()

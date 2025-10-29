@@ -24,6 +24,7 @@ import { useTranslation } from 'react-i18next';
 import { observer } from 'mobx-react-lite';
 import { documentRevisionStore } from '../../../stores/DocumentRevisionStore';
 import { referencesStore } from '../../../stores/ReferencesStore';
+import { activeRevisionsStore } from '../../../stores/ActiveRevisionsStore';
 import { getFileTypeInfo } from '../utils/fileTypeUtils';
 import RevisionsTableSkeleton from './RevisionsTableSkeleton';
 import ConfirmDialog from '../../ConfirmDialog';
@@ -33,7 +34,7 @@ interface DocumentRevisionsTableProps {
   documentId: number | null;
   isCreating: boolean;
   fileMetadata: {name: string, size: number, type: string} | null;
-  workflowPresetSequence: any[];
+  workflowPresetSequence: any[]; // Оставляем для совместимости, но не используем
   isUploadingDocument: boolean;
   uploadProgress: number;
   onDownloadRevision: (revisionId: number, fileName: string) => void;
@@ -103,10 +104,19 @@ const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer((
     }
   };
 
-  // Загружаем workflow статусы при монтировании компонента
+  // Загружаем workflow статусы и активные ревизии при монтировании компонента
   useEffect(() => {
     referencesStore.loadWorkflowStatuses();
+    // Обновляем активные ревизии для корректного отображения кнопки Release
+    activeRevisionsStore.refreshActiveRevisions();
   }, []);
+
+  // Обновляем активные ревизии при изменении documentId
+  useEffect(() => {
+    if (documentId) {
+      activeRevisionsStore.refreshActiveRevisions();
+    }
+  }, [documentId]);
 
   // Функция для определения, можно ли выпустить ревизию
   const canReleaseRevision = (revision: any) => {
@@ -123,7 +133,43 @@ const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer((
     
     // Можно выпускать только последнюю активную ревизию
     const latestRevision = getLatestActiveRevision();
-    return latestRevision && latestRevision.id === revision.id;
+    if (!latestRevision || latestRevision.id !== revision.id) {
+      return false;
+    }
+    
+    // Проверяем, требует ли эта ревизия трансмиттал
+    // Если ревизия есть в списке активных ревизий для трансмиттала, то она требует трансмиттал
+    const isInActiveRevisions = activeRevisionsStore.activeRevisions.some(
+      activeRevision => activeRevision.id === revision.id
+    );
+    
+    if (isInActiveRevisions) {
+      console.log('Release blocked: revision requires transmittal', {
+        revisionId: revision.id,
+        revisionDescriptionId: revision.revision_description_id,
+        revisionStepId: revision.revision_step_id,
+        isInActiveRevisions
+      });
+      return false;
+    }
+    
+    return true;
+  };
+
+  // Функция для определения, можно ли выпустить создаваемую ревизию (для режима создания)
+  const canReleaseCreatingRevision = () => {
+    // Проверяем, требует ли первая ревизия трансмиттал согласно workflow preset
+    if (workflowPresetSequence && workflowPresetSequence.length > 0) {
+      const firstSequence = workflowPresetSequence[0];
+      if (firstSequence && firstSequence.requires_transmittal) {
+        console.log('Release blocked: creating revision requires transmittal', {
+          firstSequence,
+          requiresTransmittal: firstSequence.requires_transmittal
+        });
+        return false;
+      }
+    }
+    return true;
   };
 
   // Функции для управления диалогом подтверждения

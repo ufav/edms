@@ -80,7 +80,7 @@ class DocumentRevision(Base):
     # uploader = relationship("User", foreign_keys=[uploaded_by])
     
     def __repr__(self):
-        return f"<DocumentRevision(document_id={self.document_id}, revision='{self.revision}')>"
+        return f"<DocumentRevision(document_id={self.document_id}, number='{self.number}')>"
 
 class DocumentReview(Base):
     __tablename__ = "document_reviews"

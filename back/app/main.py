@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 
 from app.core.config import settings
+from fastapi_pagination import add_pagination
 from app.api.v1.api import api_router
 
 # Создание директории для загрузок
@@ -37,6 +38,9 @@ app.mount("/uploads", StaticFiles(directory=settings.UPLOAD_DIR), name="uploads"
 
 # Подключение API роутеров
 app.include_router(api_router, prefix=settings.API_V1_STR)
+
+# Enable pagination for the whole app
+add_pagination(app)
 
 @app.get("/")
 async def root():

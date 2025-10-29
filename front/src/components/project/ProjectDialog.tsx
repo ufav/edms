@@ -181,6 +181,8 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
   // Мемоизированные функции для локализации
   const getDisciplineDescription = useMemo(() => (d: any) => (i18n.language === 'en' && d.description_en) ? d.description_en : d.description, [i18n.language]);
   const getRoleName = useMemo(() => (role: any) => (i18n.language === 'en' && role.name_en) ? role.name_en : role.name, [i18n.language]);
+  const getRevisionDescriptionName = useMemo(() => (rd: any) => (i18n.language === 'en') ? rd.description : (rd.description_native || rd.description), [i18n.language]);
+  const getRevisionStepName = useMemo(() => (rs: any) => (i18n.language === 'en') ? rs.description : (rs.description_native || rs.description), [i18n.language]);
 
   // Загружаем данные при открытии диалога
   useEffect(() => {
@@ -1015,8 +1017,8 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
               selectedRevisionSteps={selectedRevisionSteps}
               onRevisionDescriptionToggle={handleRevisionDescriptionToggle}
               onRevisionStepToggle={handleRevisionStepToggle}
-              getRevisionDescriptionName={(rd) => rd.description_native || rd.description}
-              getRevisionStepName={(rs) => rs.description_native || rs.description}
+              getRevisionDescriptionName={getRevisionDescriptionName}
+              getRevisionStepName={getRevisionStepName}
             />
           )}
 

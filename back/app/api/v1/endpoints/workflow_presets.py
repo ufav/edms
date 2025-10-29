@@ -15,146 +15,150 @@ router = APIRouter()
 
 def load_preset_data(preset_id: int, db: Session):
     """Загружает данные пресета с последовательностями и правилами"""
-    # Загружаем последовательности с JOIN'ами для избежания N+1 запросов
-    from sqlalchemy.orm import joinedload
-    
-    sequences = db.query(WorkflowPresetSequence).filter(
-        WorkflowPresetSequence.preset_id == preset_id
-    ).order_by(WorkflowPresetSequence.sequence_order).all()
-    
-    # Получаем все нужные ID для batch запросов
-    revision_description_ids = [seq.revision_description_id for seq in sequences if seq.revision_description_id]
-    revision_step_ids = [seq.revision_step_id for seq in sequences if seq.revision_step_id]
-    
-    # Загружаем все RevisionDescription одним запросом
-    revision_descriptions = {}
-    if revision_description_ids:
-        for rd in db.query(RevisionDescription).filter(RevisionDescription.id.in_(revision_description_ids)).all():
-            revision_descriptions[rd.id] = rd
-    
-    # Загружаем все RevisionStep одним запросом
-    revision_steps = {}
-    if revision_step_ids:
-        for rs in db.query(RevisionStep).filter(RevisionStep.id.in_(revision_step_ids)).all():
-            revision_steps[rs.id] = rs
-    
-    sequences_data = []
-    for seq in sequences:
-        rev_desc = revision_descriptions.get(seq.revision_description_id)
-        rev_step = revision_steps.get(seq.revision_step_id)
+    try:
+        # Загружаем последовательности с JOIN'ами для избежания N+1 запросов
+        from sqlalchemy.orm import joinedload
         
-        sequences_data.append({
-            "id": seq.id,
-            "sequence_order": seq.sequence_order,
-            "revision_description_id": seq.revision_description_id,
-            "revision_step_id": seq.revision_step_id,
-            "revision_description": {
-                "id": rev_desc.id,
-                "code": rev_desc.code,
-                "description": rev_desc.description,
-                "description_native": rev_desc.description_native
-            } if rev_desc else None,
-            "revision_step": {
-                "id": rev_step.id,
-                "code": rev_step.code,
-                "description": rev_step.description,
-                "description_native": rev_step.description_native
-            } if rev_step else None,
-            "is_final": seq.is_final,
-            "requires_transmittal": seq.requires_transmittal,
-            "due_days": seq.due_days
-        })
-    
-    # Загружаем правила
-    rules = db.query(WorkflowPresetRule).filter(
-        WorkflowPresetRule.preset_id == preset_id
-    ).all()
-    
-    # Получаем все нужные ID для batch запросов
-    rule_revision_description_ids = []
-    rule_revision_step_ids = []
-    review_code_ids = []
-    
-    for rule in rules:
-        if rule.current_revision_description_id:
-            rule_revision_description_ids.append(rule.current_revision_description_id)
-        if rule.next_revision_description_id:
-            rule_revision_description_ids.append(rule.next_revision_description_id)
-        if rule.current_revision_step_id:
-            rule_revision_step_ids.append(rule.current_revision_step_id)
-        if rule.next_revision_step_id:
-            rule_revision_step_ids.append(rule.next_revision_step_id)
-        if rule.review_code_id:
-            review_code_ids.append(rule.review_code_id)
-    
-    # Загружаем все RevisionDescription одним запросом
-    rule_revision_descriptions = {}
-    if rule_revision_description_ids:
-        for rd in db.query(RevisionDescription).filter(RevisionDescription.id.in_(rule_revision_description_ids)).all():
-            rule_revision_descriptions[rd.id] = rd
-    
-    # Загружаем все RevisionStep одним запросом
-    rule_revision_steps = {}
-    if rule_revision_step_ids:
-        for rs in db.query(RevisionStep).filter(RevisionStep.id.in_(rule_revision_step_ids)).all():
-            rule_revision_steps[rs.id] = rs
-    
-    # Загружаем все ReviewCode одним запросом
-    review_codes = {}
-    if review_code_ids:
-        for rc in db.query(ReviewCode).filter(ReviewCode.id.in_(review_code_ids)).all():
-            review_codes[rc.id] = rc
-    
-    rules_data = []
-    for rule in rules:
-        current_desc = rule_revision_descriptions.get(rule.current_revision_description_id)
-        current_step = rule_revision_steps.get(rule.current_revision_step_id)
-        next_desc = rule_revision_descriptions.get(rule.next_revision_description_id) if rule.next_revision_description_id else None
-        next_step = rule_revision_steps.get(rule.next_revision_step_id) if rule.next_revision_step_id else None
-        review_code = review_codes.get(rule.review_code_id)
+        sequences = db.query(WorkflowPresetSequence).filter(
+            WorkflowPresetSequence.preset_id == preset_id
+        ).order_by(WorkflowPresetSequence.sequence_order).all()
         
-        rules_data.append({
-            "id": rule.id,
-            "current_revision": {
-                "description": {
-                    "id": current_desc.id,
-                    "code": current_desc.code,
-                    "description": current_desc.description,
-                    "description_native": current_desc.description_native
-                } if current_desc else None,
-                "step": {
-                    "id": current_step.id,
-                    "code": current_step.code,
-                    "description": current_step.description,
-                    "description_native": current_step.description_native
-                } if current_step else None
-            },
-            "operator": rule.operator,
-            "review_code": {
-                "id": review_code.id,
-                "code": review_code.code,
-                "description": review_code.description,
-                "description_native": review_code.name_native
-            } if review_code else None,
-            "review_code_list": rule.review_code_list,
-            "priority": rule.priority,
-            "next_revision": {
-                "description": {
-                    "id": next_desc.id,
-                    "code": next_desc.code,
-                    "description": next_desc.description,
-                    "description_native": next_desc.description_native
-                } if next_desc else None,
-                "step": {
-                    "id": next_step.id,
-                    "code": next_step.code,
-                    "description": next_step.description,
-                    "description_native": next_step.description_native
-                } if next_step else None
-            } if rule.next_revision_description_id else None,
-        })
-    
-    return sequences_data, rules_data
+        # Получаем все нужные ID для batch запросов
+        revision_description_ids = [seq.revision_description_id for seq in sequences if seq.revision_description_id]
+        revision_step_ids = [seq.revision_step_id for seq in sequences if seq.revision_step_id]
+        
+        # Загружаем все RevisionDescription одним запросом
+        revision_descriptions = {}
+        if revision_description_ids:
+            for rd in db.query(RevisionDescription).filter(RevisionDescription.id.in_(revision_description_ids)).all():
+                revision_descriptions[rd.id] = rd
+        
+        # Загружаем все RevisionStep одним запросом
+        revision_steps = {}
+        if revision_step_ids:
+            for rs in db.query(RevisionStep).filter(RevisionStep.id.in_(revision_step_ids)).all():
+                revision_steps[rs.id] = rs
+        
+        sequences_data = []
+        for seq in sequences:
+            rev_desc = revision_descriptions.get(seq.revision_description_id)
+            rev_step = revision_steps.get(seq.revision_step_id)
+            
+            sequences_data.append({
+                "id": seq.id,
+                "sequence_order": seq.sequence_order,
+                "revision_description_id": seq.revision_description_id,
+                "revision_step_id": seq.revision_step_id,
+                "revision_description": {
+                    "id": rev_desc.id,
+                    "code": rev_desc.code,
+                    "description": rev_desc.description,
+                    "description_native": rev_desc.description_native
+                } if rev_desc else None,
+                "revision_step": {
+                    "id": rev_step.id,
+                    "code": rev_step.code,
+                    "description": rev_step.description,
+                    "description_native": rev_step.description_native
+                } if rev_step else None,
+                "is_final": seq.is_final,
+                "requires_transmittal": seq.requires_transmittal,
+                "due_days": seq.due_days
+            })
+        
+        # Загружаем правила
+        rules = db.query(WorkflowPresetRule).filter(
+            WorkflowPresetRule.preset_id == preset_id
+        ).all()
+        
+        # Получаем все нужные ID для batch запросов
+        rule_revision_description_ids = []
+        rule_revision_step_ids = []
+        review_code_ids = []
+        
+        for rule in rules:
+            if rule.current_revision_description_id:
+                rule_revision_description_ids.append(rule.current_revision_description_id)
+            if rule.next_revision_description_id:
+                rule_revision_description_ids.append(rule.next_revision_description_id)
+            if rule.current_revision_step_id:
+                rule_revision_step_ids.append(rule.current_revision_step_id)
+            if rule.next_revision_step_id:
+                rule_revision_step_ids.append(rule.next_revision_step_id)
+            if rule.review_code_id:
+                review_code_ids.append(rule.review_code_id)
+        
+        # Загружаем все RevisionDescription одним запросом
+        rule_revision_descriptions = {}
+        if rule_revision_description_ids:
+            for rd in db.query(RevisionDescription).filter(RevisionDescription.id.in_(rule_revision_description_ids)).all():
+                rule_revision_descriptions[rd.id] = rd
+        
+        # Загружаем все RevisionStep одним запросом
+        rule_revision_steps = {}
+        if rule_revision_step_ids:
+            for rs in db.query(RevisionStep).filter(RevisionStep.id.in_(rule_revision_step_ids)).all():
+                rule_revision_steps[rs.id] = rs
+        
+        # Загружаем все ReviewCode одним запросом
+        review_codes = {}
+        if review_code_ids:
+            for rc in db.query(ReviewCode).filter(ReviewCode.id.in_(review_code_ids)).all():
+                review_codes[rc.id] = rc
+        
+        rules_data = []
+        for rule in rules:
+            current_desc = rule_revision_descriptions.get(rule.current_revision_description_id)
+            current_step = rule_revision_steps.get(rule.current_revision_step_id)
+            next_desc = rule_revision_descriptions.get(rule.next_revision_description_id) if rule.next_revision_description_id else None
+            next_step = rule_revision_steps.get(rule.next_revision_step_id) if rule.next_revision_step_id else None
+            review_code = review_codes.get(rule.review_code_id)
+            
+            rules_data.append({
+                "id": rule.id,
+                "current_revision": {
+                    "description": {
+                        "id": current_desc.id,
+                        "code": current_desc.code,
+                        "description": current_desc.description,
+                        "description_native": current_desc.description_native
+                    } if current_desc else None,
+                    "step": {
+                        "id": current_step.id,
+                        "code": current_step.code,
+                        "description": current_step.description,
+                        "description_native": current_step.description_native
+                    } if current_step else None
+                },
+                "operator": rule.operator,
+                "review_code": {
+                    "id": review_code.id,
+                    "code": review_code.code,
+                    "description": review_code.description,
+                    "description_native": review_code.name_native
+                } if review_code else None,
+                "review_code_list": rule.review_code_list,
+                "priority": rule.priority,
+                "next_revision": {
+                    "description": {
+                        "id": next_desc.id,
+                        "code": next_desc.code,
+                        "description": next_desc.description,
+                        "description_native": next_desc.description_native
+                    } if next_desc else None,
+                    "step": {
+                        "id": next_step.id,
+                        "code": next_step.code,
+                        "description": next_step.description,
+                        "description_native": next_step.description_native
+                    } if next_step else None
+                } if rule.next_revision_description_id else None,
+            })
+        
+        return sequences_data, rules_data
+    except Exception as e:
+        print(f"Error in load_preset_data: {e}")
+        raise e
 
 
 # Pydantic schemas
@@ -300,7 +304,6 @@ async def create_workflow_preset(
     for i, sequence_item in enumerate(preset_data.sequences):
         sequence = WorkflowPresetSequence(
             preset_id=preset.id,
-            document_type_id=sequence_item.get('document_type_id'),
             sequence_order=i + 1,
             revision_description_id=sequence_item['revision_description_id'],
             revision_step_id=sequence_item['revision_step_id'],
@@ -378,7 +381,6 @@ async def update_workflow_preset(
         for i, sequence_item in enumerate(preset_data.sequences):
             sequence = WorkflowPresetSequence(
                 preset_id=preset.id,
-                document_type_id=sequence_item.get('document_type_id'),
                 sequence_order=i + 1,
                 revision_description_id=sequence_item['revision_description_id'],
                 revision_step_id=sequence_item['revision_step_id'],

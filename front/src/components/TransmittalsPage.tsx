@@ -55,6 +55,7 @@ const TransmittalsPage: React.FC = observer(() => {
   });
   const [, setDeletingId] = useState<number | null>(null);
   const deleteDialog = useDeleteDialog();
+  const sendDialog = useDeleteDialog();
   const [page, setPage] = useState<number>(1); // 1-based for MUI Pagination
   const rowsPerPage = 13; // фиксированное количество на страницу
   
@@ -200,6 +201,10 @@ const TransmittalsPage: React.FC = observer(() => {
         severity: 'error'
       });
     }
+  };
+
+  const handleOpenSendDialog = (transmittal: any) => {
+    sendDialog.openDeleteDialog(transmittal);
   };
 
 
@@ -385,7 +390,7 @@ const TransmittalsPage: React.FC = observer(() => {
             columnOrder={transmittalSettings.columnOrder}
             onShowDetails={handleView}
             onDelete={(transmittal) => handleDelete(transmittal.id)}
-            onSend={handleSend}
+            onSend={handleOpenSendDialog}
             formatDate={transmittalStore.formatDate}
           />
         </Box>
@@ -423,6 +428,19 @@ const TransmittalsPage: React.FC = observer(() => {
         onConfirm={() => deleteDialog.confirmDelete(handleConfirmDelete)}
         onClose={deleteDialog.closeDeleteDialog}
         loading={deleteDialog.isLoading}
+      />
+
+      <ConfirmDialog
+        open={sendDialog.isOpen}
+        title={t('transmittals.send_confirm_title') || 'Подтверждение отправки'}
+        content={t('transmittals.send_confirm_content') || 'Отправить трансмиттал? После отправки его нельзя будет изменить.'}
+        confirmText={t('transmittals.send_confirm') || 'Отправить'}
+        cancelText={t('common.cancel')}
+        onConfirm={() => sendDialog.confirmDelete(async (transmittal) => {
+          await handleSend(transmittal);
+        })}
+        onClose={sendDialog.closeDeleteDialog}
+        loading={sendDialog.isLoading}
       />
 
       <TransmittalSettingsDialog

@@ -57,8 +57,11 @@ export const useDocumentRevisions = ({
       await documentsApi.cancelRevision(revision.id);
       // Обновляем список ревизий
       documentRevisionStore.reloadRevisions(documentId);
+      // Закрываем диалог подтверждения
+      cancelRevisionDialog.closeDeleteDialog();
     } catch (error) {
       // Ошибка отмены ревизии
+      console.error('Error cancelling revision:', error);
     }
   };
 

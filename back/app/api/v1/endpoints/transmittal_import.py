@@ -111,8 +111,18 @@ async def import_incoming_transmittal(
         
         # Читаем Excel файл
         contents = await file.read()
+        print(f"DEBUG: Читаем Excel файл '{file.filename}', лист: '{settings_data['sheet_name']}'")
         try:
-            excel_data = pd.read_excel(io.BytesIO(contents), sheet_name=settings_data['sheet_name'])
+            excel_data = pd.read_excel(io.BytesIO(contents), sheet_name=settings_data['sheet_name'], header=None)
+            print(f"DEBUG: Excel файл успешно прочитан. Размер: {excel_data.shape[0]} строк, {excel_data.shape[1]} столбцов")
+            print(f"DEBUG: Первые 10 строк Excel файла (все ячейки):")
+            for i in range(min(10, len(excel_data))):
+                row_values = []
+                for j in range(min(10, len(excel_data.columns))):  # Показываем первые 10 столбцов
+                    cell_value = excel_data.iloc[i, j]
+                    cell_str = str(cell_value).strip() if pd.notna(cell_value) else ""
+                    row_values.append(f"[{i},{j}]:'{cell_str}'")
+                print(f"DEBUG: Строка {i}: {', '.join(row_values)}")
         except Exception as e:
             error_str = str(e)
             
@@ -296,38 +306,75 @@ def extract_metadata(excel_data: pd.DataFrame, metadata_fields: Dict[str, Any]) 
     """Извлекает метаданные из Excel файла по настройкам"""
     metadata = {}
     
+    print(f"DEBUG: Начинаем поиск метаданных. Размер Excel файла: {excel_data.shape[0]} строк, {excel_data.shape[1]} столбцов")
+    print(f"DEBUG: Поля для поиска: {list(metadata_fields.keys())}")
+    
     for field_key, field_config in metadata_fields.items():
         label = field_config['label']
         position = field_config['position']
         
-        # Ищем ячейку с лейблом (более гибкий поиск)
+        print(f"DEBUG: ===== Ищем поле '{field_key}' с лейблом '{label}' в позиции '{position}' =====")
+        
+        found_field = False
+        
+        # Ищем ячейку с лейблом (проходим по всем ячейкам)
         for row_idx, row in excel_data.iterrows():
             for col_idx, cell_value in enumerate(row):
-                if pd.notna(cell_value):
-                    cell_str = str(cell_value).strip()
-                    # Проверяем точное совпадение или вхождение лейбла в ячейку
-                    if cell_str == label or label in cell_str:
-                        # Находим значение в указанной позиции
-                        if position == 'right' and col_idx + 1 < len(row):
-                            next_value = row.iloc[col_idx + 1]
-                            if pd.notna(next_value):
-                                metadata[field_key] = str(next_value).strip()
-                        elif position == 'left' and col_idx - 1 >= 0:
-                            prev_value = row.iloc[col_idx - 1]
-                            if pd.notna(prev_value):
-                                metadata[field_key] = str(prev_value).strip()
-                        elif position == 'below' and row_idx + 1 < len(excel_data):
-                            below_value = excel_data.iloc[row_idx + 1, col_idx]
-                            if pd.notna(below_value):
-                                metadata[field_key] = str(below_value).strip()
-                        elif position == 'above' and row_idx - 1 >= 0:
-                            above_value = excel_data.iloc[row_idx - 1, col_idx]
-                            if pd.notna(above_value):
-                                metadata[field_key] = str(above_value).strip()
+                # Проверяем ВСЕ ячейки, даже пустые
+                cell_str = str(cell_value).strip() if pd.notna(cell_value) else ""
+                
+                # Показываем ВСЕ ячейки для полной диагностики
+                print(f"DEBUG: Ячейка [{row_idx}, {col_idx}]: '{cell_str}'")
+                
+                # Проверяем точное совпадение (самое важное)
+                if cell_str == label:
+                    print(f"DEBUG: [НАЙДЕНО] ТОЧНОЕ СОВПАДЕНИЕ! Найдено в ячейке [{row_idx}, {col_idx}]: '{cell_str}'")
+                    
+                    # Находим значение в указанной позиции
+                    if position == 'right' and col_idx + 1 < len(row):
+                        next_value = row.iloc[col_idx + 1]
+                        if pd.notna(next_value):
+                            metadata[field_key] = str(next_value).strip()
+                            print(f"DEBUG: [НАЙДЕНО] ЗНАЧЕНИЕ СПРАВА: '{metadata[field_key]}'")
+                            found_field = True
+                        else:
+                            print(f"DEBUG: Ячейка справа пустая!")
+                    elif position == 'left' and col_idx - 1 >= 0:
+                        prev_value = row.iloc[col_idx - 1]
+                        if pd.notna(prev_value):
+                            metadata[field_key] = str(prev_value).strip()
+                            print(f"DEBUG: [НАЙДЕНО] ЗНАЧЕНИЕ СЛЕВА: '{metadata[field_key]}'")
+                            found_field = True
+                        else:
+                            print(f"DEBUG: Ячейка слева пустая!")
+                    elif position == 'below' and row_idx + 1 < len(excel_data):
+                        below_value = excel_data.iloc[row_idx + 1, col_idx]
+                        if pd.notna(below_value):
+                            metadata[field_key] = str(below_value).strip()
+                            print(f"DEBUG: [НАЙДЕНО] ЗНАЧЕНИЕ СНИЗУ: '{metadata[field_key]}'")
+                            found_field = True
+                        else:
+                            print(f"DEBUG: Ячейка снизу пустая!")
+                    elif position == 'above' and row_idx - 1 >= 0:
+                        above_value = excel_data.iloc[row_idx - 1, col_idx]
+                        if pd.notna(above_value):
+                            metadata[field_key] = str(above_value).strip()
+                            print(f"DEBUG: [НАЙДЕНО] ЗНАЧЕНИЕ СВЕРХУ: '{metadata[field_key]}'")
+                            found_field = True
+                        else:
+                            print(f"DEBUG: Ячейка сверху пустая!")
+                    
+                    if found_field:
                         break
-            if field_key in metadata:
+            
+            if found_field:
                 break
+        
+        if not found_field:
+            print(f"DEBUG: [ОШИБКА] НЕ НАЙДЕНО поле '{field_key}' с лейблом '{label}'")
+            print(f"DEBUG: Проверьте, что в Excel файле есть ячейка с текстом '{label}'")
     
+    print(f"DEBUG: ===== РЕЗУЛЬТАТ ПОИСКА МЕТАДАННЫХ: {metadata} =====")
     return metadata
 
 def find_table_start(excel_data: pd.DataFrame, table_fields: Dict[str, str]) -> tuple[int, list[str]]:

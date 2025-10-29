@@ -28,15 +28,15 @@ import { DocumentViewer, DocumentRevisionDialog, DocumentCompareDialog } from '.
 import DocumentComments from './document/components/DocumentComments';
 import NotificationSnackbar from './NotificationSnackbar';
 import { useDocumentFilters } from './document/hooks/useDocumentFilters';
-import { useDocumentPagination } from './document/hooks/useDocumentPagination';
+import { useServerDocumentPagination } from './document/hooks/useServerDocumentPagination';
 import { useDocumentSettings } from './document/hooks/useDocumentSettings';
 import { useDocumentActions } from './document/hooks/useDocumentActions';
 import { useDocumentDialogs } from './document/hooks/useDocumentDialogs';
-import { useDocumentBatchUpload } from './document/hooks/useDocumentBatchUpload';
+import { useDocumentBatchUploadV2 } from './document/hooks/useDocumentBatchUploadV2';
 import { useDocumentDataLoading } from './document/hooks/useDocumentDataLoading';
 import { DocumentFilters } from './document/components/DocumentFilters';
 import { DocumentCards } from './document/components/DocumentCards';
-import AppPagination from './AppPagination';
+import ServerPagination from './ServerPagination';
 import { DocumentTable } from './document/components/DocumentTable';
 import { DocumentBatchUploadDialog } from './document/components/DocumentBatchUploadDialog';
 import { DocumentSettingsDialog } from './document/components/DocumentSettingsDialog';
@@ -137,20 +137,29 @@ const DocumentsPage: React.FC = observer(() => {
     setSelectedDocumentTypeId,
     setSelectedRevisionDescriptionId,
     setDateRange,
-    filteredDocuments,
   } = useDocumentFilters();
 
   const {
     page,
-    rowsPerPage,
+    size,
+    total,
+    pages,
     handleChangePage,
-    handleChangeRowsPerPage,
-    paginatedDocuments,
-    totalCount,
-    rowsPerPageOptions,
-  } = useDocumentPagination({
-    filteredDocuments,
-    dependencies: [filterStatus, searchTerm, selectedDisciplineId]
+    handleChangeSize,
+    documents: paginatedDocuments,
+    isLoading: documentsLoading,
+    error: documentsError,
+    refresh: refreshDocumentsData,
+  } = useServerDocumentPagination({
+    projectId: projectStore.selectedProject?.id,
+    status: filterStatus,
+    search: searchTerm,
+    disciplineId: selectedDisciplineId,
+    documentTypeId: selectedDocumentTypeId,
+    revisionDescriptionId: selectedRevisionDescriptionId,
+    dateFrom: dateRange.from,
+    dateTo: dateRange.to,
+    pageSize: 13,
   });
 
   const {
@@ -207,20 +216,27 @@ const DocumentsPage: React.FC = observer(() => {
     onCloseDialog: handleCloseDocumentDetails,
     onRefreshActiveRevisions: () => {
       refreshActiveRevisions();
-    }
+    },
+    onRefreshDocuments: refreshDocumentsData
   });
 
   const {
     metadataFile,
     uploading,
+    validating,
+    validationErrors,
+    notification,
     handleMetadataFileSelect,
-    handleBatchUpload,
+    handleValidateAndUpload,
+    handleCloseBatchNotification,
     canUpload,
-  } = useDocumentBatchUpload({
+  } = useDocumentBatchUploadV2({
     t,
     onClose: handleCloseBatchUpload,
+    onDocumentsUpdated: refreshDocumentsData,
   });
 
+  // Загружаем дисциплины и другие данные (но не документы)
   useDocumentDataLoading();
 
   const deleteDialog = useDeleteDialog();
@@ -229,7 +245,7 @@ const DocumentsPage: React.FC = observer(() => {
   const handleDeleteDocument = async (document: any) => {
     try {
       await documentsApi.softDelete(document.id);
-      await refreshDocuments();
+      await refreshDocumentsData();
     } catch (error) {
       throw error;
     }
@@ -424,14 +440,14 @@ const DocumentsPage: React.FC = observer(() => {
             }}>
               <DocumentCards
               documents={paginatedDocuments}
-              totalCount={totalCount}
-              isLoading={documentStore.isLoading}
-              error={documentStore.error}
+              totalCount={total}
+              isLoading={documentsLoading}
+              error={documentsError}
                         page={page}
-              rowsPerPage={rowsPerPage}
-              rowsPerPageOptions={rowsPerPageOptions}
+              rowsPerPage={size}
+              rowsPerPageOptions={[10, 13, 25, 50]}
                         onPageChange={handleChangePage}
-                        onRowsPerPageChange={handleChangeRowsPerPage}
+                        onRowsPerPageChange={handleChangeSize}
               onShowDetails={(documentId) => {
                 handleShowDocumentDetails(documentId);
                 handleOpenDocumentDetails();
@@ -458,9 +474,9 @@ const DocumentsPage: React.FC = observer(() => {
             }}>
               <DocumentTable
                 documents={paginatedDocuments}
-                totalCount={totalCount}
-                isLoading={documentStore.isLoading}
-                error={documentStore.error}
+                totalCount={total}
+                isLoading={documentsLoading}
+                error={documentsError}
                 visibleCols={visibleCols}
                 columnOrder={columnOrder}
                 onShowDetails={(documentId) => {
@@ -484,15 +500,15 @@ const DocumentsPage: React.FC = observer(() => {
         </Box>
 
         {/* Фиксированная пагинация внизу экрана */}
-        {!isMobile && !documentStore.isLoading && (
-          <AppPagination
-            count={totalCount}
-            page={page + 1}
-            onPageChange={(_, p) => handleChangePage(_, p - 1)}
-            rowsPerPage={rowsPerPage}
+        {!isMobile && !documentsLoading && (
+          <ServerPagination
+            total={total}
+            page={page}
+            size={size}
+            onPageChange={handleChangePage}
             insetLeft={240}
             align="right"
-            leftInfo={`${t('common.total_documents', { count: totalCount }).replace('{count}', totalCount.toLocaleString(i18n.language === 'ru' ? 'ru-RU' : 'en-US'))}`}
+            leftInfo={`${t('common.total_documents', { count: total }).replace('{count}', total.toLocaleString(i18n.language === 'ru' ? 'ru-RU' : 'en-US'))}`}
           />
         )}
 
@@ -562,10 +578,12 @@ const DocumentsPage: React.FC = observer(() => {
           open={batchUploadOpen} 
           metadataFile={metadataFile}
           uploading={uploading}
+          validating={validating}
           canUpload={canUpload}
+          validationErrors={validationErrors}
           onClose={handleCloseBatchUpload}
           onFileSelect={handleMetadataFileSelect}
-          onUpload={handleBatchUpload}
+          onValidateAndUpload={handleValidateAndUpload}
         />
 
         <DocumentViewer
@@ -598,6 +616,7 @@ const DocumentsPage: React.FC = observer(() => {
               documentRevisionStore.reloadRevisions(selectedDocumentId);
             }
             refreshDocuments();
+            refreshActiveRevisions(); // Обновляем активные ревизии для трансмиттала
           }}
         />
 
@@ -656,6 +675,14 @@ const DocumentsPage: React.FC = observer(() => {
           message={errorNotification.message}
           severity="error"
           onClose={handleCloseErrorNotification}
+        />
+
+        {/* Уведомления для множественной загрузки */}
+        <NotificationSnackbar
+          open={notification.open}
+          message={notification.message}
+          severity={notification.severity}
+          onClose={handleCloseBatchNotification}
         />
       </Box>
     </ProjectRequired>

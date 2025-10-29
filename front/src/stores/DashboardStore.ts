@@ -4,6 +4,7 @@ import { documentStore } from './DocumentStore';
 import { transmittalStore } from './TransmittalStore';
 import { reviewStore } from './ReviewStore';
 import { userStore } from './UserStore';
+import { documentsApi } from '../api/client';
 
 export interface DashboardStats {
   totalProjects: number;
@@ -24,18 +25,50 @@ export interface RecentActivity {
 class DashboardStore {
   isLoading = false;
   error: string | null = null;
+  documentsCount = 0; // Количество документов для текущего проекта
 
   constructor() {
     makeAutoObservable(this);
   }
 
+  // Получение количества документов для проекта
+  async getDocumentsCount(projectId: number): Promise<number> {
+    try {
+      const response = await documentsApi.getPage({
+        page: 1,
+        size: 1, // Нам нужен только total, поэтому берем минимум
+        project_id: projectId
+      });
+      return response.total;
+    } catch (error) {
+      return 0;
+    }
+  }
+
   // Получение статистики
   getStats(): DashboardStats {
+    const selectedProjectId = projectStore.selectedProject?.id;
+    
+    // Если проект не выбран, показываем только количество проектов
+    if (!selectedProjectId) {
+      return {
+        totalProjects: projectStore.projects.length,
+        totalDocuments: 0,
+        totalTransmittals: 0,
+        pendingReviews: 0
+      };
+    }
+    
+    // Если проект выбран, показываем статистику для этого проекта
+    const filteredTransmittals = transmittalStore.transmittals.filter(trans => trans.project_id === selectedProjectId);
+    // Все ревью считаются ожидающими, так как они загружаются через getPendingApprovals
+    const filteredReviews = reviewStore.reviews.filter(review => review.project_id === selectedProjectId);
+    
     return {
       totalProjects: projectStore.projects.length,
-      totalDocuments: documentStore.documents.length,
-      totalTransmittals: transmittalStore.transmittals.length,
-      pendingReviews: reviewStore.reviews.filter(review => review.status === 'pending').length
+      totalDocuments: this.documentsCount,
+      totalTransmittals: filteredTransmittals.length,
+      pendingReviews: filteredReviews.length
     };
   }
 
@@ -169,11 +202,22 @@ class DashboardStore {
       // Store'ы сами проверяют, нужно ли загружать данные повторно
       await Promise.all([
         projectStore.loadProjects(),
-        documentStore.loadDocuments(projectId, false, 'all'),
         transmittalStore.loadTransmittals(projectId),
-        reviewStore.loadReviews(projectId),
+        reviewStore.loadReviews(projectId, true), // Принудительная загрузка
         userStore.loadUsers()
       ]);
+      
+      // Загружаем количество документов отдельно
+      if (projectId) {
+        const documentsCount = await this.getDocumentsCount(projectId);
+        runInAction(() => {
+          this.documentsCount = documentsCount;
+        });
+      } else {
+        runInAction(() => {
+          this.documentsCount = 0;
+        });
+      }
       
       runInAction(() => {
       });

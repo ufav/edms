@@ -725,12 +725,37 @@ export const projectsApi = {
 
 // API методы для документов
 export const documentsApi = {
-  // Получить все документы
+  // Получить все документы (клиентская пагинация)
   getAll: async (projectId?: number, status?: string): Promise<Document[]> => {
     const params: any = {};
     if (projectId) params.project_id = projectId;
     if (status) params.status = status;
     // Убираем лимит и офсет - загружаем все документы
+    const response = await apiClient.get('/documents/', { params });
+    return response.data;
+  },
+
+  // Получить документы с серверной пагинацией
+  getPage: async (params: {
+    page?: number;
+    size?: number;
+    project_id?: number;
+    status?: string;
+    search?: string;
+    discipline_id?: number;
+    document_type_id?: number;
+    revision_description_id?: number;
+    date_from?: string;
+    date_to?: string;
+    sort_by?: string;
+    sort_dir?: string;
+  }): Promise<{
+    items: Document[];
+    total: number;
+    page: number;
+    size: number;
+    pages: number;
+  }> => {
     const response = await apiClient.get('/documents/', { params });
     return response.data;
   },

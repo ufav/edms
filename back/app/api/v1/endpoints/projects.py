@@ -164,7 +164,7 @@ async def get_projects(
         # Получаем участников проекта (компании) с контактами
         # Получаем участников с JOIN'ом для избежания N+1 запросов
         from app.models.references import Company
-        participants_data = db.query(
+        participants_query_result = db.query(
             ProjectParticipant,
             Company
         ).outerjoin(
@@ -175,7 +175,7 @@ async def get_projects(
         ).all()
         
         participants_data = []
-        for participant, company in participants_data:
+        for participant, company in participants_query_result:
             
             
             participants_data.append({
@@ -1054,7 +1054,12 @@ async def get_workflow_preset_sequence(
         
         result.append({
             "id": seq_item.id,
-            "order": seq_item.sequence_order,
+            "sequence_order": seq_item.sequence_order,
+            "revision_description_id": seq_item.revision_description_id,
+            "revision_step_id": seq_item.revision_step_id,
+            "is_final": seq_item.is_final,
+            "requires_transmittal": seq_item.requires_transmittal,
+            "due_days": seq_item.due_days,
             "revision_step": {
                 "id": revision_step.id if revision_step else None,
                 "code": revision_step.code if revision_step else None,

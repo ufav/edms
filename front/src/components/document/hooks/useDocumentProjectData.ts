@@ -28,8 +28,8 @@ export const useDocumentProjectData = ({
   // Загрузка данных проекта при открытии диалога
   useEffect(() => {
     if (open) {
-      // Загружаем данные для создания и редактирования документа
-      if ((isCreating || isEditing) && projectStore.selectedProject?.id) {
+      // Загружаем данные для создания, редактирования и просмотра документа
+      if (projectStore.selectedProject?.id) {
         loadProjectData(projectStore.selectedProject.id);
       }
       // Загружаем типы документов для текущей дисциплины в режиме редактирования
@@ -50,15 +50,14 @@ export const useDocumentProjectData = ({
       // Загружаем дисциплины через стор
       await disciplineStore.loadDisciplines(projectId);
       
-      // Загружаем workflow preset sequence для создания документа
-      if (isCreating) {
-        try {
-          const sequence = await projectsApi.getWorkflowPresetSequence(projectId);
-          setWorkflowPresetSequence(sequence || []);
-        } catch (error) {
-          console.error('Error loading workflow preset sequence:', error);
-          setWorkflowPresetSequence([]);
-        }
+      // Загружаем workflow preset sequence для создания и просмотра документа
+      try {
+        const sequence = await projectsApi.getWorkflowPresetSequence(projectId);
+        console.log('Loaded workflow preset sequence:', sequence);
+        setWorkflowPresetSequence(sequence || []);
+      } catch (error) {
+        console.error('Error loading workflow preset sequence:', error);
+        setWorkflowPresetSequence([]);
       }
       
       // Очищаем типы документов в режиме создания

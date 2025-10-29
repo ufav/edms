@@ -16,15 +16,12 @@ export interface UseDocumentDataLoadingReturn {
 }
 
 export const useDocumentDataLoading = (): UseDocumentDataLoadingReturn => {
-  // Загружаем документы и дисциплины при изменении проекта
+  // Загружаем дисциплины при изменении проекта (документы загружаются через серверную пагинацию)
   useEffect(() => {
     if (projectStore.hasSelectedProject && projectStore.selectedProject) {
       const projectId = projectStore.selectedProject.id;
       
-      // Загружаем документы с кешированием (без статуса, чтобы получить все документы)
-      documentStore.loadDocuments(projectId, false, 'all');
-      
-      // Загружаем дисциплины проекта для боковой панели
+      // Загружаем дисциплины проекта для фильтров
       disciplineStore.loadDisciplines(projectId);
     } else {
       disciplineStore.clearDisciplines();
