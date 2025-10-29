@@ -1,44 +1,69 @@
-
 services:
   front:
     build: ./front
     ports:
       - "5173:80"
+    env_file:
+      - ./front/.env
     depends_on:
       - back
+    networks:
+      - edms-net
 
   back:
     build: ./back
     ports:
       - "8000:8000"
-    environment:
-      DATABASE_URL: postgres://user:pass@db:5432/app
-      MINIO_URL: http://minio:9000
+    env_file:
+      - ./back/.env
     depends_on:
-      - db
-      - minio
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_started
+    networks:
+      - edms-net
 
   db:
-    image: postgres:15
+    image: postgres:16
+    env_file:
+      - ./back/.env
     environment:
-      POSTGRES_USER: user
-      POSTGRES_PASSWORD: pass
-      POSTGRES_DB: app
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_DB: ${DB_NAME}
     volumes:
       - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - edms-net
 
   minio:
     image: minio/minio
-    command: server /data
+    command: server /data --console-address ":9001"
+    env_file:
+      - ./back/.env
     environment:
-      MINIO_ROOT_USER: admin
-      MINIO_ROOT_PASSWORD: secret
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
     ports:
       - "9000:9000"
       - "9001:9001"
     volumes:
       - minio-data:/data
+    networks:
+      - edms-net
 
 volumes:
   pgdata:
   minio-data:
+
+networks:
+  edms-net:
+    driver: bridge
