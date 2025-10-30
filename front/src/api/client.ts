@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Базовый URL API
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
+const API_BASE_URL = 'http://localhost:8000/api/v1';
 
 // Создаем экземпляр axios с базовой конфигурацией
 const apiClient = axios.create({
@@ -301,21 +301,19 @@ export interface DocumentHistory {
   comment?: string;
 }
 
-export enum DocumentStatus {
-  DRAFT = 'draft',
-  IN_REVIEW = 'in_review',
-  APPROVED = 'approved',
-  REJECTED = 'rejected',
-  ARCHIVED = 'archived',
-  SUPERSEDED = 'superseded'
-}
+export type DocumentStatus =
+  | 'draft'
+  | 'in_review'
+  | 'approved'
+  | 'rejected'
+  | 'archived'
+  | 'superseded';
 
-export enum ApprovalStatus {
-  PENDING = 'pending',
-  APPROVED = 'approved',
-  REJECTED = 'rejected',
-  DELEGATED = 'delegated'
-}
+export type ApprovalStatus =
+  | 'pending'
+  | 'approved'
+  | 'rejected'
+  | 'delegated';
 
 export interface Transmittal {
   id: number;
@@ -422,88 +420,7 @@ export interface User {
   updated_at: string;
 }
 
-// New Document Structure (v2) interfaces
-export interface UniqueDocument {
-  id: number;
-  number: string;
-  title: string;
-  title_native?: string;
-  project_id: number;
-  discipline_id: number;
-  type_id: number;
-  language_id?: number;
-  drs?: string;
-  originator_id?: number;
-  created: string;
-  modified?: string;
-  deleted: number;
-}
-
-export interface DocumentRevision {
-  id: number;
-  document_id: number;
-  status_id: number;
-  step_id: number;
-  description_id?: number;
-  number?: string;
-  user_id?: number;
-  remarks?: string;
-  created: string;
-  modified?: string;
-  deleted: number;
-  workflow_status_id?: number;
-}
-
-export interface DocumentRevisionFile {
-  id: number;
-  document_id: number;
-  number: string;  // Переименовано с revision на number (содержит только номер: 01, 02, 03)
-  file_name: string;
-  file_size: number;
-  file_type: string;
-  change_description: string | null;
-  uploaded_by: number;
-  is_deleted: number;  // Флаг удаления: 0 - не удален, 1 - удален
-  created_at: string;
-  // Новые поля для связи со справочниками
-  revision_status_id?: number;
-  revision_description_id?: number;
-  revision_step_id?: number;
-  review_code_id?: number;
-}
-
-export interface UploadedFileV2 {
-  id: number;
-  created: string;
-  modified?: string;
-  deleted: number;
-  path: string;
-  filename: string;
-  file_size?: number;
-  file_type?: string;
-  revision_id: number;
-}
-
-export interface DocumentWithRevisions extends UniqueDocument {
-  revisions: DocumentRevision[];
-}
-
-export interface RevisionWithFiles extends DocumentRevision {
-  files: UploadedFileV2[];
-  status_name?: string;
-  step_name?: string;
-  description_name?: string;
-  user_name?: string;
-}
-
-export interface FullDocumentResponse extends UniqueDocument {
-  revisions: RevisionWithFiles[];
-  project_name?: string;
-  discipline_name?: string;
-  document_type_name?: string;
-  language_name?: string;
-  originator_name?: string;
-}
+// (удалены устаревшие интерфейсы documents-v2)
 
 // Reference tables interfaces
 export interface RevisionStatus {
@@ -525,7 +442,7 @@ export interface RevisionDescription {
   created_at: string;
 }
 
-export interface RevisionStep {
+export interface RevisionStepRef {
   id: number;
   code?: string;
   description?: string;
@@ -544,7 +461,7 @@ export interface Originator {
   created_at: string;
 }
 
-export interface ReviewCode {
+export interface ReviewCodeRef {
   id: number;
   code: string;
   name: string;
@@ -554,13 +471,31 @@ export interface ReviewCode {
   created_at: string;
 }
 
-export interface Language {
+export interface LanguageRef {
   id: number;
   name: string;
   name_native?: string;
   code?: string;
   is_active: boolean;
   created_at: string;
+}
+
+// Ревизии документа (ответ бэкенда /documents/{id}/revisions)
+export interface DocumentRevisionItem {
+  id: number;
+  document_id: number;
+  number: string;
+  file_name: string | null;
+  file_size: number | null;
+  file_type: string | null;
+  change_description: string;
+  uploaded_by: number | null;
+  is_deleted: number;
+  created_at: string;
+  revision_status_id?: number;
+  revision_description_id?: number;
+  revision_step_id?: number;
+  workflow_status_id?: number;
 }
 
 export interface Department {
@@ -872,8 +807,10 @@ export const documentsApi = {
     return response.data;
   },
 
+  // Тип элемента ревизии документа из бэкенда
+  
   // Получить ревизии документа
-  getRevisions: async (documentId: number): Promise<DocumentRevisionFile[]> => {
+  getRevisions: async (documentId: number): Promise<DocumentRevisionItem[]> => {
     const response = await apiClient.get(`/documents/${documentId}/revisions`);
     return response.data;
   },
@@ -1030,6 +967,18 @@ export const transmittalsApi = {
   },
 };
 
+// Тип для сущности Review (минимально необходимый для фронта)
+export interface Review {
+  id: number;
+  document_id: number;
+  reviewer_id?: number;
+  comments?: string;
+  rating?: number;
+  status?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
 // API методы для ревью
 export const reviewsApi = {
   // Получить все ревью
@@ -1155,7 +1104,7 @@ export const disciplinesApi = {
 
   // Создать дисциплину
   create: async (disciplineData: { name: string; description?: string; is_active: boolean }): Promise<Discipline> => {
-    const response = await apiClient.post('/disciplines/', disciplineData);
+    const response = await apiClient.post('/disciplines', disciplineData);
     return response.data;
   },
 
@@ -1616,67 +1565,7 @@ export const workflowPresetsApi = {
 
 // Дублирующееся объявление languagesApi удалено - используется объявление выше
 
-// Documents v2 API
-export const documentsV2Api = {
-  // Unique Documents
-  getUniqueDocuments: (params?: {
-    skip?: number;
-    limit?: number;
-    project_id?: number;
-    discipline_id?: number;
-    type_id?: number;
-  }): Promise<UniqueDocument[]> => 
-    apiClient.get('/documents-v2/unique-documents', { params }).then(res => res.data),
-  
-  createUniqueDocument: (data: Partial<UniqueDocument>): Promise<UniqueDocument> => 
-    apiClient.post('/documents-v2/unique-documents', data).then(res => res.data),
-  
-  getUniqueDocument: (id: number): Promise<UniqueDocument> => 
-    apiClient.get(`/documents-v2/unique-documents/${id}`).then(res => res.data),
-  
-  // Document Revisions
-  getDocumentRevisions: (documentId: number): Promise<DocumentRevision[]> => 
-    apiClient.get(`/documents-v2/unique-documents/${documentId}/revisions`).then(res => res.data),
-  
-  createDocumentRevision: (documentId: number, data: Partial<DocumentRevision>): Promise<DocumentRevision> => 
-    apiClient.post(`/documents-v2/unique-documents/${documentId}/revisions`, data).then(res => res.data),
-  
-  // Revision Files
-  getRevisionFiles: (revisionId: number): Promise<UploadedFileV2[]> => 
-    apiClient.get(`/documents-v2/revisions/${revisionId}/files`).then(res => res.data),
-  
-  uploadFileToRevision: (revisionId: number, file: File): Promise<{ message: string; revision_id: number }> => {
-    const formData = new FormData();
-    formData.append('file', file);
-    return apiClient.post(`/documents-v2/revisions/${revisionId}/files`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    }).then(res => res.data);
-  },
-  
-  downloadRevisionFile: (revisionId: number, fileId: number): Promise<{
-    file_id: number;
-    filename: string;
-    path: string;
-    file_size?: number;
-  }> => 
-    apiClient.get(`/documents-v2/revisions/${revisionId}/download/${fileId}`).then(res => res.data),
-  
-  // Reference Data
-  getRevisionStatuses: (): Promise<RevisionStatus[]> => 
-    apiClient.get('/documents-v2/reference-data/revision-statuses').then(res => res.data),
-  
-  getRevisionDescriptions: (): Promise<RevisionDescription[]> => 
-    apiClient.get('/documents-v2/reference-data/revision-descriptions').then(res => res.data),
-  
-  getRevisionSteps: (): Promise<RevisionStep[]> => 
-    apiClient.get('/documents-v2/reference-data/revision-steps').then(res => res.data),
-  
-  getOriginators: (): Promise<Originator[]> => 
-    apiClient.get('/documents-v2/reference-data/originators').then(res => res.data),
-  
-  getLanguages: (): Promise<Language[]> => 
-    apiClient.get('/documents-v2/reference-data/languages').then(res => res.data)
-};
+// (удалён устаревший documents-v2 API)
 
 
 // Companies API
@@ -1746,7 +1635,7 @@ export const projectParticipantsApi = {
 };
 
 // Roles API
-export interface UserRole {
+export interface ApiUserRole {
   id: number;
   code: string;
   name: string;
@@ -1758,7 +1647,7 @@ export interface UserRole {
   created_at: string;
 }
 
-export interface ProjectRole {
+export interface ApiProjectRole {
   id: number;
   code: string;
   name: string;
@@ -1784,22 +1673,22 @@ export interface DocumentComment {
 
 export const rolesApi = {
   // User Roles
-  getUserRoles: async (): Promise<UserRole[]> => {
-    const response = await apiClient.get('/roles/user-roles');
+  getUserRoles: async (): Promise<ApiUserRole[]> => {
+    const response = await apiClient.get('/roles/user-roles/');
     return response.data;
   },
   
-  getUserRole: async (roleId: number): Promise<UserRole> => {
+  getUserRole: async (roleId: number): Promise<ApiUserRole> => {
     const response = await apiClient.get(`/roles/user-roles/${roleId}`);
     return response.data;
   },
   
-  createUserRole: async (role: Omit<UserRole, 'id' | 'created_at'>): Promise<UserRole> => {
-    const response = await apiClient.post('/roles/user-roles', role);
+  createUserRole: async (role: Omit<ApiUserRole, 'id' | 'created_at'>): Promise<ApiUserRole> => {
+    const response = await apiClient.post('/roles/user-roles/', role);
     return response.data;
   },
   
-  updateUserRole: async (roleId: number, role: Partial<UserRole>): Promise<UserRole> => {
+  updateUserRole: async (roleId: number, role: Partial<ApiUserRole>): Promise<ApiUserRole> => {
     const response = await apiClient.put(`/roles/user-roles/${roleId}`, role);
     return response.data;
   },
@@ -1809,22 +1698,22 @@ export const rolesApi = {
   },
   
   // Project Roles
-  getProjectRoles: async (): Promise<ProjectRole[]> => {
+  getProjectRoles: async (): Promise<ApiProjectRole[]> => {
     const response = await apiClient.get('/roles/project-roles/');
     return response.data;
   },
   
-  getProjectRole: async (roleId: number): Promise<ProjectRole> => {
+  getProjectRole: async (roleId: number): Promise<ApiProjectRole> => {
     const response = await apiClient.get(`/roles/project-roles/${roleId}`);
     return response.data;
   },
   
-  createProjectRole: async (role: Omit<ProjectRole, 'id' | 'created_at'>): Promise<ProjectRole> => {
-    const response = await apiClient.post('/roles/project-roles', role);
+  createProjectRole: async (role: Omit<ApiProjectRole, 'id' | 'created_at'>): Promise<ApiProjectRole> => {
+    const response = await apiClient.post('/roles/project-roles/', role);
     return response.data;
   },
   
-  updateProjectRole: async (roleId: number, role: Partial<ProjectRole>): Promise<ProjectRole> => {
+  updateProjectRole: async (roleId: number, role: Partial<ApiProjectRole>): Promise<ApiProjectRole> => {
     const response = await apiClient.put(`/roles/project-roles/${roleId}`, role);
     return response.data;
   },
