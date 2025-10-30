@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from pydantic import BaseModel
 from fastapi_pagination import Page, Params, create_page
+import logging
 import os
 import shutil
 import hashlib
@@ -32,6 +33,9 @@ from fastapi_pagination import Page, Params, create_page
 from fastapi_pagination.ext.sqlalchemy import paginate as sa_paginate
 
 router = APIRouter()
+
+# Logger for diagnostics
+logger = logging.getLogger(__name__)
 
 def generate_minio_key(
     project_code: str,
@@ -759,10 +763,14 @@ async def import_documents_by_paths(
     current_user: User = Depends(get_current_active_user)
 ):
     """Импорт документов по путям из Excel метаданных с прогрессом в реальном времени."""
+    logger.info("[import-by-paths] start project_id=%s metadata=%s files=%s", project_id, getattr(metadata_file, 'filename', None), len(files) if files else 0)
 
     try:
         metadata_content = await metadata_file.read()
-        
+        try:
+            logger.info("[import-by-paths] metadata rows read: %d", len(df))
+        except Exception:
+            pass
         # Пробуем разные движки для чтения Excel файла
         try:
             df = pd.read_excel(io.BytesIO(metadata_content), engine='openpyxl', header=None)
@@ -808,6 +816,7 @@ async def import_documents_by_paths(
 
         # Нормализуем названия колонок (убираем пробелы, звездочки, приводим к нижнему регистру)
         df.columns = df.columns.str.strip().str.replace('*', '').str.lower().str.replace(' ', '_')
+        logger.debug("[import-by-paths] detected columns=%s", list(df.columns))
         
         # Проверяем наличие обязательных колонок
         required_columns = ['file_path', 'title']
@@ -818,6 +827,7 @@ async def import_documents_by_paths(
                 detail=f"Отсутствуют обязательные колонки: {', '.join(missing_columns)}. Доступные колонки: {', '.join(df.columns)}"
             )
     except Exception as e:
+        logger.exception("[import-by-paths] failed to parse metadata: %s", e)
         raise HTTPException(status_code=400, detail=f"Ошибка чтения файла метаданных: {str(e)}")
 
     # Получаем информацию о проекте
@@ -849,12 +859,14 @@ async def import_documents_by_paths(
         for f in files:
             if f and f.filename:
                 uploaded_files_map[os.path.basename(f.filename).lower()] = f
+    logger.info("[import-by-paths] uploaded files map size=%d", len(uploaded_files_map))
 
     for idx, row in df.iterrows():
         try:
             src_path_raw = row['file_path']
             if pd.isna(src_path_raw) and not uploaded_files_map:
                 errors.append("Строка без file_path пропущена")
+                logger.warning("[import-by-paths] row %s skipped: empty file_path and no uploaded files", idx)
                 continue
 
             original_name = None
@@ -874,6 +886,7 @@ async def import_documents_by_paths(
                     original_name = matched.filename
                     file_extension = os.path.splitext(original_name)[1].lstrip('.').lower()
                     file_bytes = await matched.read()
+                    logger.debug("[import-by-paths] row %s matched uploaded file name=%s bytes=%s", idx, original_name, len(file_bytes) if file_bytes else 0)
                 else:
                     # Файла среди присланных нет — пробуем режим путей на сервере
                     src_path = str(src_path_raw).strip()
@@ -881,6 +894,7 @@ async def import_documents_by_paths(
                         src_path = os.path.abspath(src_path)
                     if not os.path.exists(src_path) or not os.path.isfile(src_path):
                         errors.append(f"Файл не найден: {src_path}")
+                        logger.warning("[import-by-paths] row %s file not found on server path: %s", idx, src_path)
                         continue
                     original_name = os.path.basename(src_path)
                     file_extension = os.path.splitext(original_name)[1].lstrip('.').lower()
@@ -891,6 +905,7 @@ async def import_documents_by_paths(
                     src_path = os.path.abspath(src_path)
                 if not os.path.exists(src_path) or not os.path.isfile(src_path):
                     errors.append(f"Файл не найден: {src_path}")
+                    logger.warning("[import-by-paths] row %s file not found on server path: %s", idx, src_path)
                     continue
                 original_name = os.path.basename(src_path)
                 file_extension = os.path.splitext(original_name)[1].lstrip('.').lower()
@@ -981,6 +996,7 @@ async def import_documents_by_paths(
                             file_key=minio_key,
                             content_type=content_type
                         )
+                        logger.debug("[import-by-paths] row %s minio upload key=%s success=%s", idx, minio_key, success)
                     
                     if not success:
                         # Переключаемся на локальное хранение
@@ -992,6 +1008,7 @@ async def import_documents_by_paths(
                                     out_f.write(file_bytes)
                         except Exception as copy_err:
                             errors.append(f"Ошибка копирования '{src_path}': {copy_err}")
+                            logger.error("[import-by-paths] row %s local copy failed: %s", idx, copy_err)
                             continue
                     else:
                         # MinIO успешно загружен, используем ключ MinIO как путь
@@ -1007,6 +1024,7 @@ async def import_documents_by_paths(
                                 out_f.write(file_bytes)
                     except Exception as copy_err:
                         errors.append(f"Ошибка копирования '{src_path}': {copy_err}")
+                        logger.error("[import-by-paths] row %s minio error -> local copy failed: %s; minio_err=%s", idx, copy_err, minio_err)
                         continue
             else:
                 # Локальное сохранение
@@ -1018,6 +1036,7 @@ async def import_documents_by_paths(
                             out_f.write(file_bytes)
                 except Exception as copy_err:
                     errors.append(f"Ошибка копирования '{src_path}': {copy_err}")
+                    logger.error("[import-by-paths] row %s local save failed: %s", idx, copy_err)
                     continue
 
             # Карта метаданных
@@ -1098,6 +1117,7 @@ async def import_documents_by_paths(
             db.add(db_document)
             db.commit()
             db.refresh(db_document)
+            logger.debug("[import-by-paths] row %s created document id=%s", idx, db_document.id)
             
             # Получаем ID статуса "Active" для первой ревизии (как в одиночном создании)
             from app.models.references import RevisionStatus
@@ -1140,6 +1160,7 @@ async def import_documents_by_paths(
             db.add(revision_row)
             db.commit()
             db.refresh(revision_row)
+            logger.debug("[import-by-paths] row %s created revision id=%s for document id=%s", idx, revision_row.id, db_document.id)
             
             # Создаем запись в истории workflow для первой ревизии (как в одиночном создании)
             if draft_workflow_status:
@@ -1174,7 +1195,9 @@ async def import_documents_by_paths(
 
         except Exception as e:
             errors.append(f"Строка {idx}: {str(e)}")
+            logger.exception("[import-by-paths] row %s failed: %s", idx, e)
 
+    logger.info("[import-by-paths] finish total_rows=%s total_imported=%s errors=%s", total_rows, len(imported_documents), len(errors))
     return {
         "imported_documents": imported_documents,
         "total_imported": len(imported_documents),
