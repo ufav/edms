@@ -754,6 +754,7 @@ async def get_document(
 async def import_documents_by_paths(
     metadata_file: UploadFile = File(...),
     project_id: int = Form(...),
+    files: List[UploadFile] | None = File(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -842,26 +843,57 @@ async def import_documents_by_paths(
     upload_dir = os.path.join(settings.UPLOAD_DIR, f"project_{project_id}")
     os.makedirs(upload_dir, exist_ok=True)
 
+    # Подготавливаем карту присланных файлов по имени (без директорий)
+    uploaded_files_map = {}
+    if files:
+        for f in files:
+            if f and f.filename:
+                uploaded_files_map[os.path.basename(f.filename).lower()] = f
+
     for idx, row in df.iterrows():
         try:
             src_path_raw = row['file_path']
-            if pd.isna(src_path_raw) or not str(src_path_raw).strip():
+            if pd.isna(src_path_raw) and not uploaded_files_map:
                 errors.append("Строка без file_path пропущена")
                 continue
 
-            src_path = str(src_path_raw).strip()
+            original_name = None
+            file_extension = None
+            file_bytes: bytes | None = None
 
-            # Проверяем существование файла
-            if not os.path.isabs(src_path):
-                # Разрешаем относительные пути относительно рабочего каталога процесса
-                src_path = os.path.abspath(src_path)
-            if not os.path.exists(src_path) or not os.path.isfile(src_path):
-                errors.append(f"Файл не найден: {src_path}")
-                continue
-
-            # Имя и расширение исходного файла
-            original_name = os.path.basename(src_path)
-            file_extension = os.path.splitext(original_name)[1].lstrip('.').lower()
+            # Если клиент прислал файлы, пытаемся найти по имени
+            if uploaded_files_map:
+                name_candidate = str(src_path_raw).strip() if not pd.isna(src_path_raw) else ''
+                base_candidate = os.path.basename(name_candidate).lower() if name_candidate else ''
+                # Если в Excel пусто, используем как есть имя загруженного файла нельзя — тогда пропускаем
+                matched = uploaded_files_map.get(base_candidate) if base_candidate else None
+                if not matched and name_candidate:
+                    # Попробуем матчить по полному имени (на случай регистровых отличий)
+                    matched = uploaded_files_map.get(name_candidate.lower())
+                if matched:
+                    original_name = matched.filename
+                    file_extension = os.path.splitext(original_name)[1].lstrip('.').lower()
+                    file_bytes = await matched.read()
+                else:
+                    # Файла среди присланных нет — пробуем режим путей на сервере
+                    src_path = str(src_path_raw).strip()
+                    if not os.path.isabs(src_path):
+                        src_path = os.path.abspath(src_path)
+                    if not os.path.exists(src_path) or not os.path.isfile(src_path):
+                        errors.append(f"Файл не найден: {src_path}")
+                        continue
+                    original_name = os.path.basename(src_path)
+                    file_extension = os.path.splitext(original_name)[1].lstrip('.').lower()
+            else:
+                # Режим путей на сервере (как раньше)
+                src_path = str(src_path_raw).strip()
+                if not os.path.isabs(src_path):
+                    src_path = os.path.abspath(src_path)
+                if not os.path.exists(src_path) or not os.path.isfile(src_path):
+                    errors.append(f"Файл не найден: {src_path}")
+                    continue
+                original_name = os.path.basename(src_path)
+                file_extension = os.path.splitext(original_name)[1].lstrip('.').lower()
 
             # Проверка типа файла (по расширению)
             if file_extension and settings.ALLOWED_FILE_TYPES:
@@ -918,8 +950,11 @@ async def import_documents_by_paths(
                     )
                     
                     # Загружаем файл в MinIO
-                    with open(src_path, 'rb') as file_data:
-                        file_content = file_data.read()
+                    if file_bytes is None:
+                        with open(src_path, 'rb') as file_data:
+                            file_content = file_data.read()
+                    else:
+                        file_content = file_bytes
                         
                         # Определяем content_type по расширению файла
                         content_type = 'application/octet-stream'  # По умолчанию
@@ -950,7 +985,11 @@ async def import_documents_by_paths(
                     if not success:
                         # Переключаемся на локальное хранение
                         try:
-                            shutil.copy2(src_path, dst_path)
+                            if file_bytes is None:
+                                shutil.copy2(src_path, dst_path)
+                            else:
+                                with open(dst_path, 'wb') as out_f:
+                                    out_f.write(file_bytes)
                         except Exception as copy_err:
                             errors.append(f"Ошибка копирования '{src_path}': {copy_err}")
                             continue
@@ -961,14 +1000,22 @@ async def import_documents_by_paths(
                 except Exception as minio_err:
                     # Переключаемся на локальное хранение (dst_path уже установлен как локальный путь)
                     try:
-                        shutil.copy2(src_path, dst_path)
+                        if file_bytes is None:
+                            shutil.copy2(src_path, dst_path)
+                        else:
+                            with open(dst_path, 'wb') as out_f:
+                                out_f.write(file_bytes)
                     except Exception as copy_err:
                         errors.append(f"Ошибка копирования '{src_path}': {copy_err}")
                         continue
             else:
                 # Локальное сохранение
                 try:
-                    shutil.copy2(src_path, dst_path)
+                    if file_bytes is None:
+                        shutil.copy2(src_path, dst_path)
+                    else:
+                        with open(dst_path, 'wb') as out_f:
+                            out_f.write(file_bytes)
                 except Exception as copy_err:
                     errors.append(f"Ошибка копирования '{src_path}': {copy_err}")
                     continue
@@ -1080,7 +1127,7 @@ async def import_documents_by_paths(
                 number="01",  # Первая ревизия всегда "01"
                 file_path=dst_path,
                 file_name=original_name,
-                file_size=os.path.getsize(src_path),  # Используем исходный файл для размера
+                file_size=(len(file_bytes) if file_bytes is not None else os.path.getsize(src_path)),
                 file_type=file_extension,
                 change_description="Импорт по пути",
                 uploaded_by=current_user.id,

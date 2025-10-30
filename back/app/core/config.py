@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     API_V1_STR: str = "/api/v1"
     
     # Database
-    DATABASE_URL: str
+    DATABASE_URL: str = os.getenv('DATABASE_URL', '')
     DB_HOST: str
     DB_PORT: int
     DB_NAME: str
