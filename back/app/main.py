@@ -24,6 +24,8 @@ app = FastAPI(
     openapi_url=f"{settings.API_V1_STR}/openapi.json"
 )
 
+app.router.redirect_slashes = False
+
 # Настройка CORS
 app.add_middleware(
     CORSMiddleware,

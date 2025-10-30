@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Базовый URL API
-const API_BASE_URL = 'http://localhost:8000/api/v1';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
 
 // Создаем экземпляр axios с базовой конфигурацией
 const apiClient = axios.create({
@@ -1149,13 +1149,13 @@ export const disciplinesApi = {
   // Получить все дисциплины
   getAll: async (): Promise<Discipline[]> => {
     // Убираем лимит и офсет - загружаем все дисциплины
-    const response = await apiClient.get('/disciplines');
+    const response = await apiClient.get('/disciplines/');
     return response.data;
   },
 
   // Создать дисциплину
   create: async (disciplineData: { name: string; description?: string; is_active: boolean }): Promise<Discipline> => {
-    const response = await apiClient.post('/disciplines', disciplineData);
+    const response = await apiClient.post('/disciplines/', disciplineData);
     return response.data;
   },
 
@@ -1599,13 +1599,13 @@ export const referencesApi = {
 // Workflow Presets API
 export const workflowPresetsApi = {
   getAll: (): Promise<any[]> => 
-    apiClient.get('/workflow-presets').then(res => res.data),
+    apiClient.get('/workflow-presets/').then(res => res.data),
   
   getById: (id: number): Promise<any> => 
     apiClient.get(`/workflow-presets/${id}`).then(res => res.data),
   
   create: (data: any): Promise<any> => 
-    apiClient.post('/workflow-presets', data).then(res => res.data),
+    apiClient.post('/workflow-presets/', data).then(res => res.data),
   
   update: (id: number, data: any): Promise<any> => 
     apiClient.put(`/workflow-presets/${id}`, data).then(res => res.data),
@@ -1810,7 +1810,7 @@ export const rolesApi = {
   
   // Project Roles
   getProjectRoles: async (): Promise<ProjectRole[]> => {
-    const response = await apiClient.get('/roles/project-roles');
+    const response = await apiClient.get('/roles/project-roles/');
     return response.data;
   },
   

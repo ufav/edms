@@ -6,7 +6,7 @@ COPY package*.json ./
 RUN npm ci --no-progress
 
 COPY . .
-RUN npm run build
+RUN npm run build --verbose
 
 # ===== production stage =====
 FROM nginx:alpine
