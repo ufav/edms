@@ -225,8 +225,10 @@ const DocumentsPage: React.FC = observer(() => {
     uploading,
     validating,
     validationErrors,
+    selectedDirectoryName,
     notification,
     handleMetadataFileSelect,
+    handleSelectDirectory,
     handleValidateAndUpload,
     handleCloseBatchNotification,
     canUpload,
@@ -581,8 +583,10 @@ const DocumentsPage: React.FC = observer(() => {
           validating={validating}
           canUpload={canUpload}
           validationErrors={validationErrors}
+          selectedDirectoryName={selectedDirectoryName}
           onClose={handleCloseBatchUpload}
           onFileSelect={handleMetadataFileSelect}
+          onSelectDirectory={handleSelectDirectory}
           onValidateAndUpload={handleValidateAndUpload}
         />
 

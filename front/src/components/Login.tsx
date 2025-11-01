@@ -11,8 +11,11 @@ import {
   useMediaQuery,
   InputLabel,
   OutlinedInput,
-  FormControl
+  FormControl,
+  Select,
+  MenuItem
 } from '@mui/material';
+import { useTranslation } from 'react-i18next';
 import { 
   Person as PersonIcon, 
   Lock as LockIcon,
@@ -35,15 +38,23 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const [error, setError] = useState('');
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const { t, i18n } = useTranslation();
+  const [lang, setLang] = useState(i18n.language === 'en' ? 'en' : 'ru');
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     
     if (!username || !password) {
-      setError('Пожалуйста, заполните все поля');
+      setError(t('auth.fill_all_fields'));
       return;
     }
+  const handleChangeLang = (lng: 'ru' | 'en') => {
+    setLang(lng);
+    i18n.changeLanguage(lng);
+    try { localStorage.setItem('lang', lng); } catch {}
+  };
+
     
     onLogin(username, password);
   };
@@ -107,7 +118,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 fontWeight: 300
               }}
             >
-              Electronic Document Management System
+              {t('auth.subtitle')}
             </Typography>
             
             {/* Features */}
@@ -116,10 +127,10 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 <SecurityIcon sx={{ mr: 2, fontSize: 32, opacity: 0.8 }} />
                 <Box>
                   <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 0.5 }}>
-                    Безопасность
+                    {t('auth.feature_security_title')}
                   </Typography>
                   <Typography variant="body2" sx={{ opacity: 0.8 }}>
-                    Защищенное хранение и управление документами
+                    {t('auth.feature_security_text')}
                   </Typography>
                 </Box>
               </Box>
@@ -128,10 +139,10 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 <SpeedIcon sx={{ mr: 2, fontSize: 32, opacity: 0.8 }} />
                 <Box>
                   <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 0.5 }}>
-                    Эффективность
+                    {t('auth.feature_efficiency_title')}
                   </Typography>
                   <Typography variant="body2" sx={{ opacity: 0.8 }}>
-                    Быстрый поиск и обработка документов
+                    {t('auth.feature_efficiency_text')}
                   </Typography>
                 </Box>
               </Box>
@@ -140,10 +151,10 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 <DescriptionIcon sx={{ mr: 2, fontSize: 32, opacity: 0.8 }} />
                 <Box>
                   <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 0.5 }}>
-                    Контроль версий
+                    {t('auth.feature_versions_title')}
                   </Typography>
                   <Typography variant="body2" sx={{ opacity: 0.8 }}>
-                    Полная история изменений документов
+                    {t('auth.feature_versions_text')}
                   </Typography>
                 </Box>
               </Box>
@@ -183,7 +194,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                   variant="subtitle1" 
                   color="text.secondary"
                 >
-                  Electronic Document Management System
+                  {t('auth.subtitle')}
                 </Typography>
               </Box>
             )}
@@ -197,15 +208,32 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                 color: 'text.primary'
               }}
             >
-              Добро пожаловать
+              {t('auth.welcome')}
             </Typography>
             <Typography 
               variant="body1" 
               color="text.secondary"
               sx={{ mb: 4 }}
             >
-              Войдите в систему для доступа к документам
+              {t('auth.sign_in_hint')}
             </Typography>
+
+            {/* Language Switch */}
+            <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
+              <FormControl size="small" sx={{ minWidth: 120 }}>
+                <InputLabel id="lang-select-label">{t('auth.language')}</InputLabel>
+                <Select
+                  labelId="lang-select-label"
+                  id="lang-select"
+                  value={lang}
+                  label={t('auth.language')}
+                  onChange={(e) => handleChangeLang((e.target.value as 'ru' | 'en'))}
+                >
+                  <MenuItem value={'ru'}>Русский</MenuItem>
+                  <MenuItem value={'en'}>English</MenuItem>
+                </Select>
+              </FormControl>
+            </Box>
 
             {/* Error Alert */}
             {error && (
@@ -217,7 +245,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
             {/* Login Form */}
             <Box component="form" onSubmit={handleSubmit} sx={{ mt: 2 }}>
               <FormControl fullWidth variant="outlined" sx={{ mb: 3 }}>
-                <InputLabel htmlFor="username">Имя пользователя</InputLabel>
+                <InputLabel htmlFor="username">{t('auth.username')}</InputLabel>
                 <OutlinedInput
                   id="username"
                   name="username"
@@ -230,12 +258,12 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                       <PersonIcon color="action" />
                     </InputAdornment>
                   }
-                  label="Имя пользователя"
+                  label={t('auth.username')}
                 />
               </FormControl>
               
               <FormControl fullWidth variant="outlined" sx={{ mb: 4 }}>
-                <InputLabel htmlFor="password">Пароль</InputLabel>
+                <InputLabel htmlFor="password">{t('auth.password')}</InputLabel>
                 <OutlinedInput
                   id="password"
                   name="password"
@@ -259,7 +287,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                       </IconButton>
                     </InputAdornment>
                   }
-                  label="Пароль"
+                  label={t('auth.password')}
                 />
               </FormControl>
               
@@ -282,7 +310,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
                   }
                 }}
               >
-                Войти в систему
+                {t('auth.sign_in')}
               </Button>
             </Box>
 
@@ -296,7 +324,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               borderColor: 'grey.200'
             }}>
               <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1, fontWeight: 'bold' }}>
-                Демо-доступ:
+                {t('auth.demo_title')}
               </Typography>
               <Typography variant="body2" color="text.secondary">
                 <strong>Username:</strong> admin

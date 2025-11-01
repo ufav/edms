@@ -138,13 +138,11 @@ export const useDocumentActions = ({ t, onCloseDialog, onRefreshActiveRevisions,
       }
       
     } catch (error: any) {
-      console.error('Error in handleCreateDocument:', error);
       let errorMessage = t('documents.create_error');
       
       // Обрабатываем структурированную ошибку для ревизий
       if (error?.response?.data?.detail?.error_type === 'revision_status_error') {
         const { revision, status } = error.response.data.detail;
-        console.log('Revision error details in useDocumentActions:', { revision, status });
         // Используем ручную интерполяцию, если t() не работает
         const template = t('documents.revision_error');
         errorMessage = template
@@ -194,7 +192,7 @@ export const useDocumentActions = ({ t, onCloseDialog, onRefreshActiveRevisions,
           const updatedDocument = await documentsApi.getById(selectedDocumentId);
           setSelectedDocument(updatedDocument);
         } catch (error) {
-          console.error('Error loading updated document:', error);
+          // Игнорируем ошибку загрузки обновленного документа
         }
         
         // Показываем сообщение об успехе
@@ -209,7 +207,6 @@ export const useDocumentActions = ({ t, onCloseDialog, onRefreshActiveRevisions,
         }
       }
     } catch (error: any) {
-      console.error('Error saving document:', error);
       let errorMessage = t('documents.update_error');
       
       if (error?.response?.data?.detail) {
@@ -267,24 +264,17 @@ export const useDocumentActions = ({ t, onCloseDialog, onRefreshActiveRevisions,
   // Обработчик скачивания документа
   const handleDownload = async (documentId: number) => {
     try {
-      console.log(`Starting download for document ${documentId}`);
-      
       // Получаем информацию о документе через API
       let doc: ApiDocument;
       try {
         doc = await documentsApi.getById(documentId);
       } catch (error) {
-        console.error('Document not found:', documentId, error);
         alert(t('documents.not_found'));
         return;
       }
 
-      console.log('Document found:', doc.file_name);
-      
       // Скачиваем файл
-      console.log('Calling documentsApi.download...');
       const blob = await documentsApi.download(documentId);
-      console.log('Download completed, blob size:', blob.size);
       
       // Создаем ссылку для скачивания
       const url = URL.createObjectURL(blob);
@@ -299,9 +289,8 @@ export const useDocumentActions = ({ t, onCloseDialog, onRefreshActiveRevisions,
       setTimeout(() => {
         try {
           link.click();
-          console.log('Download link clicked');
         } catch (clickError) {
-          console.error('Error clicking download link:', clickError);
+          // Игнорируем ошибку клика
         }
         
         // Очищаем через небольшую задержку
@@ -309,22 +298,13 @@ export const useDocumentActions = ({ t, onCloseDialog, onRefreshActiveRevisions,
           try {
             window.document.body.removeChild(link);
             URL.revokeObjectURL(url);
-            console.log('Download cleanup completed');
           } catch (cleanupError) {
-            console.error('Error during cleanup:', cleanupError);
+            // Игнорируем ошибку очистки
           }
         }, 100);
       }, 10);
       
     } catch (error: any) {
-      console.error('Download error details:', {
-        error,
-        message: error?.message,
-        response: error?.response,
-        status: error?.response?.status,
-        data: error?.response?.data
-      });
-      
       let errorMessage = t('documents.download_error');
       
       if (error?.response?.data?.detail) {
@@ -344,8 +324,6 @@ export const useDocumentActions = ({ t, onCloseDialog, onRefreshActiveRevisions,
           errorMessage = error.message;
         }
       }
-      
-      console.error('Final error message:', errorMessage);
       
       // Показываем уведомление об ошибке
       setErrorNotification({

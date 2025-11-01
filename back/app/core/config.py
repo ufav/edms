@@ -3,8 +3,13 @@ Configuration settings for EDMS application
 """
 
 import os
+from pathlib import Path
 from typing import List
 from pydantic_settings import BaseSettings
+
+# Определяем путь к .env файлу относительно файла config.py
+BASE_DIR = Path(__file__).resolve().parent.parent.parent  # back/
+ENV_FILE = BASE_DIR / ".env"
 
 class Settings(BaseSettings):
     # Application
@@ -46,7 +51,7 @@ class Settings(BaseSettings):
     ).split(',') if origin.strip()]
     
     class Config:
-        env_file = ".env"
+        env_file = str(ENV_FILE) if ENV_FILE.exists() else ".env"
         case_sensitive = True
         env_file_encoding = 'utf-8'
         extra = 'ignore'  # Игнорировать дополнительные поля

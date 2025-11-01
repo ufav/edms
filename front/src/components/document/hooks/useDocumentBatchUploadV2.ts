@@ -5,6 +5,7 @@ import { documentStore } from '../../../stores/DocumentStore';
 import { projectStore } from '../../../stores/ProjectStore';
 import { disciplineStore } from '../../../stores/DisciplineStore';
 import { languageStore } from '../../../stores/LanguageStore';
+import { projectDialogStore } from '../../../stores/ProjectDialogStore';
 
 export interface UseDocumentBatchUploadV2Props {
   t: (key: string) => string;
@@ -46,6 +47,7 @@ export interface UseDocumentBatchUploadV2Return {
   validating: boolean;
   validationErrors: ValidationError[];
   documents: DocumentRow[];
+  selectedDirectoryName?: string;
   
   // Уведомления
   notification: {
@@ -60,6 +62,7 @@ export interface UseDocumentBatchUploadV2Return {
   
   // Обработчики
   handleMetadataFileSelect: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  handleSelectDirectory: () => Promise<void>;
   handleValidateAndUpload: () => Promise<void>;
   handleClose: () => void;
   handleCloseBatchNotification: () => void;
@@ -78,6 +81,8 @@ export const useDocumentBatchUploadV2 = ({
   const [validating, setValidating] = useState(false);
   const [validationErrors, setValidationErrors] = useState<ValidationError[]>([]);
   const [documents, setDocuments] = useState<DocumentRow[]>([]);
+  const [directoryHandle, setDirectoryHandle] = useState<any | null>(null);
+  const [selectedDirectoryName, setSelectedDirectoryName] = useState<string | undefined>(undefined);
 
   // Состояние уведомлений
   const [notification, setNotification] = useState({
@@ -362,11 +367,18 @@ export const useDocumentBatchUploadV2 = ({
     const disciplines = disciplineStore.disciplines || [];
     const allLanguages = languageStore.languages || [];
     
-    // Получаем типы документов для каждой дисциплины
+    // Проверяем кэш типов документов проекта в ProjectDialogStore
+    let projectData = projectDialogStore.projectDataCache[projectStore.selectedProject.id];
+    
+    // Если данных нет в кэше, загружаем их
+    if (!projectData) {
+      projectData = await projectDialogStore.loadProjectData(projectStore.selectedProject.id);
+    }
+    
+    // Используем закэшированные типы документов
     const disciplineDocumentTypes = new Map<number, any[]>();
-    for (const discipline of disciplines) {
-      const types = await projectsApi.getDocumentTypes(projectStore.selectedProject.id, discipline.id);
-      disciplineDocumentTypes.set(discipline.id, types);
+    for (const [disciplineId, types] of Object.entries(projectData.documentTypes)) {
+      disciplineDocumentTypes.set(parseInt(disciplineId), types);
     }
 
     docs.forEach((doc, index) => {
@@ -485,6 +497,69 @@ export const useDocumentBatchUploadV2 = ({
     setDocuments([]);
   };
 
+  // Выбор директории (File System Access API)
+  const handleSelectDirectory = async () => {
+    try {
+      // @ts-ignore
+      const dir = await (window as any).showDirectoryPicker?.();
+      if (!dir) return;
+      setDirectoryHandle(dir);
+      // Пытаемся получить человекочитаемое имя
+      // @ts-ignore
+      setSelectedDirectoryName(dir.name || 'selected-folder');
+    } catch (e) {
+      // Игнорируем отмену
+    }
+  };
+
+  // Получить файл по относительному пути из выбранной директории
+  const getFileFromDirectory = async (relPath: string): Promise<File | null> => {
+    if (!directoryHandle) return null;
+    const cleaned = relPath.replace(/^[\\/]+/, '');
+    const parts = cleaned.split(/\\|\//).filter(Boolean);
+    if (parts.length === 0) return null;
+    try {
+      let current: any = directoryHandle;
+      for (let i = 0; i < parts.length - 1; i++) {
+        const segment = parts[i];
+        // @ts-ignore
+        current = await current.getDirectoryHandle(segment, { create: false });
+      }
+      const fileName = parts[parts.length - 1];
+      // @ts-ignore
+      const fileHandle = await current.getFileHandle(fileName, { create: false });
+      // @ts-ignore
+      const file = await fileHandle.getFile();
+      return file as File;
+    } catch (e) {
+      return null;
+    }
+  };
+
+  // Рекурсивно прочитать все файлы из директории
+  const getAllFilesFromDirectory = async (dirHandle: any, files: File[] = []): Promise<File[]> => {
+    try {
+      // @ts-ignore
+      for await (const entry of dirHandle.values()) {
+        if (entry.kind === 'file') {
+          try {
+            // @ts-ignore
+            const file = await entry.getFile();
+            files.push(file);
+          } catch (e) {
+            console.warn('Не удалось прочитать файл:', entry.name, e);
+          }
+        } else if (entry.kind === 'directory') {
+          // Рекурсивно читаем подпапки
+          await getAllFilesFromDirectory(entry, files);
+        }
+      }
+    } catch (e) {
+      console.error('Ошибка при чтении директории:', e);
+    }
+    return files;
+  };
+
   // Обработчик валидации и загрузки
   const handleValidateAndUpload = async () => {
     if (!metadataFile || !projectStore.selectedProject) {
@@ -526,7 +601,17 @@ export const useDocumentBatchUploadV2 = ({
         formData.append('metadata_file', metadataFile);
         formData.append('project_id', projectStore.selectedProject.id.toString());
         
-        
+        // Если выбрана директория, читаем ВСЕ файлы из папки и отправляем их
+        // Бэкенд сам сопоставит файлы по номеру документа (имя файла без расширения = Document ID)
+        if (directoryHandle) {
+          const allFiles = await getAllFilesFromDirectory(directoryHandle);
+          
+          // Отправляем все файлы из папки
+          for (const file of allFiles) {
+            formData.append('files', file, file.name);
+          }
+        }
+
         const response = await documentsApi.importByPaths(formData);
         
         
@@ -605,6 +690,7 @@ export const useDocumentBatchUploadV2 = ({
     validating,
     validationErrors,
     documents,
+    selectedDirectoryName,
     
     // Уведомления
     notification,
@@ -615,6 +701,7 @@ export const useDocumentBatchUploadV2 = ({
     
     // Обработчики
     handleMetadataFileSelect,
+    handleSelectDirectory,
     handleValidateAndUpload,
     handleClose,
     handleCloseBatchNotification,

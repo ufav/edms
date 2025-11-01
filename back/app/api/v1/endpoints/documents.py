@@ -8,7 +8,6 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from pydantic import BaseModel
 from fastapi_pagination import Page, Params, create_page
-import logging
 import os
 import shutil
 import hashlib
@@ -33,9 +32,6 @@ from fastapi_pagination import Page, Params, create_page
 from fastapi_pagination.ext.sqlalchemy import paginate as sa_paginate
 
 router = APIRouter()
-
-# Logger for diagnostics
-logger = logging.getLogger(__name__)
 
 def generate_minio_key(
     project_code: str,
@@ -758,19 +754,13 @@ async def get_document(
 async def import_documents_by_paths(
     metadata_file: UploadFile = File(...),
     project_id: int = Form(...),
-    files: List[UploadFile] | None = File(None),
+    files: List[UploadFile] = File(default=[]),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
     """Импорт документов по путям из Excel метаданных с прогрессом в реальном времени."""
-    logger.info("[import-by-paths] start project_id=%s metadata=%s files=%s", project_id, getattr(metadata_file, 'filename', None), len(files) if files else 0)
-
     try:
         metadata_content = await metadata_file.read()
-        try:
-            logger.info("[import-by-paths] metadata rows read: %d", len(df))
-        except Exception:
-            pass
         # Пробуем разные движки для чтения Excel файла
         try:
             df = pd.read_excel(io.BytesIO(metadata_content), engine='openpyxl', header=None)
@@ -781,28 +771,83 @@ async def import_documents_by_paths(
                 # Пробуем без указания движка
                 df = pd.read_excel(io.BytesIO(metadata_content), header=None)
         
-        
         # Ищем строку с заголовками (аналогично клиентскому коду)
         header_row_index = None
-        required_fields = ['file_path', 'title', 'discipline', 'document_type', 'language']
+        # Алиасы для распознавания колонок (после нормализации: lower, strip, remove '*', replace ' ' with '_')
+        # Варианты из пользовательского списка:
+        header_aliases = {
+            'number': {
+                'document_number',  # Document Number, Document Number*, Document_Number
+                'documentnumber',   # DocumentNumber*, DocumentNumber
+                'documentid',       # DocumentId, DocumentId*
+                'document_id'       # DocumentId, DocumentId*
+            },
+            'title': {
+                'title',            # title, title*
+                'document_title',  # document_title, document Title*, document Title
+                'documenttitle'    # documentTitle, documentTitle*
+            },
+            'secondary_title': {
+                'secondary_title',  # Secondary Title, Secondary_Title
+                'secondarytitle'     # SecondaryTitle
+            },
+            'discipline': {
+                'discipline'  # Discipline, Discipline*
+            },
+            'document_type': {
+                'documenttype',    # DocumentType, DocumentType*
+                'document_type'    # Document Type, Document Type*, Document_Type
+            },
+            'content_language': {
+                'language',           # Language, Language*
+                'content_language',   # content_Language*, content_Language, content Language*, content Language
+                'contentlanguage'    # contentLanguage, contentLanguage*
+            }
+        }
+        required_fields = ['number', 'title']
         
+        original_header_by_norm = {}
         for row_idx in range(len(df)):
             row_values = df.iloc[row_idx].astype(str).str.strip().str.lower().str.replace('*', '').str.replace(' ', '_').tolist()
-            
-            found_fields = 0
-            for field in required_fields:
-                if any(field in val for val in row_values if val and val != 'nan'):
-                    found_fields += 1
-            
-            
-            if found_fields >= len(required_fields):
+
+            # Исключаем явные поля типа transmittal_number из рассмотрения
+            row_values_filtered = [v for v in row_values if v and v != 'nan']
+
+            # Подсчет совпадений по всем известным группам
+            matched_groups = {}
+            matched_fields_details = {}
+            total_matches = 0
+            contains_number = False
+            contains_title = False
+            for group_name, aliases in header_aliases.items():
+                matched = any(v in aliases for v in row_values_filtered)
+                matched_groups[group_name] = matched
+                if matched:
+                    # Находим конкретное совпавшее значение
+                    matched_value = next((v for v in row_values_filtered if v in aliases), None)
+                    matched_fields_details[group_name] = matched_value
+                    total_matches += 1
+                    if group_name == 'number':
+                        contains_number = True
+                    if group_name == 'title':
+                        contains_title = True
+
+            # Эвристика: шапка — если минимум 3 совпадения среди известных колонок и обязательно найдены number и title
+            if contains_number and contains_title and total_matches >= 3:
                 header_row_index = row_idx
+                # Сохраним исходные заголовки для логирования (до нормализации)
+                try:
+                    raw_headers = df.iloc[row_idx].astype(str).tolist()
+                    norm_headers = [str(v).strip().lower().replace('*', '').replace(' ', '_') for v in raw_headers]
+                    original_header_by_norm = {norm: raw for norm, raw in zip(norm_headers, raw_headers)}
+                except Exception as e:
+                    original_header_by_norm = {}
                 break
         
         if header_row_index is None:
             raise HTTPException(
                 status_code=400,
-                detail="Не найдена строка с заголовками. Проверьте, что файл содержит все обязательные колонки."
+                detail="Не найдена строка с заголовками. Требуются 'number' и 'title' или их алиасы."
             )
         
         # Читаем файл заново с правильной строкой заголовков
@@ -816,10 +861,56 @@ async def import_documents_by_paths(
 
         # Нормализуем названия колонок (убираем пробелы, звездочки, приводим к нижнему регистру)
         df.columns = df.columns.str.strip().str.replace('*', '').str.lower().str.replace(' ', '_')
-        logger.debug("[import-by-paths] detected columns=%s", list(df.columns))
+
+        # Переименовываем в канонические имена по алиасам
+        column_aliases = {
+            'number': header_aliases['number'],
+            'title': header_aliases['title'],
+            'secondary_title': header_aliases['secondary_title'],
+            'discipline': header_aliases['discipline'],
+            'document_type': header_aliases['document_type'],
+            'content_language': header_aliases['content_language'],
+        }
+        rename_map = {}
+        for col in list(df.columns):
+            for canonical, aliases in column_aliases.items():
+                if col in aliases and col != canonical:
+                    rename_map[col] = canonical
+        if rename_map:
+            df.rename(columns=rename_map, inplace=True)
         
-        # Проверяем наличие обязательных колонок
-        required_columns = ['file_path', 'title']
+        # После переименования колонки могли стать каноническими именами (например, 'number')
+        # Проверяем сначала наличие 'number' (после переименования), затем исходные алиасы
+        available_cols = set(df.columns)
+        selected_number_col = None
+        
+        # Приоритет 1: если есть 'number' (каноническое имя после переименования) - используем его
+        if 'number' in available_cols:
+            selected_number_col = 'number'
+        else:
+            # Приоритет 2: ищем исходные алиасы из пользовательского списка
+            number_aliases_order = [
+                'document_number',   # Document Number, Document Number*, Document_Number
+                'documentnumber',    # DocumentNumber*, DocumentNumber
+                'documentid',        # DocumentId, DocumentId*
+                'document_id'        # DocumentId, DocumentId*
+            ]
+            excluded_number_like = {'trn_number', 'transmittal_number', 'trn_no'}
+            for candidate in number_aliases_order:
+                is_excluded = candidate in excluded_number_like or 'trn' in candidate or 'transmittal' in candidate
+                is_available = candidate in available_cols
+                if is_available and not is_excluded:
+                    selected_number_col = candidate
+                    break
+            
+            if not selected_number_col:
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"Не найдена колонка с номером документа. Доступные колонки: {', '.join(df.columns)}. Ожидаются варианты: Document Number, DocumentNumber, DocumentId, Document_Id"
+                )
+        
+        # Проверяем наличие обязательных колонок (без file_path)
+        required_columns = ['number', 'title']
         missing_columns = [col for col in required_columns if col not in df.columns]
         if missing_columns:
             raise HTTPException(
@@ -827,7 +918,6 @@ async def import_documents_by_paths(
                 detail=f"Отсутствуют обязательные колонки: {', '.join(missing_columns)}. Доступные колонки: {', '.join(df.columns)}"
             )
     except Exception as e:
-        logger.exception("[import-by-paths] failed to parse metadata: %s", e)
         raise HTTPException(status_code=400, detail=f"Ошибка чтения файла метаданных: {str(e)}")
 
     # Получаем информацию о проекте
@@ -855,60 +945,41 @@ async def import_documents_by_paths(
 
     # Подготавливаем карту присланных файлов по имени (без директорий)
     uploaded_files_map = {}
-    if files:
-        for f in files:
-            if f and f.filename:
-                uploaded_files_map[os.path.basename(f.filename).lower()] = f
-    logger.info("[import-by-paths] uploaded files map size=%d", len(uploaded_files_map))
+    
+    for idx, f in enumerate(files):
+        if f:
+            filename = getattr(f, 'filename', None) or str(f)
+            if filename:
+                uploaded_files_map[os.path.basename(filename).lower()] = f
+    
+    # Карта по имени без расширения
+    uploaded_files_noext = {}
+    for base_name, f in uploaded_files_map.items():
+        noext = os.path.splitext(base_name)[0].lower()
+        uploaded_files_noext[noext] = f
 
     for idx, row in df.iterrows():
         try:
-            src_path_raw = row['file_path']
-            if pd.isna(src_path_raw) and not uploaded_files_map:
-                errors.append("Строка без file_path пропущена")
-                logger.warning("[import-by-paths] row %s skipped: empty file_path and no uploaded files", idx)
-                continue
-
             original_name = None
             file_extension = None
             file_bytes: bytes | None = None
 
-            # Если клиент прислал файлы, пытаемся найти по имени
-            if uploaded_files_map:
-                name_candidate = str(src_path_raw).strip() if not pd.isna(src_path_raw) else ''
-                base_candidate = os.path.basename(name_candidate).lower() if name_candidate else ''
-                # Если в Excel пусто, используем как есть имя загруженного файла нельзя — тогда пропускаем
-                matched = uploaded_files_map.get(base_candidate) if base_candidate else None
-                if not matched and name_candidate:
-                    # Попробуем матчить по полному имени (на случай регистровых отличий)
-                    matched = uploaded_files_map.get(name_candidate.lower())
+            # Ищем файл по номеру документа (имя файла без расширения)
+            # selected_number_col уже проверен и гарантированно существует в df.columns
+            source_col = selected_number_col
+            doc_number = str(row.get(source_col) or '').strip()
+            doc_number_lower = doc_number.lower() if doc_number else ''
+            
+            if doc_number:
+                matched = uploaded_files_noext.get(doc_number_lower)
                 if matched:
                     original_name = matched.filename
                     file_extension = os.path.splitext(original_name)[1].lstrip('.').lower()
                     file_bytes = await matched.read()
-                    logger.debug("[import-by-paths] row %s matched uploaded file name=%s bytes=%s", idx, original_name, len(file_bytes) if file_bytes else 0)
-                else:
-                    # Файла среди присланных нет — пробуем режим путей на сервере
-                    src_path = str(src_path_raw).strip()
-                    if not os.path.isabs(src_path):
-                        src_path = os.path.abspath(src_path)
-                    if not os.path.exists(src_path) or not os.path.isfile(src_path):
-                        errors.append(f"Файл не найден: {src_path}")
-                        logger.warning("[import-by-paths] row %s file not found on server path: %s", idx, src_path)
-                        continue
-                    original_name = os.path.basename(src_path)
-                    file_extension = os.path.splitext(original_name)[1].lstrip('.').lower()
-            else:
-                # Режим путей на сервере (как раньше)
-                src_path = str(src_path_raw).strip()
-                if not os.path.isabs(src_path):
-                    src_path = os.path.abspath(src_path)
-                if not os.path.exists(src_path) or not os.path.isfile(src_path):
-                    errors.append(f"Файл не найден: {src_path}")
-                    logger.warning("[import-by-paths] row %s file not found on server path: %s", idx, src_path)
-                    continue
-                original_name = os.path.basename(src_path)
-                file_extension = os.path.splitext(original_name)[1].lstrip('.').lower()
+
+            if not file_bytes:
+                errors.append(f"Файл не найден по номеру документа ({source_col}): {doc_number}")
+                continue
 
             # Проверка типа файла (по расширению)
             if file_extension and settings.ALLOWED_FILE_TYPES:
@@ -956,7 +1027,7 @@ async def import_documents_by_paths(
                     # Генерируем ключ для MinIO
                     minio_key = generate_minio_key(
                         project_code=project.project_code,
-                        document_number=get_str('document_id', 'UNKNOWN'),
+                        document_number=get_str('number', 'UNKNOWN'),
                         revision_code="A",  # По умолчанию
                         revision_number="01",
                         revision_description_id=1,  # По умолчанию
@@ -965,50 +1036,40 @@ async def import_documents_by_paths(
                     )
                     
                     # Загружаем файл в MinIO
-                    if file_bytes is None:
-                        with open(src_path, 'rb') as file_data:
-                            file_content = file_data.read()
-                    else:
-                        file_content = file_bytes
-                        
-                        # Определяем content_type по расширению файла
-                        content_type = 'application/octet-stream'  # По умолчанию
-                        if file_extension:
-                            content_type_map = {
-                                'pdf': 'application/pdf',
-                                'dwg': 'application/dwg',
-                                'doc': 'application/msword',
-                                'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-                                'xls': 'application/vnd.ms-excel',
-                                'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                                'jpg': 'image/jpeg',
-                                'jpeg': 'image/jpeg',
-                                'png': 'image/png',
-                                'gif': 'image/gif',
-                                'tiff': 'image/tiff',
-                                'txt': 'text/plain',
-                                'rtf': 'application/rtf'
-                            }
-                            content_type = content_type_map.get(file_extension.lower(), 'application/octet-stream')
-                        
-                        success = await minio_service.upload_file(
-                            file_content=file_content,
-                            file_key=minio_key,
-                            content_type=content_type
-                        )
-                        logger.debug("[import-by-paths] row %s minio upload key=%s success=%s", idx, minio_key, success)
+                    file_content = file_bytes
+                    # Определяем content_type по расширению файла
+                    content_type = 'application/octet-stream'  # По умолчанию
+                    if file_extension:
+                        content_type_map = {
+                            'pdf': 'application/pdf',
+                            'dwg': 'application/dwg',
+                            'doc': 'application/msword',
+                            'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                            'xls': 'application/vnd.ms-excel',
+                            'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                            'jpg': 'image/jpeg',
+                            'jpeg': 'image/jpeg',
+                            'png': 'image/png',
+                            'gif': 'image/gif',
+                            'tiff': 'image/tiff',
+                            'txt': 'text/plain',
+                            'rtf': 'application/rtf'
+                        }
+                        content_type = content_type_map.get(file_extension.lower(), 'application/octet-stream')
+
+                    success = await minio_service.upload_file(
+                        file_content=file_content,
+                        file_key=minio_key,
+                        content_type=content_type
+                    )
                     
                     if not success:
                         # Переключаемся на локальное хранение
                         try:
-                            if file_bytes is None:
-                                shutil.copy2(src_path, dst_path)
-                            else:
-                                with open(dst_path, 'wb') as out_f:
-                                    out_f.write(file_bytes)
+                            with open(dst_path, 'wb') as out_f:
+                                out_f.write(file_bytes)
                         except Exception as copy_err:
-                            errors.append(f"Ошибка копирования '{src_path}': {copy_err}")
-                            logger.error("[import-by-paths] row %s local copy failed: %s", idx, copy_err)
+                            errors.append(f"Ошибка сохранения локально: {copy_err}")
                             continue
                     else:
                         # MinIO успешно загружен, используем ключ MinIO как путь
@@ -1017,26 +1078,18 @@ async def import_documents_by_paths(
                 except Exception as minio_err:
                     # Переключаемся на локальное хранение (dst_path уже установлен как локальный путь)
                     try:
-                        if file_bytes is None:
-                            shutil.copy2(src_path, dst_path)
-                        else:
-                            with open(dst_path, 'wb') as out_f:
-                                out_f.write(file_bytes)
+                        with open(dst_path, 'wb') as out_f:
+                            out_f.write(file_bytes)
                     except Exception as copy_err:
-                        errors.append(f"Ошибка копирования '{src_path}': {copy_err}")
-                        logger.error("[import-by-paths] row %s minio error -> local copy failed: %s; minio_err=%s", idx, copy_err, minio_err)
+                        errors.append(f"Ошибка сохранения локально: {copy_err}")
                         continue
             else:
                 # Локальное сохранение
                 try:
-                    if file_bytes is None:
-                        shutil.copy2(src_path, dst_path)
-                    else:
-                        with open(dst_path, 'wb') as out_f:
-                            out_f.write(file_bytes)
+                    with open(dst_path, 'wb') as out_f:
+                        out_f.write(file_bytes)
                 except Exception as copy_err:
-                    errors.append(f"Ошибка копирования '{src_path}': {copy_err}")
-                    logger.error("[import-by-paths] row %s local save failed: %s", idx, copy_err)
+                    errors.append(f"Ошибка сохранения локально: {copy_err}")
                     continue
 
             # Карта метаданных
@@ -1096,7 +1149,7 @@ async def import_documents_by_paths(
                 title=title,
                 title_native=get_str('secondary_title'),  # Используем secondary_title для title_native
                 remarks=None,  # Примечания (можно добавить в будущем)
-                number=get_str('document_id'),  # document_id из Excel -> number в БД
+                number=get_str('number'),
                 project_id=project_id,
                 discipline_id=discipline_id,
                 document_type_id=document_type_id,
@@ -1117,7 +1170,6 @@ async def import_documents_by_paths(
             db.add(db_document)
             db.commit()
             db.refresh(db_document)
-            logger.debug("[import-by-paths] row %s created document id=%s", idx, db_document.id)
             
             # Получаем ID статуса "Active" для первой ревизии (как в одиночном создании)
             from app.models.references import RevisionStatus
@@ -1147,7 +1199,7 @@ async def import_documents_by_paths(
                 number="01",  # Первая ревизия всегда "01"
                 file_path=dst_path,
                 file_name=original_name,
-                file_size=(len(file_bytes) if file_bytes is not None else os.path.getsize(src_path)),
+                file_size=(len(file_bytes) if file_bytes is not None else 0),
                 file_type=file_extension,
                 change_description="Импорт по пути",
                 uploaded_by=current_user.id,
@@ -1160,7 +1212,6 @@ async def import_documents_by_paths(
             db.add(revision_row)
             db.commit()
             db.refresh(revision_row)
-            logger.debug("[import-by-paths] row %s created revision id=%s for document id=%s", idx, revision_row.id, db_document.id)
             
             # Создаем запись в истории workflow для первой ревизии (как в одиночном создании)
             if draft_workflow_status:
@@ -1195,9 +1246,7 @@ async def import_documents_by_paths(
 
         except Exception as e:
             errors.append(f"Строка {idx}: {str(e)}")
-            logger.exception("[import-by-paths] row %s failed: %s", idx, e)
 
-    logger.info("[import-by-paths] finish total_rows=%s total_imported=%s errors=%s", total_rows, len(imported_documents), len(errors))
     return {
         "imported_documents": imported_documents,
         "total_imported": len(imported_documents),

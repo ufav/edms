@@ -28,10 +28,12 @@ export interface DocumentBatchUploadDialogProps {
   validating: boolean;
   canUpload: boolean;
   validationErrors?: Array<{row: number, field: string, message: string}>;
+  selectedDirectoryName?: string;
   
   // Обработчики
   onClose: () => void;
   onFileSelect: (event: React.ChangeEvent<HTMLInputElement>) => void;
+  onSelectDirectory: () => void;
   onValidateAndUpload: () => void;
 }
 
@@ -42,8 +44,10 @@ export const DocumentBatchUploadDialog: React.FC<DocumentBatchUploadDialogProps>
   validating,
   canUpload,
   validationErrors,
+  selectedDirectoryName,
   onClose,
   onFileSelect,
+  onSelectDirectory,
   onValidateAndUpload,
 }) => {
   const { t } = useTranslation();
@@ -117,6 +121,19 @@ export const DocumentBatchUploadDialog: React.FC<DocumentBatchUploadDialogProps>
             </Box>
           </Box>
 
+          {/* Выбор папки для автоматического поиска файлов */}
+          <Box>
+            <Typography variant="h6" gutterBottom>
+              {t('documents.select_folder') || 'Выбрать папку с файлами'}
+            </Typography>
+            <Button variant="outlined" onClick={onSelectDirectory} sx={{ width: '100%' }}>
+              {selectedDirectoryName ? selectedDirectoryName : (t('documents.choose_folder') || 'Выбрать папку')}
+            </Button>
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+              {t('documents.select_folder_hint') || 'Файлы будут автоматически найдены по путям/именам из Excel.'}
+            </Typography>
+          </Box>
+
           {/* Информация о формате Excel */}
           <Alert severity="info" sx={{ mt: 2 }}>
             <Typography variant="body2">
@@ -175,7 +192,7 @@ export const DocumentBatchUploadDialog: React.FC<DocumentBatchUploadDialogProps>
           disabled={!canUpload}
           startIcon={(uploading || validating) ? <CircularProgress size={20} /> : <UploadFileIcon />}
         >
-          {validating ? 'Проверка...' : uploading ? (t('documents.uploading') || 'Импорт...') : (t('documents.import') || 'Импортировать')}
+          {validating ? (t('documents.validating') || 'Проверка...') : uploading ? (t('documents.uploading') || 'Импорт...') : (t('documents.import') || 'Импортировать')}
         </Button>
       </DialogActions>
     </Dialog>
