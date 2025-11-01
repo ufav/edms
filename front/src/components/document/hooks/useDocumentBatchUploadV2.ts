@@ -500,15 +500,55 @@ export const useDocumentBatchUploadV2 = ({
   // Выбор директории (File System Access API)
   const handleSelectDirectory = async () => {
     try {
-      // @ts-ignore
-      const dir = await (window as any).showDirectoryPicker?.();
+      // Проверяем поддержку File System Access API
+      const win = window as any;
+      if (typeof win.showDirectoryPicker !== 'function') {
+        setNotification({
+          open: true,
+          message: 'Выбор папок не поддерживается в этом браузере или требуется HTTPS соединение',
+          severity: 'error'
+        });
+        return;
+      }
+
+      // Проверяем безопасный контекст (HTTPS или localhost)
+      // window.isSecureContext работает и с self-signed сертификатами после принятия пользователем
+      // Для localhost тоже работает, даже без HTTPS
+      const isSecureContext = window.isSecureContext || 
+        window.location.protocol === 'https:' || 
+        window.location.hostname === 'localhost' || 
+        window.location.hostname === '127.0.0.1' ||
+        window.location.hostname.includes('.localhost');
+
+      if (!isSecureContext) {
+        setNotification({
+          open: true,
+          message: 'Выбор папок доступен только при HTTPS соединении или на localhost',
+          severity: 'error'
+        });
+        return;
+      }
+
+      // Вызываем File System Access API
+      const dir = await win.showDirectoryPicker();
       if (!dir) return;
+      
       setDirectoryHandle(dir);
       // Пытаемся получить человекочитаемое имя
       // @ts-ignore
       setSelectedDirectoryName(dir.name || 'selected-folder');
-    } catch (e) {
-      // Игнорируем отмену
+    } catch (e: any) {
+      // Игнорируем ошибку отмены пользователем (AbortError)
+      if (e?.name === 'AbortError' || e?.message?.includes('abort')) {
+        return;
+      }
+      
+      // Показываем другие ошибки пользователю
+      setNotification({
+        open: true,
+        message: `Ошибка при выборе папки: ${e?.message || 'Неизвестная ошибка'}`,
+        severity: 'error'
+      });
     }
   };
 
