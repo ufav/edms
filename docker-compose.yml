@@ -1,6 +1,8 @@
 services:
   nginx:
-    build: ./nginx
+    build:
+      context: .                  # <--- контекст теперь корень проекта
+      dockerfile: ./nginx/Dockerfile
     ports:
       - "80:80"
       - "443:443"
@@ -8,6 +10,9 @@ services:
       - back
     networks:
       - edms-net
+    volumes:
+      - ./nginx/conf.d/default.conf:/etc/nginx/conf.d/default.conf:ro  # <--- использовать локальный файл
+      - ./nginx/ssl:/etc/nginx/ssl:ro                                  # <--- использовать локальные SSL-файлы
 
   back:
     build: ./back
