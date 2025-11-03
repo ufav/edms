@@ -1,10 +1,9 @@
 services:
-  front:
-    build: ./front
+  nginx:
+    build: ./nginx
     ports:
-      - "5173:80"
-    env_file:
-      - ./front/.env
+      - "80:80"
+      - "443:443"
     depends_on:
       - back
     networks:
@@ -55,21 +54,6 @@ services:
       - "9001:9001"
     volumes:
       - minio-data:/data
-    networks:
-      - edms-net
-
-  nginx:
-    image: nginx:latest
-    ports:
-      - "80:80"
-      - "443:443"
-    volumes:
-      - ./nginx/conf.d:/etc/nginx/conf.d
-      - ./nginx/ssl:/etc/nginx/ssl
-      - ./front/dist:/usr/share/nginx/html
-    depends_on:
-      - front
-      - back
     networks:
       - edms-net
 
