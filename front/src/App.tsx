@@ -36,6 +36,7 @@ function App() {
   const [user, setUser] = useState<{ username: string; role: string } | null>(null);
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [tokenExpiryMs, setTokenExpiryMs] = useState<number | null>(null);
+  const [loginError, setLoginError] = useState<string | null>(null);
   const lastActivityRef = useRef<number>(Date.now());
   const activityWindowMs = 5 * 60 * 1000; // 5 минут окна активности
   const refreshThresholdMs = 2 * 60 * 1000; // авто-рефреш за 2 минуты до истечения
@@ -121,6 +122,7 @@ function App() {
 
   const handleLogin = async (username: string, password: string) => {
     try {
+      setLoginError(null);
       // Попытка входа через API
       const response = await authApi.login(username, password);
       
@@ -153,8 +155,8 @@ function App() {
       
       // Загружаем настройки пользователя
       await settingsStore.loadSettings('documents');
-    } catch (error) {
-      alert('Ошибка входа в систему. Проверьте, что backend запущен и учетные данные правильные.');
+    } catch (error: any) {
+      setLoginError(error?.response?.data?.detail || 'Ошибка входа в систему. Проверьте учетные данные.');
     }
   };
 
@@ -164,6 +166,7 @@ function App() {
     setUser(null);
     setCurrentPage('dashboard');
     setTokenExpiryMs(null);
+    setLoginError(null);
 
     // Очищаем проекты при выходе через action
     projectStore.clearProjects();
@@ -227,7 +230,7 @@ function App() {
             } />
           </Routes>
         ) : (
-          <Login onLogin={handleLogin} />
+          <Login onLogin={handleLogin} loginError={loginError} />
         )}
       </Router>
     </ThemeProvider>

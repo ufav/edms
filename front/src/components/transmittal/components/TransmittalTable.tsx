@@ -14,6 +14,7 @@ import {
   Typography,
   CircularProgress,
   Alert,
+  alpha,
 } from '@mui/material';
 import {
   Delete as DeleteIcon,
@@ -299,8 +300,18 @@ export const TransmittalTable: React.FC<TransmittalTableProps> = ({
                       label={transmittal.direction === 'in' ? t('transmittals.direction.in') : 
                              transmittal.direction === 'out' ? t('transmittals.direction.out') : 'Не указано'}
                       color={transmittal.direction === 'in' ? 'success' : 'primary'}
+                      variant="outlined"
                       size="small"
-                      sx={{ fontSize: '0.75rem', height: '24px' }}
+                      sx={{ 
+                        fontSize: '0.75rem', 
+                        height: '24px',
+                        backgroundColor: (theme) => {
+                          const chipColor = transmittal.direction === 'in' ? 'success' : 'primary';
+                          return chipColor === 'success' 
+                            ? alpha(theme.palette.success.main, 0.12)
+                            : alpha(theme.palette.primary.main, 0.12);
+                        }
+                      }}
                     />
                   </TableCell>
                 )}
@@ -334,8 +345,24 @@ export const TransmittalTable: React.FC<TransmittalTableProps> = ({
                     <Chip
                       label={transmittalStore.getTransmittalStatusLabel(transmittal.status, t)}
                       color={transmittalStore.getTransmittalStatusColor(transmittal.status) as any}
+                      variant="outlined"
                       size="small"
-                      sx={{ fontSize: '0.75rem', height: '24px' }}
+                      sx={{ 
+                        fontSize: '0.75rem', 
+                        height: '24px',
+                        backgroundColor: (theme) => {
+                          const statusColor = transmittalStore.getTransmittalStatusColor(transmittal.status);
+                          const colorMap: { [key: string]: string } = {
+                            'error': alpha(theme.palette.error.main, 0.12),
+                            'warning': alpha(theme.palette.warning.main, 0.12),
+                            'info': alpha(theme.palette.info.main, 0.12),
+                            'success': alpha(theme.palette.success.main, 0.12),
+                            'primary': alpha(theme.palette.primary.main, 0.12),
+                            'default': theme.palette.grey[100]
+                          };
+                          return colorMap[statusColor] || theme.palette.grey[100];
+                        }
+                      }}
                     />
                   </TableCell>
                 )}

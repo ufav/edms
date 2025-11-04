@@ -15,6 +15,7 @@ import {
   CircularProgress,
   Alert,
   Checkbox,
+  alpha,
 } from '@mui/material';
 import {
   Description as DescriptionIcon,
@@ -349,8 +350,24 @@ export const DocumentTable: React.FC<DocumentTableProps> = observer(({
             <Chip
               label={documentStore.getDocumentStatusLabel(document, referencesStore, language)}
               color={documentStore.getDocumentStatusColor(document, referencesStore) as any}
+              variant="outlined"
               size="small"
-              sx={{ fontSize: '0.75rem', height: '24px' }}
+              sx={{ 
+                fontSize: '0.75rem', 
+                height: '24px',
+                backgroundColor: (theme) => {
+                  const statusColor = documentStore.getDocumentStatusColor(document, referencesStore);
+                  const colorMap: { [key: string]: string } = {
+                    'error': alpha(theme.palette.error.main, 0.12),
+                    'warning': alpha(theme.palette.warning.main, 0.12),
+                    'info': alpha(theme.palette.info.main, 0.12),
+                    'success': alpha(theme.palette.success.main, 0.12),
+                    'primary': alpha(theme.palette.primary.main, 0.12),
+                    'default': theme.palette.grey[100]
+                  };
+                  return colorMap[statusColor] || theme.palette.grey[100];
+                }
+              }}
             />
           );
         case 'review_status':
@@ -358,8 +375,24 @@ export const DocumentTable: React.FC<DocumentTableProps> = observer(({
             <Chip
               label={referencesStore.getWorkflowStatusLabel(document.workflow_status_id, language)}
               color={getWorkflowStatusColor(document.workflow_status_id) as any}
+              variant="outlined"
               size="small"
-              sx={{ fontSize: '0.75rem', height: '24px' }}
+              sx={{ 
+                fontSize: '0.75rem', 
+                height: '24px',
+                backgroundColor: (theme) => {
+                  const statusColor = getWorkflowStatusColor(document.workflow_status_id);
+                  const colorMap: { [key: string]: string } = {
+                    'error': alpha(theme.palette.error.main, 0.12),
+                    'warning': alpha(theme.palette.warning.main, 0.12),
+                    'info': alpha(theme.palette.info.main, 0.12),
+                    'success': alpha(theme.palette.success.main, 0.12),
+                    'primary': alpha(theme.palette.primary.main, 0.12),
+                    'default': theme.palette.grey[100]
+                  };
+                  return colorMap[statusColor] || theme.palette.grey[100];
+                }
+              }}
             />
           );
         case 'language':

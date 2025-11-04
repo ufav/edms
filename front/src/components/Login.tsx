@@ -30,9 +30,10 @@ import {
 
 interface LoginProps {
   onLogin: (username: string, password: string) => void;
+  loginError?: string | null;
 }
 
-const Login: React.FC<LoginProps> = ({ onLogin }) => {
+const Login: React.FC<LoginProps> = ({ onLogin, loginError }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -237,14 +238,6 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               {t('auth.sign_in_hint')}
             </Typography>
 
-            
-            {/* Error Alert */}
-            {error && (
-              <Alert severity="error" sx={{ mb: 3 }}>
-                {error}
-              </Alert>
-            )}
-
             {/* Login Form */}
             <Box component="form" onSubmit={handleSubmit} sx={{ mt: 2 }}>
               <FormControl fullWidth variant="outlined" sx={{ mb: 3 }}>
@@ -317,24 +310,29 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               </Button>
             </Box>
 
-            {/* Demo Credentials */}
-            <Box sx={{ 
-              mt: 3, 
-              p: 3, 
-              bgcolor: 'grey.50', 
-              borderRadius: 2,
-              border: '1px solid',
-              borderColor: 'grey.200'
-            }}>
-              <Typography variant="subtitle2" color="text.secondary" sx={{ mb: 1, fontWeight: 'bold' }}>
-                {t('auth.demo_title')}
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                <strong>Username:</strong> admin
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                <strong>Password:</strong> admin123
-              </Typography>
+            {/* Error Message */}
+            <Box sx={{ mt: 3, height: '80px', position: 'relative' }}>
+              {loginError && (
+                <Alert 
+                  severity="error" 
+                  sx={{ 
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    '& .MuiAlert-message': {
+                      width: '100%'
+                    }
+                  }}
+                >
+                  <Typography variant="subtitle2" sx={{ mb: 0.5, fontWeight: 'bold' }}>
+                    {t('auth.login_error') || 'Ошибка входа'}
+                  </Typography>
+                  <Typography variant="body2">
+                    {loginError}
+                  </Typography>
+                </Alert>
+              )}
             </Box>
           </Box>
         </Grid>

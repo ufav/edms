@@ -23,10 +23,10 @@ import {
   Tooltip,
   useTheme,
   useMediaQuery,
+  alpha,
 } from '@mui/material';
 import {
   Search as SearchIcon,
-  FilterList as FilterIcon,
   Add as AddIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
@@ -60,6 +60,8 @@ const UsersPage: React.FC = observer(() => {
     is_active: true,
     password: '',
   });
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [errors, setErrors] = useState<{ [key: string]: string }>({});
   const [saving, setSaving] = useState<boolean>(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState<boolean>(false);
@@ -107,6 +109,8 @@ const UsersPage: React.FC = observer(() => {
     setDialogMode('create');
     setEditingUserId(null);
     setFormData({ username: '', full_name: '', email: '', role: 'viewer', is_active: true, password: '' });
+    setConfirmPassword('');
+    setErrors({});
     setSaveError(null);
     setDialogOpen(true);
   };
@@ -124,6 +128,8 @@ const UsersPage: React.FC = observer(() => {
       is_active: u.is_active,
       password: '',
     });
+    setConfirmPassword('');
+    setErrors({});
     setSaveError(null);
     setDialogOpen(true);
   };
@@ -154,9 +160,108 @@ const UsersPage: React.FC = observer(() => {
   const handleDialogClose = () => {
     if (saving) return;
     setDialogOpen(false);
+    setErrors({});
+    setConfirmPassword('');
+  };
+
+  // Валидация формы
+  const validateForm = (): boolean => {
+    const newErrors: { [key: string]: string } = {};
+
+    if (dialogMode === 'create') {
+      if (!formData.username.trim()) {
+        newErrors.username = t('users.validation.username_required') || 'Имя пользователя обязательно';
+      } else if (formData.username.length < 3) {
+        newErrors.username = t('users.validation.username_min_length') || 'Имя пользователя должно быть не менее 3 символов';
+      } else if (!/^[a-zA-Z0-9_]+$/.test(formData.username)) {
+        newErrors.username = t('users.validation.username_invalid') || 'Имя пользователя может содержать только буквы, цифры и подчеркивание';
+      }
+
+      if (!formData.password) {
+        newErrors.password = t('users.validation.password_required') || 'Пароль обязателен';
+      } else if (formData.password.length < 6) {
+        newErrors.password = t('users.validation.password_min_length') || 'Пароль должен быть не менее 6 символов';
+      }
+
+      if (!confirmPassword) {
+        newErrors.confirmPassword = t('users.validation.confirm_password_required') || 'Подтверждение пароля обязательно';
+      } else if (formData.password !== confirmPassword) {
+        newErrors.confirmPassword = t('users.validation.passwords_not_match') || 'Пароли не совпадают';
+      }
+    }
+
+    if (!formData.full_name.trim()) {
+      newErrors.full_name = t('users.validation.full_name_required') || 'Полное имя обязательно';
+    }
+
+    if (!formData.email.trim()) {
+      newErrors.email = t('users.validation.email_required') || 'Email обязателен';
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+      newErrors.email = t('users.validation.email_invalid') || 'Некорректный формат email';
+    }
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
+  // Валидация отдельного поля
+  const validateField = (fieldName: string, value: string) => {
+    const newErrors = { ...errors };
+    delete newErrors[fieldName];
+
+    if (fieldName === 'username' && dialogMode === 'create') {
+      if (!value.trim()) {
+        newErrors.username = t('users.validation.username_required') || 'Имя пользователя обязательно';
+      } else if (value.length < 3) {
+        newErrors.username = t('users.validation.username_min_length') || 'Имя пользователя должно быть не менее 3 символов';
+      } else if (!/^[a-zA-Z0-9_]+$/.test(value)) {
+        newErrors.username = t('users.validation.username_invalid') || 'Имя пользователя может содержать только буквы, цифры и подчеркивание';
+      }
+    }
+
+    if (fieldName === 'full_name') {
+      if (!value.trim()) {
+        newErrors.full_name = t('users.validation.full_name_required') || 'Полное имя обязательно';
+      }
+    }
+
+    if (fieldName === 'email') {
+      if (!value.trim()) {
+        newErrors.email = t('users.validation.email_required') || 'Email обязателен';
+      } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+        newErrors.email = t('users.validation.email_invalid') || 'Некорректный формат email';
+      }
+    }
+
+    if (fieldName === 'password' && dialogMode === 'create') {
+      if (!value) {
+        newErrors.password = t('users.validation.password_required') || 'Пароль обязателен';
+      } else if (value.length < 6) {
+        newErrors.password = t('users.validation.password_min_length') || 'Пароль должен быть не менее 6 символов';
+      }
+      // Проверка совпадения паролей при изменении поля пароля
+      if (confirmPassword && value !== confirmPassword) {
+        newErrors.confirmPassword = t('users.validation.passwords_not_match') || 'Пароли не совпадают';
+      } else if (confirmPassword && value === confirmPassword) {
+        delete newErrors.confirmPassword;
+      }
+    }
+
+    if (fieldName === 'confirmPassword') {
+      if (!value) {
+        newErrors.confirmPassword = t('users.validation.confirm_password_required') || 'Подтверждение пароля обязательно';
+      } else if (formData.password !== value) {
+        newErrors.confirmPassword = t('users.validation.passwords_not_match') || 'Пароли не совпадают';
+      }
+    }
+
+    setErrors(newErrors);
   };
 
   const handleSave = async () => {
+    if (!validateForm()) {
+      return;
+    }
     setSaveError(null);
     setSaving(true);
     try {
@@ -165,7 +270,7 @@ const UsersPage: React.FC = observer(() => {
           username: formData.username,
           email: formData.email,
           full_name: formData.full_name,
-          password: formData.password || 'ChangeMe123!',
+          password: formData.password,
           role: formData.role,
           is_active: formData.is_active,
         });
@@ -181,6 +286,8 @@ const UsersPage: React.FC = observer(() => {
       userStore.clearUsers();
       await userStore.loadUsers();
       setDialogOpen(false);
+      setConfirmPassword('');
+      setErrors({});
     } catch (e: any) {
       setSaveError(e?.response?.data?.detail || 'Ошибка сохранения');
     } finally {
@@ -427,16 +534,41 @@ const UsersPage: React.FC = observer(() => {
                         <Chip
                           label={getRoleLabel(user.role, t)}
                           color={getRoleColor(user.role) as any}
+                          variant="outlined"
                           size="small"
-                          sx={{ fontSize: '0.75rem', height: '24px' }}
+                          sx={{ 
+                            fontSize: '0.75rem', 
+                            height: '24px',
+                            backgroundColor: (theme) => {
+                              const roleColor = getRoleColor(user.role);
+                              const colorMap: { [key: string]: string } = {
+                                'error': alpha(theme.palette.error.main, 0.12),
+                                'warning': alpha(theme.palette.warning.main, 0.12),
+                                'info': alpha(theme.palette.info.main, 0.12),
+                                'success': alpha(theme.palette.success.main, 0.12),
+                                'primary': alpha(theme.palette.primary.main, 0.12),
+                                'default': theme.palette.grey[100]
+                              };
+                              return colorMap[roleColor] || theme.palette.grey[100];
+                            }
+                          }}
                         />
                       </TableCell>
                       <TableCell>
                         <Chip
                           label={user.is_active ? t('users.active') : t('users.inactive')}
                           color={user.is_active ? 'success' : 'default'}
+                          variant="outlined"
                           size="small"
-                          sx={{ fontSize: '0.75rem', height: '24px' }}
+                          sx={{ 
+                            fontSize: '0.75rem', 
+                            height: '24px',
+                            backgroundColor: (theme) => {
+                              return user.is_active 
+                                ? alpha(theme.palette.success.main, 0.12)
+                                : theme.palette.grey[100];
+                            }
+                          }}
                         />
                       </TableCell>
                       <TableCell>
@@ -451,7 +583,7 @@ const UsersPage: React.FC = observer(() => {
                       </TableCell>
                       <TableCell>
                         <Box sx={{ display: 'flex', gap: 1 }}>
-                          <Tooltip title={t('project.edit')}>
+                          <Tooltip title={t('common.edit')}>
                             <IconButton size="small" onClick={() => handleEdit(user.id)} sx={{ padding: '4px' }}>
                               <EditIcon fontSize="small" />
                             </IconButton>
@@ -479,7 +611,7 @@ const UsersPage: React.FC = observer(() => {
           count={totalPages}
           page={Math.min(page, totalPages)}
           onPageChange={(_, p) => setPage(p)}
-          showRowsPerPage={false}
+          rowsPerPage={rowsPerPage}
           fixedBottom
           insetLeft={isMobile ? 0 : 240}
           align="right"
@@ -490,7 +622,7 @@ const UsersPage: React.FC = observer(() => {
       {/* Диалог создания/редактирования пользователя */}
       <Dialog open={dialogOpen} onClose={handleDialogClose} fullWidth maxWidth="sm">
         <DialogTitle>
-          {dialogMode === 'create' ? t('users.add_user') : t('project.edit')}
+          {dialogMode === 'create' ? t('users.add_user') : t('common.edit')}
         </DialogTitle>
         <DialogContent sx={{ pt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
           {saveError && (
@@ -498,27 +630,58 @@ const UsersPage: React.FC = observer(() => {
           )}
           <TextField
             label={t('users.columns.username')}
+            sx={{ mt: 2 }}
             value={formData.username}
-            onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+            onChange={(e) => {
+              setFormData({ ...formData, username: e.target.value });
+              if (dialogMode === 'create') {
+                validateField('username', e.target.value);
+              }
+            }}
+            onBlur={() => {
+              if (dialogMode === 'create') {
+                validateField('username', formData.username);
+              }
+            }}
             disabled={saving || dialogMode === 'edit'}
             fullWidth
+            required
+            error={!!errors.username}
+            helperText={errors.username}
+            autoComplete="username"
           />
           <TextField
             label={t('users.columns.full_name')}
             value={formData.full_name}
-            onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+            onChange={(e) => {
+              setFormData({ ...formData, full_name: e.target.value });
+              validateField('full_name', e.target.value);
+            }}
+            onBlur={() => validateField('full_name', formData.full_name)}
             disabled={saving}
             fullWidth
+            required
+            error={!!errors.full_name}
+            helperText={errors.full_name}
+            autoComplete="name"
           />
           <TextField
             label={t('users.columns.email')}
             type="email"
             value={formData.email}
-            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+            onChange={(e) => {
+              setFormData({ ...formData, email: e.target.value });
+              validateField('email', e.target.value);
+            }}
+            onBlur={() => validateField('email', formData.email)}
             disabled={saving}
             fullWidth
+            required
+            error={!!errors.email}
+            helperText={errors.email}
+            autoComplete="email"
           />
-          <FormControl fullWidth>
+          <FormControl fullWidth required>
             <InputLabel>{t('users.role')}</InputLabel>
             <Select
               label={t('users.role')}
@@ -531,7 +694,7 @@ const UsersPage: React.FC = observer(() => {
               <MenuItem value="viewer">{t('roles.viewer')}</MenuItem>
             </Select>
           </FormControl>
-          <FormControl fullWidth>
+          <FormControl fullWidth required>
             <InputLabel>{t('common.status')}</InputLabel>
             <Select
               label={t('common.status')}
@@ -544,20 +707,56 @@ const UsersPage: React.FC = observer(() => {
             </Select>
           </FormControl>
           {dialogMode === 'create' && (
-            <TextField
-              label={t('common.password') || 'Пароль'}
-              type="password"
-              value={formData.password}
-              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-              disabled={saving}
-              fullWidth
-              placeholder="Минимум 6 символов"
-            />
+            <>
+              <TextField
+                label={t('auth.password')}
+                type="password"
+                value={formData.password}
+                onChange={(e) => {
+                  setFormData({ ...formData, password: e.target.value });
+                  validateField('password', e.target.value);
+                }}
+                onBlur={() => validateField('password', formData.password)}
+                disabled={saving}
+                fullWidth
+                required
+                error={!!errors.password}
+                helperText={errors.password || (t('users.validation.password_hint') || 'Минимум 6 символов')}
+                autoComplete="new-password"
+              />
+              <TextField
+                label={t('users.confirm_password') || 'Подтверждение пароля'}
+                type="password"
+                value={confirmPassword}
+                onChange={(e) => {
+                  setConfirmPassword(e.target.value);
+                  validateField('confirmPassword', e.target.value);
+                }}
+                onBlur={() => validateField('confirmPassword', confirmPassword)}
+                disabled={saving}
+                fullWidth
+                required
+                error={!!errors.confirmPassword}
+                helperText={errors.confirmPassword}
+                autoComplete="new-password"
+              />
+            </>
           )}
         </DialogContent>
         <DialogActions>
           <Button onClick={handleDialogClose} disabled={saving}>{t('common.cancel')}</Button>
-          <Button onClick={handleSave} variant="contained" disabled={saving} startIcon={dialogMode === 'create' ? <AddIcon /> : <EditIcon />}>
+          <Button 
+            onClick={handleSave} 
+            variant="contained" 
+            disabled={saving || (Object.keys(errors).filter(key => {
+              // В режиме редактирования не учитываем ошибки username и password полей
+              if (dialogMode === 'edit') {
+                return key !== 'username' && key !== 'password' && key !== 'confirmPassword';
+              }
+              return true;
+            }).length > 0)} 
+            startIcon={dialogMode === 'create' ? <AddIcon /> : <EditIcon />}
+          >
             {dialogMode === 'create' ? t('common.create') : t('common.save')}
           </Button>
         </DialogActions>

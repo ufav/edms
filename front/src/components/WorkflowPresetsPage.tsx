@@ -35,6 +35,7 @@ import {
   Autocomplete,
   useTheme,
   useMediaQuery,
+  alpha,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -494,8 +495,17 @@ const WorkflowPresetsPage: React.FC = observer(() => {
                         <Chip 
                           label={preset.is_global ? t('workflows.types.global') : t('workflows.types.user')} 
                           color={preset.is_global ? 'primary' : 'secondary'}
+                          variant="outlined"
                           size="small"
-                          sx={{ fontSize: '0.75rem', height: '24px' }}
+                          sx={{ 
+                            fontSize: '0.75rem', 
+                            height: '24px',
+                            backgroundColor: (theme) => {
+                              return preset.is_global
+                                ? alpha(theme.palette.primary.main, 0.12)
+                                : alpha(theme.palette.secondary.main, 0.12);
+                            }
+                          }}
                         />
                       </TableCell>
                       <TableCell sx={{ 
