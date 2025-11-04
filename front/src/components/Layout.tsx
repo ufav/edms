@@ -126,7 +126,7 @@ const Layout: React.FC<LayoutProps> = observer(({
     ...(permissions.canViewWorkflows ? [{ id: 'workflows', label: t('menu.workflows'), icon: <WorkflowIcon /> }] : []),
     ...(permissions.canViewUsers ? [{ id: 'users', label: t('menu.users'), icon: <UserIcon /> }] : []),
     ...(permissions.canViewAdmin ? [
-      { id: 'admin', label: 'Админка', icon: <SettingsIcon />, external: true }
+      { id: 'admin', label: t('admin.title'), icon: <SettingsIcon />, external: true }
     ] : []),
   ];
 

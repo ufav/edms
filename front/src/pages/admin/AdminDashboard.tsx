@@ -97,7 +97,7 @@ const StatCard: React.FC<{
         )}
       </Box>
       <Typography variant="h4" sx={{ fontWeight: 'bold', mb: 0.5 }}>
-        {value.toLocaleString()}
+        {Number(value ?? 0).toLocaleString()}
       </Typography>
       <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
         {title}

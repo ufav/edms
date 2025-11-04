@@ -37,6 +37,9 @@ import { userStore } from '../stores/UserStore';
 import { useTranslation } from 'react-i18next';
 import { getRoleLabel, getRoleColor } from '../utils/roleLocalization';
 import AppPagination from './AppPagination';
+import { Dialog, DialogTitle, DialogContent, DialogActions } from '@mui/material';
+import { usersApi } from '../api/client';
+import ConfirmDeleteDialog from './ConfirmDeleteDialog';
 
 const UsersPage: React.FC = observer(() => {
   const { t } = useTranslation();
@@ -46,6 +49,22 @@ const UsersPage: React.FC = observer(() => {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [page, setPage] = useState<number>(1); // 1-based
+  const [dialogOpen, setDialogOpen] = useState<boolean>(false);
+  const [dialogMode, setDialogMode] = useState<'create' | 'edit'>('create');
+  const [editingUserId, setEditingUserId] = useState<number | null>(null);
+  const [formData, setFormData] = useState({
+    username: '',
+    full_name: '',
+    email: '',
+    role: 'viewer',
+    is_active: true,
+    password: '',
+  });
+  const [saving, setSaving] = useState<boolean>(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [deleteOpen, setDeleteOpen] = useState<boolean>(false);
+  const [deleteLoading, setDeleteLoading] = useState<boolean>(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: number; name: string } | null>(null);
   const rowsPerPage = 13;
 
   // Загружаем пользователей при монтировании компонента
@@ -53,9 +72,18 @@ const UsersPage: React.FC = observer(() => {
     userStore.loadUsers();
   }, []);
 
+  // Нормализация роли для корректной фильтрации
+  const normalizeRole = (role: string): string => {
+    const r = (role || '').toLowerCase();
+    if (r === 'administrator' || r === 'superadmin' || r === 'admin') return 'admin';
+    if (r === 'operator') return 'operator';
+    if (r === 'viewer') return 'viewer';
+    return r;
+  };
+
   // Фильтрация пользователей
   const filteredUsers = userStore.users.filter(user => {
-    const roleMatch = filterRole === 'all' || user.role === filterRole;
+    const roleMatch = filterRole === 'all' || normalizeRole(user.role) === filterRole;
     const statusMatch = filterStatus === 'all' || 
       (filterStatus === 'active' && user.is_active) ||
       (filterStatus === 'inactive' && !user.is_active);
@@ -76,15 +104,88 @@ const UsersPage: React.FC = observer(() => {
   const displayedUsers = filteredUsers.slice((page - 1) * rowsPerPage, (page - 1) * rowsPerPage + rowsPerPage);
 
   const handleCreate = () => {
-    // TODO: Реализовать создание пользователя
+    setDialogMode('create');
+    setEditingUserId(null);
+    setFormData({ username: '', full_name: '', email: '', role: 'viewer', is_active: true, password: '' });
+    setSaveError(null);
+    setDialogOpen(true);
   };
 
   const handleEdit = (userId: number) => {
-    // TODO: Реализовать редактирование пользователя
+    const u = userStore.getUserById(userId);
+    if (!u) return;
+    setDialogMode('edit');
+    setEditingUserId(userId);
+    setFormData({
+      username: u.username,
+      full_name: u.full_name,
+      email: u.email,
+      role: u.role,
+      is_active: u.is_active,
+      password: '',
+    });
+    setSaveError(null);
+    setDialogOpen(true);
   };
 
   const handleDelete = (userId: number) => {
-    // TODO: Реализовать удаление пользователя
+    const u = userStore.getUserById(userId);
+    if (!u) return;
+    setDeleteTarget({ id: u.id, name: u.full_name || u.username });
+    setDeleteOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleteLoading(true);
+    try {
+      await usersApi.delete(deleteTarget.id);
+      userStore.clearUsers();
+      await userStore.loadUsers();
+      setDeleteOpen(false);
+      setDeleteTarget(null);
+    } catch (_e) {
+      alert('Не удалось удалить пользователя');
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
+  const handleDialogClose = () => {
+    if (saving) return;
+    setDialogOpen(false);
+  };
+
+  const handleSave = async () => {
+    setSaveError(null);
+    setSaving(true);
+    try {
+      if (dialogMode === 'create') {
+        await usersApi.create({
+          username: formData.username,
+          email: formData.email,
+          full_name: formData.full_name,
+          password: formData.password || 'ChangeMe123!',
+          role: formData.role,
+          is_active: formData.is_active,
+        });
+      } else if (dialogMode === 'edit' && editingUserId != null) {
+        await usersApi.update(editingUserId, {
+          username: formData.username,
+          email: formData.email,
+          full_name: formData.full_name,
+          role: formData.role,
+          is_active: formData.is_active,
+        } as any);
+      }
+      userStore.clearUsers();
+      await userStore.loadUsers();
+      setDialogOpen(false);
+    } catch (e: any) {
+      setSaveError(e?.response?.data?.detail || 'Ошибка сохранения');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -180,6 +281,7 @@ const UsersPage: React.FC = observer(() => {
             minWidth: '100%', 
             flex: 1,
             minHeight: 0,
+            height: '100%',
             display: 'flex', 
             alignItems: 'center', 
             justifyContent: 'center',
@@ -187,10 +289,10 @@ const UsersPage: React.FC = observer(() => {
           }}>
             <Box sx={{ textAlign: 'center', py: 4 }}>
               <Typography variant="h6" color="text.secondary">
-                Пользователи не найдены
+                {t('users.no_users')}
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Попробуйте изменить фильтры или добавить новых пользователей
+                {t('users.no_users_hint')}
               </Typography>
             </Box>
           </TableContainer>
@@ -355,7 +457,7 @@ const UsersPage: React.FC = observer(() => {
                             </IconButton>
                           </Tooltip>
                           <Tooltip title={t('common.delete')}>
-                            <IconButton size="small" onClick={() => handleDelete(user.id)} color="error" sx={{ padding: '4px' }}>
+                            <IconButton size="small" onClick={() => handleDelete(user.id)} sx={{ padding: '4px', color: 'text.secondary' }}>
                               <DeleteIcon fontSize="small" />
                             </IconButton>
                           </Tooltip>
@@ -384,6 +486,93 @@ const UsersPage: React.FC = observer(() => {
           size="small"
         />
       )}
+
+      {/* Диалог создания/редактирования пользователя */}
+      <Dialog open={dialogOpen} onClose={handleDialogClose} fullWidth maxWidth="sm">
+        <DialogTitle>
+          {dialogMode === 'create' ? t('users.add_user') : t('project.edit')}
+        </DialogTitle>
+        <DialogContent sx={{ pt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
+          {saveError && (
+            <Alert severity="error">{saveError}</Alert>
+          )}
+          <TextField
+            label={t('users.columns.username')}
+            value={formData.username}
+            onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+            disabled={saving || dialogMode === 'edit'}
+            fullWidth
+          />
+          <TextField
+            label={t('users.columns.full_name')}
+            value={formData.full_name}
+            onChange={(e) => setFormData({ ...formData, full_name: e.target.value })}
+            disabled={saving}
+            fullWidth
+          />
+          <TextField
+            label={t('users.columns.email')}
+            type="email"
+            value={formData.email}
+            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+            disabled={saving}
+            fullWidth
+          />
+          <FormControl fullWidth>
+            <InputLabel>{t('users.role')}</InputLabel>
+            <Select
+              label={t('users.role')}
+              value={formData.role}
+              onChange={(e) => setFormData({ ...formData, role: e.target.value as string })}
+              disabled={saving}
+            >
+              <MenuItem value="admin">{t('roles.admin')}</MenuItem>
+              <MenuItem value="operator">{t('roles.operator')}</MenuItem>
+              <MenuItem value="viewer">{t('roles.viewer')}</MenuItem>
+            </Select>
+          </FormControl>
+          <FormControl fullWidth>
+            <InputLabel>{t('common.status')}</InputLabel>
+            <Select
+              label={t('common.status')}
+              value={formData.is_active ? 'active' : 'inactive'}
+              onChange={(e) => setFormData({ ...formData, is_active: e.target.value === 'active' })}
+              disabled={saving}
+            >
+              <MenuItem value="active">{t('users.active')}</MenuItem>
+              <MenuItem value="inactive">{t('users.inactive')}</MenuItem>
+            </Select>
+          </FormControl>
+          {dialogMode === 'create' && (
+            <TextField
+              label={t('common.password') || 'Пароль'}
+              type="password"
+              value={formData.password}
+              onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+              disabled={saving}
+              fullWidth
+              placeholder="Минимум 6 символов"
+            />
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleDialogClose} disabled={saving}>{t('common.cancel')}</Button>
+          <Button onClick={handleSave} variant="contained" disabled={saving} startIcon={dialogMode === 'create' ? <AddIcon /> : <EditIcon />}>
+            {dialogMode === 'create' ? t('common.create') : t('common.save')}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Диалог подтверждения удаления */}
+      <ConfirmDeleteDialog
+        open={deleteOpen}
+        onClose={() => { if (!deleteLoading) setDeleteOpen(false); }}
+        onConfirm={handleConfirmDelete}
+        title={t('common.delete')}
+        message={t('users.delete_confirm') || t('common.confirm_action')}
+        itemName={deleteTarget?.name}
+        loading={deleteLoading}
+      />
     </Box>
   );
 });

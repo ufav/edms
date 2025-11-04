@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Box, Typography, Grid, Card, CardContent, Button, Paper, CircularProgress, Alert, useTheme, useMediaQuery } from '@mui/material';
 import { 
   Add as AddIcon, 
@@ -12,11 +12,28 @@ import { observer } from 'mobx-react-lite';
 import { dashboardStore } from '../stores/DashboardStore';
 import { projectStore } from '../stores/ProjectStore';
 import { useTranslation } from 'react-i18next';
+import ProjectDialog from './project/ProjectDialog';
+import { DocumentViewer } from './document';
+import TransmittalDialog from './transmittal/components/TransmittalDialog';
+import { useDocumentActions } from './document/hooks/useDocumentActions';
 
 const Dashboard: React.FC = observer(() => {
   const { t } = useTranslation();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+
+  // Состояние модалок быстрых действий
+  const [createProjectOpen, setCreateProjectOpen] = useState(false);
+  const [createDocumentOpen, setCreateDocumentOpen] = useState(false);
+  const [createTransmittalOpen, setCreateTransmittalOpen] = useState(false);
+  const [addUserOpen, setAddUserOpen] = useState(false);
+
+  // Действия с документами (для большого диалога создания документа)
+  const { handleCreateDocument } = useDocumentActions({
+    t: (key: string) => t(key),
+    onCloseDialog: () => setCreateDocumentOpen(false),
+  });
+
   // Загружаем данные дашборда только после выбора проекта и аутентификации
   useEffect(() => {
     if (projectStore.selectedProject) {
@@ -28,19 +45,19 @@ const Dashboard: React.FC = observer(() => {
   const recentActivities = dashboardStore.getRecentActivities(t);
 
   const handleCreateProject = () => {
-    // TODO: Реализовать создание проекта
+    setCreateProjectOpen(true);
   };
 
   const handleUploadDocument = () => {
-    // TODO: Реализовать загрузку документа
+    setCreateDocumentOpen(true);
   };
 
   const handleCreateTransmittal = () => {
-    // TODO: Реализовать создание трансмиттала
+    setCreateTransmittalOpen(true);
   };
 
   const handleAddUser = () => {
-    // TODO: Реализовать добавление пользователя
+    setAddUserOpen(true);
   };
 
   const getActivityIcon = (iconType: string) => {
@@ -242,6 +259,44 @@ const Dashboard: React.FC = observer(() => {
           </Paper>
         </Grid>
       </Grid>
+
+      {/* Модалки существующих компонентов */}
+      {/* Проект: создание */}
+      <ProjectDialog
+        open={createProjectOpen}
+        mode="create"
+        onClose={() => setCreateProjectOpen(false)}
+        onSuccess={async () => {
+          setCreateProjectOpen(false);
+          await projectStore.refreshProjects();
+        }}
+      />
+
+      {/* Документ: большой диалог создания документа */}
+      <DocumentViewer
+        open={createDocumentOpen}
+        document={null}
+        documentId={null}
+        isCreating
+        onClose={() => setCreateDocumentOpen(false)}
+        onNewRevision={() => {}}
+        onCompareRevisions={() => {}}
+        onCreateDocument={handleCreateDocument}
+      />
+
+      {/* Трансмиттал: создание */}
+      <TransmittalDialog
+        open={createTransmittalOpen}
+        onClose={() => setCreateTransmittalOpen(false)}
+        onCreateTransmittal={async () => {
+          // Заглушка: по-хорошему вызвать API создания трансмиттала
+          // Диалог сам закроется после resolve, т.к. вызывает onClose()
+        }}
+        formatFileSize={(bytes: number) => `${(bytes / 1024 / 1024).toFixed(2)} MB`}
+        formatDate={(date: string) => new Date(date).toLocaleDateString()}
+      />
+
+      {/* Добавление пользователя: отдельного универсального диалога нет; оставляем кнопку для будущей интеграции */}
     </Box>
   );
 });

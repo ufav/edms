@@ -31,6 +31,8 @@
   "common.view": "View",
   "common.delete": "Delete",
   "common.cancel": "Cancel",
+  "common.deleting": "Deleting...",
+  "common.item_label": "Item",
   "common.confirm": "Confirm",
   "common.confirm_action": "Are you sure you want to perform this action?",
   "common.create": "Create",
@@ -564,8 +566,8 @@
   "createProject.messages.add_user_description": "Dialog for adding a user to the project - select user and assign role",
   "createProject.messages.edit_user_description": "Dialog for editing a project user - change user role",
   
-  "workflows.title": "Workflow Presets",
-  "workflows.create_preset": "Create Preset",
+  "workflows.title": "Workflows",
+  "workflows.create_preset": "Create Workflow",
   "workflows.table.name": "Name",
   "workflows.table.description": "Description",
   "workflows.table.type": "Type",
@@ -734,6 +736,9 @@
   "users.columns.role": "Role",
   "users.columns.status": "Status",
   "users.columns.created_at": "Created At",
+  "users.no_users": "No users found",
+  "users.no_users_hint": "Try changing filters or add new users",
+  "users.delete_confirm": "Are you sure you want to delete this user?",
   "roles.admin": "Administrator",
   "roles.operator": "Operator",
   "roles.viewer": "Viewer",
@@ -787,5 +792,7 @@
     "reviews.load_error": "Error loading documents",
     "reviews.action_error": "Error performing action",
     "reviews.approved_successfully": "Document successfully approved",
-    "reviews.rejected_successfully": "Document successfully rejected"
+    "reviews.rejected_successfully": "Document successfully rejected",
+
+  "admin.title": "Admin Panel"
 }

@@ -568,10 +568,12 @@ async def update_project(
 
 def check_project_access(project: Project, current_user: User, db: Session, require_creator_or_admin: bool = False):
     """Проверяет права доступа к проекту"""
+    # Глобальный администратор всегда имеет доступ
+    if current_user.user_role and current_user.user_role.code == 'admin':
+        return
+
     if require_creator_or_admin:
         # Для управления участниками: admin, создатель проекта или участники с ролью "manager" в проекте
-        if current_user.user_role and current_user.user_role.code == 'admin':
-            return  # Админ может все
         
         # Проверяем, является ли пользователь создателем проекта
         if project.created_by == current_user.id:

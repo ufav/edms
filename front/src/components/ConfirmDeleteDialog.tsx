@@ -10,6 +10,7 @@ import {
   IconButton,
 } from '@mui/material';
 import { Warning as WarningIcon, Close as CloseIcon } from '@mui/icons-material';
+import { useTranslation } from 'react-i18next';
 
 interface ConfirmDeleteDialogProps {
   open: boolean;
@@ -30,6 +31,7 @@ const ConfirmDeleteDialog: React.FC<ConfirmDeleteDialogProps> = ({
   itemName,
   loading = false,
 }) => {
+  const { t } = useTranslation();
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
       <DialogTitle>
@@ -51,13 +53,13 @@ const ConfirmDeleteDialog: React.FC<ConfirmDeleteDialogProps> = ({
         </Typography>
         {itemName && (
           <Typography variant="body2" color="text.secondary">
-            <strong>Элемент:</strong> {itemName}
+            <strong>{t('common.item_label')}:</strong> {itemName}
           </Typography>
         )}
       </DialogContent>
       <DialogActions sx={{ p: 2 }}>
         <Button onClick={onClose} disabled={loading}>
-          Отмена
+          {t('common.cancel')}
         </Button>
         <Button
           onClick={onConfirm}
@@ -65,7 +67,7 @@ const ConfirmDeleteDialog: React.FC<ConfirmDeleteDialogProps> = ({
           variant="contained"
           disabled={loading}
         >
-          {loading ? 'Удаление...' : 'Удалить'}
+          {loading ? (t('common.deleting') || `${t('common.delete')}...`) : t('common.delete')}
         </Button>
       </DialogActions>
     </Dialog>

@@ -150,7 +150,7 @@ const AdminWorkflows: React.FC = () => {
       await new Promise(resolve => setTimeout(resolve, 1000));
       setWorkflows(mockWorkflows);
     } catch (err) {
-      setError('Ошибка загрузки workflow шаблонов');
+      setError('Ошибка загрузки маршрутов');
       console.error('Error loading workflows:', err);
     } finally {
       setLoading(false);
@@ -305,7 +305,7 @@ const AdminWorkflows: React.FC = () => {
               </Typography>
 
               <Typography variant="h6" sx={{ mb: 2 }}>
-                Этапы workflow
+                Этапы маршрута
               </Typography>
 
               <Stepper orientation="vertical">
@@ -367,7 +367,7 @@ const AdminWorkflows: React.FC = () => {
               sx={{ mb: 2 }}
             />
             <Alert severity="info" sx={{ mb: 2 }}>
-              После создания шаблона вы сможете добавить этапы workflow
+              После создания маршрута вы сможете добавить его этапы
             </Alert>
           </Box>
         </DialogContent>

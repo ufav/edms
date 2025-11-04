@@ -1,6 +1,7 @@
 import { makeAutoObservable, runInAction } from 'mobx';
 import { projectsApi } from '../api/client';
 import type { ProjectParticipant } from '../api/client';
+import { settingsStore } from './SettingsStore';
 
 export interface Project {
   id: number;
@@ -109,6 +110,12 @@ class ProjectStore {
   // Выбор проекта
   selectProject(project: Project) {
     this.selectedProject = project;
+    // Сохраняем последний выбранный проект в настройках пользователя (не дожидаясь)
+    try {
+      settingsStore.saveSettings('app', { last_project_id: project.id });
+    } catch (_e) {
+      // ignore best-effort
+    }
   }
 
   // Удаление проекта из стора (для soft delete)

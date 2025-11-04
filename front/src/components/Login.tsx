@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { 
   Box, 
   Button, 
+  ButtonGroup,
   Typography, 
   InputAdornment,
   IconButton,
@@ -41,6 +42,12 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
   const { t, i18n } = useTranslation();
   const [lang, setLang] = useState(i18n.language === 'en' ? 'en' : 'ru');
 
+  const handleChangeLang = (lng: 'ru' | 'en') => {
+    setLang(lng);
+    i18n.changeLanguage(lng);
+    try { localStorage.setItem('lang', lng); } catch {}
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -49,12 +56,6 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
       setError(t('auth.fill_all_fields'));
       return;
     }
-  const handleChangeLang = (lng: 'ru' | 'en') => {
-    setLang(lng);
-    i18n.changeLanguage(lng);
-    try { localStorage.setItem('lang', lng); } catch {}
-  };
-
     
     onLogin(username, password);
   };
@@ -69,8 +70,26 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
         minHeight: '100vh',
         display: 'flex',
         background: 'linear-gradient(135deg, #1976d2 0%, #42a5f5 100%)',
+        position: 'relative'
       }}
     >
+      {/* Global Language Switcher - top-right corner */}
+      <Box sx={{ position: 'fixed', top: 16, right: 16, zIndex: 10 }}>
+        <ButtonGroup size="small" variant="outlined" color="inherit">
+          <Button 
+            variant={lang === 'ru' ? 'contained' : 'outlined'} 
+            onClick={() => handleChangeLang('ru')}
+          >
+            RU
+          </Button>
+          <Button 
+            variant={lang === 'en' ? 'contained' : 'outlined'} 
+            onClick={() => handleChangeLang('en')}
+          >
+            EN
+          </Button>
+        </ButtonGroup>
+      </Box>
       <Grid container sx={{ minHeight: '100vh' }}>
         {/* Left Side - Branding */}
         <Grid 
@@ -218,23 +237,7 @@ const Login: React.FC<LoginProps> = ({ onLogin }) => {
               {t('auth.sign_in_hint')}
             </Typography>
 
-            {/* Language Switch */}
-            <Box sx={{ display: 'flex', justifyContent: 'flex-end', mb: 2 }}>
-              <FormControl size="small" sx={{ minWidth: 120 }}>
-                <InputLabel id="lang-select-label">{t('auth.language')}</InputLabel>
-                <Select
-                  labelId="lang-select-label"
-                  id="lang-select"
-                  value={lang}
-                  label={t('auth.language')}
-                  onChange={(e) => handleChangeLang((e.target.value as 'ru' | 'en'))}
-                >
-                  <MenuItem value={'ru'}>Русский</MenuItem>
-                  <MenuItem value={'en'}>English</MenuItem>
-                </Select>
-              </FormControl>
-            </Box>
-
+            
             {/* Error Alert */}
             {error && (
               <Alert severity="error" sx={{ mb: 3 }}>

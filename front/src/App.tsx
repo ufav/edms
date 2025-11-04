@@ -10,7 +10,7 @@ import DocumentsPage from './components/DocumentsPage';
 import TransmittalsPage from './components/TransmittalsPage';
 import ReviewsPage from './components/review/ReviewsPage';
 import UsersPage from './components/UsersPage';
-import WorkflowPresetsPage from './pages/WorkflowPresetsPage';
+import WorkflowPresetsPage from './components/WorkflowPresetsPage';
 import AdminRoutes from './pages/admin/AdminRoutes';
 import { authApi, setAuthToken, removeAuthToken, setUnauthorizedHandler } from './api/client';
 import { projectStore } from './stores/ProjectStore';
@@ -137,6 +137,16 @@ function App() {
       
       // Загружаем проекты после успешной аутентификации
       await projectStore.loadProjects();
+      
+      // Загружаем глобальные настройки пользователя и автовыбираем последний проект
+      const appSettings = await settingsStore.loadSettings('app');
+      const lastId = appSettings?.last_project_id;
+      if (lastId) {
+        const found = projectStore.getProjectById(Number(lastId));
+        if (found) {
+          projectStore.selectProject(found);
+        }
+      }
       
       // Загружаем справочные данные
       await referenceDataStore.loadAllReferenceData();

@@ -53,6 +53,7 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = observer(({ onProjectSel
         onClick={() => {
           handleOpenDialog();
         }}
+        data-project-selector
         sx={{
           minWidth: isMobile ? 150 : 200,
           justifyContent: 'flex-start',
