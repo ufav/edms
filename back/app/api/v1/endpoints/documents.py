@@ -12,7 +12,7 @@ import os
 import shutil
 import hashlib
 import uuid
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import pandas as pd
 import io
 
@@ -339,8 +339,9 @@ async def get_documents(
     if date_from:
         query = query.filter(Document.created_at >= date_from)
     if date_to:
-        # включительно конец дня
-        query = query.filter(Document.created_at <= date_to)
+        # включительно конец дня - добавляем 1 день и используем < вместо <=
+        next_day = date_to + timedelta(days=1)
+        query = query.filter(Document.created_at < next_day)
 
     # Сортировка
     sort_field_map = {

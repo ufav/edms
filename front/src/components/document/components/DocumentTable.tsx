@@ -16,7 +16,9 @@ import {
   Alert,
   Checkbox,
   alpha,
+  TableSortLabel,
 } from '@mui/material';
+import { visuallyHidden } from '@mui/utils';
 import {
   Description as DescriptionIcon,
   Download as DownloadIcon,
@@ -92,6 +94,11 @@ export interface DocumentTableProps {
   formatFileSize: (bytes: number) => string;
   formatDate: (date: string) => string;
   language: string;
+  
+  // Сортировка
+  order?: 'asc' | 'desc';
+  orderBy?: string;
+  onRequestSort?: (event: React.MouseEvent<unknown>, property: string) => void;
 }
 
 export const DocumentTable: React.FC<DocumentTableProps> = observer(({
@@ -111,6 +118,9 @@ export const DocumentTable: React.FC<DocumentTableProps> = observer(({
   formatFileSize,
   formatDate,
   language,
+  order = 'desc',
+  orderBy = 'updated_at',
+  onRequestSort,
 }) => {
   // Загружаем workflow статусы при монтировании компонента
   useEffect(() => {
@@ -216,6 +226,22 @@ export const DocumentTable: React.FC<DocumentTableProps> = observer(({
     }
   };
 
+  // Определяем, какие колонки можно сортировать (согласно API)
+  const isSortable = (columnKey: string): boolean => {
+    return ['number', 'title', 'date', 'updated_at'].includes(columnKey);
+  };
+  
+  // Маппинг колонок на поля API
+  const getSortField = (columnKey: string): string => {
+    const fieldMap: { [key: string]: string } = {
+      'number': 'number',
+      'title': 'title',
+      'date': 'created_at',
+      'updated_at': 'updated_at',
+    };
+    return fieldMap[columnKey] || columnKey;
+  };
+
   // Функция для рендеринга заголовка колонки
   const renderColumnHeader = (columnKey: string) => {
     const getColumnLabel = (key: string) => {
@@ -238,6 +264,17 @@ export const DocumentTable: React.FC<DocumentTableProps> = observer(({
       }
     };
 
+    const sortable = isSortable(columnKey);
+    const sortField = getSortField(columnKey);
+    const isActiveSort = orderBy === sortField;
+    const sortDirection = isActiveSort ? order : undefined;
+
+    const handleSortClick = (event: React.MouseEvent<unknown>) => {
+      if (sortable && onRequestSort) {
+        onRequestSort(event, sortField);
+      }
+    };
+
     return (
       <TableCell 
         key={columnKey}
@@ -248,8 +285,29 @@ export const DocumentTable: React.FC<DocumentTableProps> = observer(({
           fontSize: '0.875rem', 
           whiteSpace: 'nowrap' 
         }}
+        sortDirection={sortDirection}
       >
-        {getColumnLabel(columnKey)}
+        {sortable ? (
+          <TableSortLabel
+            active={isActiveSort}
+            direction={sortDirection}
+            onClick={handleSortClick}
+            sx={{ 
+              '& .MuiTableSortLabel-icon': {
+                opacity: isActiveSort ? 1 : 0,
+              }
+            }}
+          >
+            {getColumnLabel(columnKey)}
+            {isActiveSort ? (
+              <Box component="span" sx={visuallyHidden}>
+                {order === 'desc' ? 'sorted descending' : 'sorted ascending'}
+              </Box>
+            ) : null}
+          </TableSortLabel>
+        ) : (
+          getColumnLabel(columnKey)
+        )}
       </TableCell>
     );
   };

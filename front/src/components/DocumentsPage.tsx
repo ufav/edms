@@ -57,6 +57,10 @@ const DocumentsPage: React.FC = observer(() => {
   const [showSelectColumn, setShowSelectColumn] = useState(!isViewer); // Не показываем галочки для viewer
   const [cartModalOpen, setCartModalOpen] = useState(false); // Состояние модалки трансмитталов
   
+  // Состояние для сортировки
+  const [orderBy, setOrderBy] = useState<string>('updated_at');
+  const [order, setOrder] = useState<'asc' | 'desc'>('desc');
+  
   // Состояние для уведомлений трансмиттала
   const [transmittalNotification, setTransmittalNotification] = useState<{
     open: boolean;
@@ -157,10 +161,25 @@ const DocumentsPage: React.FC = observer(() => {
     disciplineId: selectedDisciplineId,
     documentTypeId: selectedDocumentTypeId,
     revisionDescriptionId: selectedRevisionDescriptionId,
-    dateFrom: dateRange.from,
-    dateTo: dateRange.to,
+    dateFrom: dateRange[0] ? (() => {
+      const d = dateRange[0]!;
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    })() : undefined,
+    dateTo: dateRange[1] ? (() => {
+      const d = dateRange[1]!;
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    })() : undefined,
+    sortBy: orderBy,
+    sortDir: order,
     pageSize: 13,
   });
+  
+  // Обработчик сортировки
+  const handleRequestSort = (event: React.MouseEvent<unknown>, property: string) => {
+    const isAsc = orderBy === property && order === 'asc';
+    setOrder(isAsc ? 'desc' : 'asc');
+    setOrderBy(property);
+  };
 
   const {
     settingsOpen,
@@ -496,6 +515,9 @@ const DocumentsPage: React.FC = observer(() => {
                 formatFileSize={formatFileSize}
                 formatDate={formatDate}
                 language={i18n.language}
+                order={order}
+                orderBy={orderBy}
+                onRequestSort={handleRequestSort}
               />
             </Box>
           )}
