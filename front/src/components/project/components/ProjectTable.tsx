@@ -14,6 +14,7 @@ import {
   Typography,
   CircularProgress,
   Alert,
+  alpha,
 } from '@mui/material';
 import {
   Edit as EditIcon,
@@ -276,8 +277,17 @@ export const ProjectTable: React.FC<ProjectTableProps> = ({
                   <Chip
                     label={project.status}
                     color={project.status === 'active' ? 'success' : 'default'}
+                    variant="outlined"
                     size="small"
-                    sx={{ fontSize: '0.75rem', height: '24px' }}
+                    sx={{ 
+                      fontSize: '0.75rem', 
+                      height: '24px',
+                      backgroundColor: (theme) => {
+                        return project.status === 'active'
+                          ? alpha(theme.palette.success.main, 0.12)
+                          : theme.palette.grey[100];
+                      }
+                    }}
                   />
                 </TableCell>
                 <TableCell sx={{ 

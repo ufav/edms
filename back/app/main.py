@@ -6,12 +6,14 @@ FastAPI Application Entry Point
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from fastapi.responses import RedirectResponse
 import os
 from pathlib import Path
 
 from app.core.config import settings
 from fastapi_pagination import add_pagination
 from app.api.v1.api import api_router
+from app.admin import init_admin
 
 # Создание директории для загрузок
 upload_dir = Path(settings.UPLOAD_DIR)
@@ -43,6 +45,14 @@ app.include_router(api_router, prefix=settings.API_V1_STR)
 
 # Enable pagination for the whole app
 add_pagination(app)
+
+# Admin panel (sqladmin)
+init_admin(app)
+
+# Redirect helper for trailing slash to support both /admin and /admin/
+@app.get("/admin")
+async def admin_no_slash():
+    return RedirectResponse(url="/admin/")
 
 @app.get("/")
 async def root():

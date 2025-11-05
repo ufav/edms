@@ -11,6 +11,7 @@ import TransmittalsPage from './components/TransmittalsPage';
 import ReviewsPage from './components/review/ReviewsPage';
 import UsersPage from './components/UsersPage';
 import WorkflowPresetsPage from './components/WorkflowPresetsPage';
+import AuditLogsPage from './components/AuditLogsPage';
 import AdminRoutes from './pages/admin/AdminRoutes';
 import { authApi, setAuthToken, removeAuthToken, setUnauthorizedHandler } from './api/client';
 import { projectStore } from './stores/ProjectStore';
@@ -202,6 +203,8 @@ function App() {
         return <WorkflowPresetsPage />;
       case 'users':
         return permissions.canViewUsers ? <UsersPage /> : <Dashboard />;
+      case 'audit-logs':
+        return permissions.canViewAdmin ? <AuditLogsPage /> : <Dashboard />;
       default:
         return <Dashboard />;
     }

@@ -420,6 +420,21 @@ export interface User {
   updated_at: string;
 }
 
+export interface AuditLog {
+  id: number;
+  user_id: number | null;
+  action: string;
+  entity_type: string;
+  entity_id: number;
+  old_values: Record<string, any> | null;
+  new_values: Record<string, any> | null;
+  ip_address: string | null;
+  user_agent: string | null;
+  created_at: string;
+  user_username: string | null;
+  user_full_name: string | null;
+}
+
 // (удалены устаревшие интерфейсы documents-v2)
 
 // Reference tables interfaces
@@ -1756,6 +1771,30 @@ export const documentCommentsApi = {
     const response = await apiClient.patch(`/comments/${commentId}/resolve`);
     return response.data;
   }
+};
+
+// API методы для audit logs
+export const auditLogsApi = {
+  // Получить список логов
+  getAll: async (params?: {
+    skip?: number;
+    limit?: number;
+    action?: string;
+    entity_type?: string;
+    entity_id?: number;
+    user_id?: number;
+    date_from?: string;
+    date_to?: string;
+  }): Promise<{ items: AuditLog[]; total: number; skip: number; limit: number }> => {
+    const response = await apiClient.get('/audit-logs/', { params });
+    return response.data;
+  },
+
+  // Получить конкретный лог по ID
+  getById: async (logId: number): Promise<AuditLog> => {
+    const response = await apiClient.get(`/audit-logs/${logId}`);
+    return response.data;
+  },
 };
 
 

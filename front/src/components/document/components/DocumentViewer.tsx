@@ -246,7 +246,6 @@ const DocumentViewer: React.FC<DocumentViewerProps> = observer(({
               {(() => {
                 // Ждем загрузки данных проекта
                 if (projectData.loadingProjectData) {
-                  console.log('Project data loading...');
                   return (
                     <Button 
                       variant="contained" 
@@ -259,13 +258,6 @@ const DocumentViewer: React.FC<DocumentViewerProps> = observer(({
                 
                 const firstSequence = projectData.workflowPresetSequence.length > 0 ? projectData.workflowPresetSequence[0] : null;
                 const requiresTransmittal = firstSequence && firstSequence.requires_transmittal;
-                
-                console.log('Button state check:', {
-                  loadingProjectData: projectData.loadingProjectData,
-                  workflowPresetSequence: projectData.workflowPresetSequence,
-                  firstSequence,
-                  requiresTransmittal
-                });
                 
                 if (requiresTransmittal) {
                   return (

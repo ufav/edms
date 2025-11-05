@@ -2,7 +2,7 @@
 Projects endpoints
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
@@ -16,6 +16,7 @@ from app.models.project import Project, ProjectMember, ProjectDisciplineDocument
 from app.models.project_participant import ProjectParticipant
 from app.models.discipline import Discipline, DocumentType
 from app.services.auth import get_current_active_user
+from app.services.audit_service import log_action
 
 router = APIRouter()
 
@@ -216,6 +217,7 @@ async def get_projects(
 @router.post("/", response_model=dict)
 async def create_project(
     project_data: ProjectCreate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -374,6 +376,26 @@ async def create_project(
     
     db.commit()
     
+    # Логирование действия
+    new_values = {
+        "id": db_project.id,
+        "name": db_project.name,
+        "project_code": db_project.project_code,
+        "status": db_project.status.value if hasattr(db_project.status, 'value') else str(db_project.status),
+        "created_by": db_project.created_by,
+        "is_deleted": db_project.is_deleted,
+    }
+    log_action(
+        db=db,
+        user_id=current_user.id,
+        action="create",
+        entity_type="project",
+        entity_id=db_project.id,
+        old_values=None,
+        new_values=new_values,
+        request=request,
+    )
+    
     return {
         "id": db_project.id,
         "name": db_project.name,
@@ -418,6 +440,7 @@ async def get_project(
 async def update_project(
     project_id: int,
     project_data: ProjectUpdate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -434,6 +457,16 @@ async def update_project(
         pass  # Создатель проекта может все
     else:
         raise HTTPException(status_code=403, detail="Только создатель проекта или админ могут редактировать проект")
+    
+    # Сохраняем старые значения для лога
+    old_values = {
+        "id": project.id,
+        "name": project.name,
+        "project_code": project.project_code,
+        "status": project.status.value if hasattr(project.status, 'value') else str(project.status),
+        "created_by": project.created_by,
+        "is_deleted": project.is_deleted,
+    }
 
     # Обновляем простые поля
     for field in ["name", "description", "project_code", "status", "start_date", "end_date", "budget"]:
@@ -548,6 +581,26 @@ async def update_project(
 
     db.commit()
     db.refresh(project)
+    
+    # Логирование действия
+    new_values = {
+        "id": project.id,
+        "name": project.name,
+        "project_code": project.project_code,
+        "status": project.status.value if hasattr(project.status, 'value') else str(project.status),
+        "created_by": project.created_by,
+        "is_deleted": project.is_deleted,
+    }
+    log_action(
+        db=db,
+        user_id=current_user.id,
+        action="update",
+        entity_type="project",
+        entity_id=project_id,
+        old_values=old_values,
+        new_values=new_values,
+        request=request,
+    )
 
     return {
         "id": project.id,
@@ -815,6 +868,7 @@ async def remove_project_member(
 @router.delete("/{project_id}")
 async def delete_project(
     project_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -828,9 +882,31 @@ async def delete_project(
     if not (current_user.user_role and current_user.user_role.code == 'admin') and project.created_by != current_user.id:
         raise HTTPException(status_code=403, detail="Только создатель проекта или админ может удалить проект")
     
+    # Сохраняем старые значения для лога
+    old_values = {
+        "id": project.id,
+        "name": project.name,
+        "project_code": project.project_code,
+        "status": project.status.value if hasattr(project.status, 'value') else str(project.status),
+        "created_by": project.created_by,
+        "is_deleted": project.is_deleted,
+    }
+    
     # Устанавливаем is_deleted = 1
     project.is_deleted = 1
     db.commit()
+    
+    # Логирование действия
+    log_action(
+        db=db,
+        user_id=current_user.id,
+        action="delete",
+        entity_type="project",
+        entity_id=project_id,
+        old_values=old_values,
+        new_values={"is_deleted": 1},
+        request=request,
+    )
     
     return {"message": "Проект удален"}
 

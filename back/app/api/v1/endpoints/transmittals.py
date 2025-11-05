@@ -2,7 +2,7 @@
 Transmittals endpoints
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from typing import List
@@ -14,6 +14,7 @@ from app.models.transmittal import Transmittal, TransmittalRevision
 from app.models.document import Document, DocumentRevision
 from app.models.references import RevisionStatus
 from app.services.auth import get_current_active_user
+from app.services.audit_service import log_action
 
 router = APIRouter()
 
@@ -39,6 +40,7 @@ class TransmittalRevisionRemove(BaseModel):
 @router.delete("/{transmittal_id}", response_model=dict)
 async def delete_transmittal(
     transmittal_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -47,8 +49,31 @@ async def delete_transmittal(
     if not transmittal or transmittal.is_deleted == 1:
         raise HTTPException(status_code=404, detail="Трансмиттал не найден")
 
+    # Сохраняем старые значения для лога
+    old_values = {
+        "id": transmittal.id,
+        "transmittal_number": transmittal.transmittal_number,
+        "title": transmittal.title,
+        "project_id": transmittal.project_id,
+        "direction": transmittal.direction,
+        "counterparty_id": transmittal.counterparty_id,
+        "is_deleted": transmittal.is_deleted,
+    }
+
     transmittal.is_deleted = 1
     db.commit()
+
+    # Логирование действия
+    log_action(
+        db=db,
+        user_id=current_user.id,
+        action="delete",
+        entity_type="transmittal",
+        entity_id=transmittal_id,
+        old_values=old_values,
+        new_values={"is_deleted": 1},
+        request=request,
+    )
 
     return {"message": "Трансмиттал удален", "id": transmittal_id}
 
@@ -94,6 +119,7 @@ async def get_transmittals(
 @router.post("/", response_model=dict)
 async def create_transmittal(
     transmittal_data: TransmittalCreate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -150,6 +176,28 @@ async def create_transmittal(
     
     db.commit()
     
+    # Логирование действия
+    new_values = {
+        "id": db_transmittal.id,
+        "transmittal_number": db_transmittal.transmittal_number,
+        "title": db_transmittal.title,
+        "project_id": db_transmittal.project_id,
+        "direction": db_transmittal.direction,
+        "counterparty_id": db_transmittal.counterparty_id,
+        "created_by": db_transmittal.created_by,
+        "is_deleted": db_transmittal.is_deleted,
+    }
+    log_action(
+        db=db,
+        user_id=current_user.id,
+        action="create",
+        entity_type="transmittal",
+        entity_id=db_transmittal.id,
+        old_values=None,
+        new_values=new_values,
+        request=request,
+    )
+    
     return {
         "id": db_transmittal.id,
         "transmittal_number": db_transmittal.transmittal_number,
@@ -170,6 +218,7 @@ async def create_transmittal(
 async def update_transmittal(
     transmittal_id: int,
     transmittal_data: TransmittalUpdate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -177,6 +226,14 @@ async def update_transmittal(
     transmittal = db.query(Transmittal).filter(Transmittal.id == transmittal_id, Transmittal.is_deleted == 0).first()
     if not transmittal:
         raise HTTPException(status_code=404, detail="Трансмиттал не найден")
+    
+    # Сохраняем старые значения для лога
+    old_values = {
+        "id": transmittal.id,
+        "transmittal_number": transmittal.transmittal_number,
+        "title": transmittal.title,
+        "counterparty_id": transmittal.counterparty_id,
+    }
     
     # Обновляем только переданные поля
     if transmittal_data.transmittal_number is not None:
@@ -205,6 +262,24 @@ async def update_transmittal(
                 status_code=400, 
                 detail="Ошибка при обновлении трансмиттала"
             )
+    
+    # Логирование действия
+    new_values = {
+        "id": transmittal.id,
+        "transmittal_number": transmittal.transmittal_number,
+        "title": transmittal.title,
+        "counterparty_id": transmittal.counterparty_id,
+    }
+    log_action(
+        db=db,
+        user_id=current_user.id,
+        action="update",
+        entity_type="transmittal",
+        entity_id=transmittal_id,
+        old_values=old_values,
+        new_values=new_values,
+        request=request,
+    )
     
     return {
         "id": transmittal.id,
@@ -487,6 +562,7 @@ async def get_active_revisions(
 @router.put("/{transmittal_id}/send")
 async def send_transmittal(
     transmittal_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -498,6 +574,15 @@ async def send_transmittal(
     # Проверяем права доступа
     if transmittal.created_by != current_user.id and not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Нет прав для отправки трансмиттала")
+    
+    # Сохраняем старые значения для лога
+    old_values = {
+        "id": transmittal.id,
+        "status_id": transmittal.status_id,
+        "direction": transmittal.direction,
+        "transmittal_date": transmittal.transmittal_date.isoformat() if transmittal.transmittal_date else None,
+        "sender_id": transmittal.sender_id,
+    }
     
     # Обновляем трансмиттал
     from datetime import datetime
@@ -582,12 +667,35 @@ async def send_transmittal(
     db.commit()
     db.refresh(transmittal)
     
+    # Логирование действия
+    from app.models.references import TransmittalStatus
+    sent_status = db.query(TransmittalStatus).filter(TransmittalStatus.name == "Sent").first()
+    new_values = {
+        "id": transmittal.id,
+        "status_id": sent_status.id if sent_status else transmittal.status_id,
+        "direction": "out",
+        "transmittal_date": transmittal.transmittal_date.isoformat() if transmittal.transmittal_date else None,
+        "sender_id": current_user.id,
+        "action": "send",
+    }
+    log_action(
+        db=db,
+        user_id=current_user.id,
+        action="update",
+        entity_type="transmittal",
+        entity_id=transmittal_id,
+        old_values=old_values,
+        new_values=new_values,
+        request=request,
+    )
+    
     return {"message": "Трансмиттал успешно отправлен", "transmittal_id": transmittal.id}
 
 
 @router.put("/{transmittal_id}/receive")
 async def receive_transmittal(
     transmittal_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -595,6 +703,14 @@ async def receive_transmittal(
     transmittal = db.query(Transmittal).filter(Transmittal.id == transmittal_id).first()
     if not transmittal:
         raise HTTPException(status_code=404, detail="Трансмиттал не найден")
+    
+    # Сохраняем старые значения для лога
+    old_values = {
+        "id": transmittal.id,
+        "status_id": transmittal.status_id,
+        "direction": transmittal.direction,
+        "transmittal_date": transmittal.transmittal_date.isoformat() if transmittal.transmittal_date else None,
+    }
     
     # Обновляем трансмиттал
     from datetime import datetime
@@ -612,6 +728,27 @@ async def receive_transmittal(
     
     db.commit()
     db.refresh(transmittal)
+    
+    # Логирование действия
+    from app.models.references import TransmittalStatus
+    received_status = db.query(TransmittalStatus).filter(TransmittalStatus.name == "received").first()
+    new_values = {
+        "id": transmittal.id,
+        "status_id": received_status.id if received_status else transmittal.status_id,
+        "direction": "in",
+        "transmittal_date": transmittal.transmittal_date.isoformat() if transmittal.transmittal_date else None,
+        "action": "receive",
+    }
+    log_action(
+        db=db,
+        user_id=current_user.id,
+        action="update",
+        entity_type="transmittal",
+        entity_id=transmittal_id,
+        old_values=old_values,
+        new_values=new_values,
+        request=request,
+    )
     
     return {"message": "Трансмиттал успешно получен", "transmittal_id": transmittal.id}
 

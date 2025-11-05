@@ -2,7 +2,7 @@
 API endpoints for document reviews and approvals
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_
 from typing import List, Optional
@@ -20,6 +20,7 @@ from app.models.document import Document, DocumentRevision
 from app.models.project import Project, WorkflowPresetSequence
 from app.models.references import WorkflowStatus, RevisionStep, RevisionDescription
 from app.api.v1.endpoints.auth import get_current_user
+from app.services.audit_service import log_action
 
 router = APIRouter()
 
@@ -170,6 +171,7 @@ async def get_pending_approvals(
 async def approve_document(
     document_id: int,
     request: ApproveRequest,
+    http_request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -263,6 +265,29 @@ async def approve_document(
     db.add(workflow_history)
     db.commit()
     
+    # Логирование действия
+    old_values = {
+        "id": latest_revision.id,
+        "document_id": document_id,
+        "workflow_status_id": old_status_id,
+    }
+    new_values = {
+        "id": latest_revision.id,
+        "document_id": document_id,
+        "workflow_status_id": approved_status.id,
+        "action": "approve",
+    }
+    log_action(
+        db=db,
+        user_id=current_user.id,
+        action="approve",
+        entity_type="document",
+        entity_id=document_id,
+        old_values=old_values,
+        new_values=new_values,
+        request=http_request,
+    )
+    
     return {
         "message": "Документ утвержден",
         "document_id": document_id,
@@ -275,6 +300,7 @@ async def approve_document(
 async def reject_document(
     document_id: int,
     request: RejectRequest,
+    http_request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -370,6 +396,29 @@ async def reject_document(
     db.add(workflow_history)
     db.commit()
     print(f"DEBUG: reject workflow_history created with id={workflow_history.id}")
+    
+    # Логирование действия
+    old_values = {
+        "id": latest_revision.id,
+        "document_id": document_id,
+        "workflow_status_id": old_status_id,
+    }
+    new_values = {
+        "id": latest_revision.id,
+        "document_id": document_id,
+        "workflow_status_id": rejected_status.id,
+        "action": "reject",
+    }
+    log_action(
+        db=db,
+        user_id=current_user.id,
+        action="reject",
+        entity_type="document",
+        entity_id=document_id,
+        old_values=old_values,
+        new_values=new_values,
+        request=http_request,
+    )
     
     return {
         "message": "Документ отклонен",

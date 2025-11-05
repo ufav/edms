@@ -34,3 +34,4 @@ aiobotocore==2.21.1
 boto3==1.37.1
 
 fastapi-pagination==0.14.3
+sqladmin==0.18.0

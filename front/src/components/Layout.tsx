@@ -30,6 +30,7 @@ import {
   Logout as LogoutIcon,
   Settings as SettingsIcon,
   AccountTree as WorkflowIcon,
+  History as HistoryIcon,
 } from '@mui/icons-material';
 import ProjectSelector from './ProjectSelector';
 import ProfileDialog from './ProfileDialog';
@@ -126,6 +127,7 @@ const Layout: React.FC<LayoutProps> = observer(({
     ...(permissions.canViewWorkflows ? [{ id: 'workflows', label: t('menu.workflows'), icon: <WorkflowIcon /> }] : []),
     ...(permissions.canViewUsers ? [{ id: 'users', label: t('menu.users'), icon: <UserIcon /> }] : []),
     ...(permissions.canViewAdmin ? [
+      { id: 'audit-logs', label: t('menu.audit_logs'), icon: <HistoryIcon /> },
       { id: 'admin', label: t('admin.title'), icon: <SettingsIcon />, external: true }
     ] : []),
   ];

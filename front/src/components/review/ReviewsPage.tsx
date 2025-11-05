@@ -24,7 +24,8 @@ import {
   CardContent,
   useTheme,
   useMediaQuery,
-  InputAdornment
+  InputAdornment,
+  alpha,
 } from '@mui/material';
 import {
   Check as ApproveIcon,
@@ -390,9 +391,15 @@ const ReviewTable: React.FC<ReviewTableProps> = ({
                 </TableCell>
                 <TableCell sx={{ width: '10%', minWidth: '100px' }}>
                   <Chip 
-                    label={approval.revision_number || '-'} 
+                    label={approval.current_description?.code 
+                      ? `${approval.current_description.code}${approval.revision_number || ''}` 
+                      : (approval.revision_number || '-')} 
+                    variant="outlined"
                     size="small" 
-                    color="primary" 
+                    color="primary"
+                    sx={{
+                      backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.12)
+                    }}
                   />
                 </TableCell>
                 <TableCell sx={{ width: '15%', minWidth: '150px' }}>

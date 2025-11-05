@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from pydantic import BaseModel
@@ -9,6 +9,7 @@ from app.models.project import WorkflowPreset, WorkflowPresetSequence, WorkflowP
 from app.models.references import RevisionDescription, RevisionStep, ReviewCode
 from app.models.user import User
 from app.services.auth import get_current_active_user
+from app.services.audit_service import log_action
 
 router = APIRouter()
 
@@ -271,6 +272,7 @@ async def get_workflow_preset(
 @router.post("/", response_model=WorkflowPresetResponse)
 async def create_workflow_preset(
     preset_data: WorkflowPresetCreate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -331,6 +333,25 @@ async def create_workflow_preset(
     
     db.commit()
     
+    # Логирование действия
+    new_values = {
+        "id": preset.id,
+        "name": preset.name,
+        "description": preset.description,
+        "is_global": preset.is_global,
+        "created_by": preset.created_by,
+    }
+    log_action(
+        db=db,
+        user_id=current_user.id,
+        action="create",
+        entity_type="workflow_preset",
+        entity_id=preset.id,
+        old_values=None,
+        new_values=new_values,
+        request=request,
+    )
+    
     # Загружаем данные пресета
     sequences_data, rules_data = load_preset_data(preset.id, db)
     
@@ -352,6 +373,7 @@ async def create_workflow_preset(
 async def update_workflow_preset(
     preset_id: int,
     preset_data: WorkflowPresetUpdate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -363,6 +385,15 @@ async def update_workflow_preset(
     # Проверяем права доступа
     if not preset.is_global and preset.created_by != current_user.id:
         raise HTTPException(status_code=403, detail="Нет доступа к этому пресету")
+    
+    # Сохраняем старые значения для лога
+    old_values = {
+        "id": preset.id,
+        "name": preset.name,
+        "description": preset.description,
+        "is_global": preset.is_global,
+        "created_by": preset.created_by,
+    }
     
     # Обновляем основные поля
     if preset_data.name is not None:
@@ -413,6 +444,25 @@ async def update_workflow_preset(
     db.commit()
     db.refresh(preset)
     
+    # Логирование действия
+    new_values = {
+        "id": preset.id,
+        "name": preset.name,
+        "description": preset.description,
+        "is_global": preset.is_global,
+        "created_by": preset.created_by,
+    }
+    log_action(
+        db=db,
+        user_id=current_user.id,
+        action="update",
+        entity_type="workflow_preset",
+        entity_id=preset_id,
+        old_values=old_values,
+        new_values=new_values,
+        request=request,
+    )
+    
     # Загружаем данные пресета
     sequences_data, rules_data = load_preset_data(preset.id, db)
     
@@ -433,6 +483,7 @@ async def update_workflow_preset(
 @router.delete("/{preset_id}")
 async def delete_workflow_preset(
     preset_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -445,10 +496,31 @@ async def delete_workflow_preset(
     if not preset.is_global and preset.created_by != current_user.id:
         raise HTTPException(status_code=403, detail="Нет доступа к этому пресету")
     
+    # Сохраняем старые значения для лога
+    old_values = {
+        "id": preset.id,
+        "name": preset.name,
+        "description": preset.description,
+        "is_global": preset.is_global,
+        "created_by": preset.created_by,
+    }
+    
     # Удаляем связанные данные (каскадное удаление)
     db.query(WorkflowPresetSequence).filter(WorkflowPresetSequence.preset_id == preset.id).delete()
     db.query(WorkflowPresetRule).filter(WorkflowPresetRule.preset_id == preset.id).delete()
     db.delete(preset)
     db.commit()
+    
+    # Логирование действия
+    log_action(
+        db=db,
+        user_id=current_user.id,
+        action="delete",
+        entity_type="workflow_preset",
+        entity_id=preset_id,
+        old_values=old_values,
+        new_values=None,
+        request=request,
+    )
     
     return {"message": "Workflow пресет удален"}

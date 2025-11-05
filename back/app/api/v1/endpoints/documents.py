@@ -2,12 +2,13 @@
 Documents endpoints
 """
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request, Query
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from pydantic import BaseModel
 from fastapi_pagination import Page, Params, create_page
+from fastapi_pagination.ext.sqlalchemy import paginate as sa_paginate
 import os
 import shutil
 import hashlib
@@ -21,15 +22,12 @@ from app.core.config import settings
 from app.models.user import User
 from app.models.document import Document, DocumentRevision
 from app.models.discipline import Discipline, DocumentType
-from app.models.discipline import Discipline, DocumentType
 from app.models.references import Language, WorkflowStatus
 from app.models.project import Project, ProjectDisciplineDocumentType, ProjectMember
 from app.models.document_workflow_history import DocumentWorkflowHistory
 from app.services.auth import get_current_active_user
 from app.services.minio_service import minio_service
-from fastapi import Query
-from fastapi_pagination import Page, Params, create_page
-from fastapi_pagination.ext.sqlalchemy import paginate as sa_paginate
+from app.services.audit_service import log_action
 
 router = APIRouter()
 
@@ -673,6 +671,26 @@ async def create_document_with_revision(
         )
         db.add(workflow_history)
         db.commit()
+    
+    # Логирование действия (без Request для Form-запроса)
+    new_values = {
+        "id": db_document.id,
+        "title": db_document.title,
+        "number": db_document.number,
+        "project_id": db_document.project_id,
+        "discipline_id": db_document.discipline_id,
+        "document_type_id": db_document.document_type_id,
+    }
+    log_action(
+        db=db,
+        user_id=current_user.id,
+        action="create",
+        entity_type="document",
+        entity_id=db_document.id,
+        old_values=None,
+        new_values=new_values,
+        request=None,  # Request недоступен в Form-запросах
+    )
     
     return {
         "id": db_document.id,
@@ -1860,6 +1878,7 @@ async def download_document_revision(
 @router.patch("/{document_id}/soft-delete")
 async def soft_delete_document(
     document_id: int,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -1867,6 +1886,15 @@ async def soft_delete_document(
     document = db.query(Document).filter(Document.id == document_id).first()
     if not document:
         raise HTTPException(status_code=404, detail="Документ не найден")
+    
+    # Сохраняем старые значения для лога
+    old_values = {
+        "id": document.id,
+        "title": document.title,
+        "number": document.number,
+        "is_deleted": document.is_deleted,
+        "project_id": document.project_id,
+    }
     
     # Проверяем права доступа
     can_delete = False
@@ -1902,6 +1930,18 @@ async def soft_delete_document(
     ).update({"is_deleted": 1})
     
     db.commit()
+    
+    # Логирование действия
+    log_action(
+        db=db,
+        user_id=current_user.id,
+        action="delete",
+        entity_type="document",
+        entity_id=document_id,
+        old_values=old_values,
+        new_values={"is_deleted": 1},
+        request=request,
+    )
     
     return {"message": "Документ и все его ревизии помечены как удаленные", "document_id": document_id}
 
@@ -2061,6 +2101,7 @@ async def cancel_document_revision(
 async def update_document(
     document_id: int,
     document_data: DocumentUpdate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -2070,6 +2111,17 @@ async def update_document(
     document = db.query(Document).filter(Document.id == document_id).first()
     if not document:
         raise HTTPException(status_code=404, detail="Документ не найден")
+    
+    # Сохраняем старые значения для лога
+    old_values = {
+        "id": document.id,
+        "title": document.title,
+        "title_native": document.title_native,
+        "remarks": document.remarks,
+        "number": document.number,
+        "discipline_id": document.discipline_id,
+        "document_type_id": document.document_type_id,
+    }
     
     # Проверяем права доступа
     # 1. Администратор может редактировать любые документы
@@ -2099,6 +2151,27 @@ async def update_document(
     
     db.commit()
     db.refresh(document)
+    
+    # Логирование действия
+    new_values = {
+        "id": document.id,
+        "title": document.title,
+        "title_native": document.title_native,
+        "remarks": document.remarks,
+        "number": document.number,
+        "discipline_id": document.discipline_id,
+        "document_type_id": document.document_type_id,
+    }
+    log_action(
+        db=db,
+        user_id=current_user.id,
+        action="update",
+        entity_type="document",
+        entity_id=document_id,
+        old_values=old_values,
+        new_values=new_values,
+        request=request,
+    )
     
     return {"message": "Документ обновлен", "document_id": document_id}
 
