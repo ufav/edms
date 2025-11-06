@@ -7,6 +7,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.requests import Request as StarletteRequest
 import os
 from pathlib import Path
 
@@ -19,6 +21,17 @@ from app.admin import init_admin
 upload_dir = Path(settings.UPLOAD_DIR)
 upload_dir.mkdir(exist_ok=True)
 
+
+class ProxyHeadersMiddleware(BaseHTTPMiddleware):
+    """Middleware для корректной обработки HTTPS за прокси"""
+    async def dispatch(self, request: StarletteRequest, call_next):
+        # Исправляем scheme на основе X-Forwarded-Proto
+        if request.headers.get("x-forwarded-proto") == "https":
+            request.scope["scheme"] = "https"
+        response = await call_next(request)
+        return response
+
+
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
@@ -27,6 +40,9 @@ app = FastAPI(
 )
 
 app.router.redirect_slashes = False
+
+# Добавляем middleware для обработки заголовков прокси ПЕРВЫМ
+app.add_middleware(ProxyHeadersMiddleware)
 
 # Настройка CORS
 app.add_middleware(
