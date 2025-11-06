@@ -12,8 +12,9 @@ FROM nginx:alpine
 # Копируем собранный фронт
 COPY --from=build /app/dist /usr/share/nginx/html
 
-# Копируем конфиг nginx (будет перезаписан volume mount из docker-compose.yml, если он есть)
-COPY ./nginx/conf.d/default.conf /etc/nginx/conf.d/default.conf
+# Копируем конфиги nginx (будет перезаписан volume mount из docker-compose.yml, если он есть)
+# Контекст сборки - корень проекта, поэтому путь относительно корня
+COPY nginx/conf.d/ /etc/nginx/conf.d/
 
 EXPOSE 80 443
 CMD ["nginx", "-g", "daemon off;"]
