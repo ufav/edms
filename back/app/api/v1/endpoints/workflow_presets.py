@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from pydantic import BaseModel
@@ -9,7 +9,7 @@ from app.models.project import WorkflowPreset, WorkflowPresetSequence, WorkflowP
 from app.models.references import RevisionDescription, RevisionStep, ReviewCode
 from app.models.user import User
 from app.services.auth import get_current_active_user
-from app.services.audit_service import log_action
+from app.services.audit_service import log_action, add_log_task
 
 router = APIRouter()
 
@@ -341,15 +341,15 @@ async def create_workflow_preset(
         "is_global": preset.is_global,
         "created_by": preset.created_by,
     }
-    log_action(
-        db=db,
+    add_log_task(
+        background_tasks=background_tasks,
+        request=request,
         user_id=current_user.id,
         action="create",
         entity_type="workflow_preset",
         entity_id=preset.id,
         old_values=None,
         new_values=new_values,
-        request=request,
     )
     
     # Загружаем данные пресета
@@ -374,6 +374,7 @@ async def update_workflow_preset(
     preset_id: int,
     preset_data: WorkflowPresetUpdate,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -452,15 +453,15 @@ async def update_workflow_preset(
         "is_global": preset.is_global,
         "created_by": preset.created_by,
     }
-    log_action(
-        db=db,
+    add_log_task(
+        background_tasks=background_tasks,
+        request=request,
         user_id=current_user.id,
         action="update",
         entity_type="workflow_preset",
         entity_id=preset_id,
         old_values=old_values,
         new_values=new_values,
-        request=request,
     )
     
     # Загружаем данные пресета
@@ -484,6 +485,7 @@ async def update_workflow_preset(
 async def delete_workflow_preset(
     preset_id: int,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -512,15 +514,15 @@ async def delete_workflow_preset(
     db.commit()
     
     # Логирование действия
-    log_action(
-        db=db,
+    add_log_task(
+        background_tasks=background_tasks,
+        request=request,
         user_id=current_user.id,
         action="delete",
         entity_type="workflow_preset",
         entity_id=preset_id,
         old_values=old_values,
         new_values=None,
-        request=request,
     )
     
     return {"message": "Workflow пресет удален"}

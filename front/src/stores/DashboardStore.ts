@@ -4,6 +4,7 @@ import { documentStore } from './DocumentStore';
 import { transmittalStore } from './TransmittalStore';
 import { reviewStore } from './ReviewStore';
 import { userStore } from './UserStore';
+import { referencesStore } from './ReferencesStore';
 import { documentsApi } from '../api/client';
 
 export interface DashboardStats {
@@ -11,6 +12,15 @@ export interface DashboardStats {
   totalDocuments: number;
   totalTransmittals: number;
   pendingReviews: number;
+}
+
+export interface DisciplineStat {
+  disciplineId: number | null;
+  disciplineCode?: string;
+  disciplineName?: string;
+  documentsCount: number;
+  closedDocumentsCount: number;
+  closedRatio: number; // 0..1
 }
 
 export interface RecentActivity {
@@ -70,6 +80,64 @@ class DashboardStore {
       totalTransmittals: filteredTransmittals.length,
       pendingReviews: filteredReviews.length
     };
+  }
+
+  // Статистика по дисциплинам для выбранного проекта
+  getDisciplineStats(): DisciplineStat[] {
+    const selectedProjectId = projectStore.selectedProject?.id;
+    if (!selectedProjectId) {
+      return [];
+    }
+
+    const docs = documentStore.getDocumentsByProject(selectedProjectId);
+
+    // Финальные workflow статусы считаем "закрытыми" документами
+    const finalStatusNames = ["Approved", "Rejected", "Approved with Comments", "Not Reviewed"];
+    const finalStatusIds = referencesStore.workflowStatuses
+      .filter((s) => finalStatusNames.includes(s.name))
+      .map((s) => s.id);
+    const finalStatusIdSet = new Set<number>(finalStatusIds);
+
+    const statsMap = new Map<number | 'none', DisciplineStat>();
+
+    docs.forEach((doc) => {
+      const key: number | 'none' = doc.discipline_id ?? 'none';
+      let stat = statsMap.get(key);
+
+      if (!stat) {
+        stat = {
+          disciplineId: doc.discipline_id ?? null,
+          disciplineCode: doc.discipline_code,
+          disciplineName: doc.discipline_name,
+          documentsCount: 0,
+          closedDocumentsCount: 0,
+          closedRatio: 0,
+        };
+        statsMap.set(key, stat);
+      }
+
+      const isClosed =
+        !!doc.workflow_status_id && finalStatusIdSet.has(doc.workflow_status_id);
+
+      stat.documentsCount += 1;
+      if (isClosed) {
+        stat.closedDocumentsCount += 1;
+      }
+    });
+
+    return Array.from(statsMap.values())
+      .map((stat) => ({
+        ...stat,
+        closedRatio:
+          stat.documentsCount > 0
+            ? stat.closedDocumentsCount / stat.documentsCount
+            : 0,
+      }))
+      .sort((a, b) => {
+        const codeA = a.disciplineCode || "";
+        const codeB = b.disciplineCode || "";
+        return codeA.localeCompare(codeB, undefined, { sensitivity: "base" });
+      });
   }
 
   // Получение последних активностей
@@ -202,9 +270,11 @@ class DashboardStore {
       // Store'ы сами проверяют, нужно ли загружать данные повторно
       await Promise.all([
         projectStore.loadProjects(),
+        documentStore.loadDocuments(projectId),
         transmittalStore.loadTransmittals(projectId),
         reviewStore.loadReviews(projectId, true), // Принудительная загрузка
-        userStore.loadUsers()
+        userStore.loadUsers(),
+        referencesStore.loadWorkflowStatuses(),
       ]);
       
       // Загружаем количество документов отдельно

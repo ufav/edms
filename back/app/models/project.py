@@ -2,7 +2,7 @@
 Project model for EDMS
 """
 
-from sqlalchemy import Column, Integer, String, Text, Date, DateTime, ForeignKey, Numeric, Boolean, Enum, UniqueConstraint
+from sqlalchemy import Column, Integer, String, Text, Date, DateTime, ForeignKey, Numeric, Boolean, Enum, UniqueConstraint, BigInteger
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -40,6 +40,8 @@ class Project(Base):
     # documents = relationship("Document", back_populates="project")  # Temporarily commented out
     # transmittals = relationship("Transmittal", back_populates="project")  # Temporarily commented out
     # workflows = relationship("Workflow", back_populates="project")  # Временно отключено из-за циклического импорта
+    # Support pack files
+    support_files = relationship("ProjectSupportFile", back_populates="project", cascade="all, delete-orphan")
     
     def __repr__(self):
         return f"<Project(id={self.id}, name='{self.name}', code='{self.project_code}')>"
@@ -83,6 +85,30 @@ class ProjectDisciplineDocumentType(Base):
     
     def __repr__(self):
         return f"<ProjectDisciplineDocumentType(project_id={self.project_id}, discipline_id={self.discipline_id}, document_type_id={self.document_type_id})>"
+
+
+class ProjectSupportFile(Base):
+    """Файлы support pack, привязанные к проекту (не к документам)."""
+    __tablename__ = "project_support_files"
+
+    id = Column(Integer, primary_key=True, index=True)
+    project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"), nullable=False)
+
+    file_path = Column(String(500), nullable=False)
+    file_name = Column(String(255), nullable=False)
+    file_size = Column(BigInteger)
+    file_type = Column(String(100))
+    is_deleted = Column(Integer, default=0, nullable=False)
+
+    uploaded_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Relationships
+    project = relationship("Project", back_populates="support_files")
+    # uploader = relationship("User")  # можно раскомментировать при необходимости
+
+    def __repr__(self):
+        return f"<ProjectSupportFile(project_id={self.project_id}, file_name='{self.file_name}')>"
 
 
 class ProjectRevisionDescription(Base):

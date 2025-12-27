@@ -87,7 +87,6 @@ const AuditLogsPage: React.FC = () => {
       log.entity_type.toLowerCase().includes(searchLower) ||
       log.user_username?.toLowerCase().includes(searchLower) ||
       log.user_full_name?.toLowerCase().includes(searchLower) ||
-      String(log.entity_id).includes(searchTerm) ||
       log.ip_address?.toLowerCase().includes(searchLower)
     );
   });
@@ -101,6 +100,20 @@ const AuditLogsPage: React.FC = () => {
       'logout': t('audit.actions.logout'),
       'approve': t('audit.actions.approve'),
       'reject': t('audit.actions.reject'),
+      'change_password': t('audit.actions.change_password'),
+      'create_revision': t('audit.actions.create_revision'),
+      'cancel_revision': t('audit.actions.cancel_revision'),
+      'restore_revision': t('audit.actions.restore_revision'),
+      'release_revision': t('audit.actions.release_revision'),
+      'upload_support_file': t('audit.actions.upload_support_file'),
+      'delete_support_file': t('audit.actions.delete_support_file'),
+      'add_member': t('audit.actions.add_member'),
+      'update_member': t('audit.actions.update_member'),
+      'remove_member': t('audit.actions.remove_member'),
+      'send': t('audit.actions.send'),
+      'receive': t('audit.actions.receive'),
+      'download': t('audit.actions.download'),
+      'import': t('audit.actions.import'),
     };
     return labels[action] || action;
   };
@@ -114,6 +127,20 @@ const AuditLogsPage: React.FC = () => {
       'logout': 'default',
       'approve': 'success',
       'reject': 'error',
+      'change_password': 'warning',
+      'create_revision': 'success',
+      'cancel_revision': 'error',
+      'restore_revision': 'info',
+      'release_revision': 'success',
+      'upload_support_file': 'success',
+      'delete_support_file': 'error',
+      'add_member': 'success',
+      'update_member': 'info',
+      'remove_member': 'error',
+      'send': 'success',
+      'receive': 'info',
+      'download': 'info',
+      'import': 'success',
     };
     return colors[action] || 'default';
   };
@@ -125,6 +152,9 @@ const AuditLogsPage: React.FC = () => {
       'project': t('audit.entities.project'),
       'transmittal': t('audit.entities.transmittal'),
       'workflow_preset': t('audit.entities.workflow_preset'),
+      'document_revision': t('audit.entities.document_revision'),
+      'project_support_file': t('audit.entities.project_support_file'),
+      'project_member': t('audit.entities.project_member'),
     };
     return labels[entityType] || entityType;
   };
@@ -202,6 +232,20 @@ const AuditLogsPage: React.FC = () => {
             <MenuItem value="reject">{t('audit.actions.reject')}</MenuItem>
             <MenuItem value="login">{t('audit.actions.login')}</MenuItem>
             <MenuItem value="logout">{t('audit.actions.logout')}</MenuItem>
+            <MenuItem value="change_password">{t('audit.actions.change_password')}</MenuItem>
+            <MenuItem value="create_revision">{t('audit.actions.create_revision')}</MenuItem>
+            <MenuItem value="cancel_revision">{t('audit.actions.cancel_revision')}</MenuItem>
+            <MenuItem value="restore_revision">{t('audit.actions.restore_revision')}</MenuItem>
+            <MenuItem value="release_revision">{t('audit.actions.release_revision')}</MenuItem>
+            <MenuItem value="upload_support_file">{t('audit.actions.upload_support_file')}</MenuItem>
+            <MenuItem value="delete_support_file">{t('audit.actions.delete_support_file')}</MenuItem>
+            <MenuItem value="add_member">{t('audit.actions.add_member')}</MenuItem>
+            <MenuItem value="update_member">{t('audit.actions.update_member')}</MenuItem>
+            <MenuItem value="remove_member">{t('audit.actions.remove_member')}</MenuItem>
+            <MenuItem value="send">{t('audit.actions.send')}</MenuItem>
+            <MenuItem value="receive">{t('audit.actions.receive')}</MenuItem>
+            <MenuItem value="download">{t('audit.actions.download')}</MenuItem>
+            <MenuItem value="import">{t('audit.actions.import')}</MenuItem>
           </Select>
         </FormControl>
         
@@ -221,6 +265,9 @@ const AuditLogsPage: React.FC = () => {
             <MenuItem value="project">{t('audit.entities.project')}</MenuItem>
             <MenuItem value="transmittal">{t('audit.entities.transmittal')}</MenuItem>
             <MenuItem value="workflow_preset">{t('audit.entities.workflow_preset')}</MenuItem>
+            <MenuItem value="document_revision">{t('audit.entities.document_revision')}</MenuItem>
+            <MenuItem value="project_support_file">{t('audit.entities.project_support_file')}</MenuItem>
+            <MenuItem value="project_member">{t('audit.entities.project_member')}</MenuItem>
           </Select>
         </FormControl>
       </Box>
@@ -300,22 +347,15 @@ const AuditLogsPage: React.FC = () => {
                       fontWeight: 'bold',
                       fontSize: '0.875rem',
                       whiteSpace: 'nowrap',
-                      width: '15%',
-                      minWidth: '120px'
+                      width: '20%',
+                      minWidth: '150px'
                     }}>{t('audit.columns.entity_type')}</TableCell>
                     <TableCell sx={{ 
                       fontWeight: 'bold',
                       fontSize: '0.875rem',
                       whiteSpace: 'nowrap',
-                      width: '10%',
-                      minWidth: '80px'
-                    }}>{t('audit.columns.entity_id')}</TableCell>
-                    <TableCell sx={{ 
-                      fontWeight: 'bold',
-                      fontSize: '0.875rem',
-                      whiteSpace: 'nowrap',
-                      width: '14%',
-                      minWidth: '120px'
+                      width: '20%',
+                      minWidth: '150px'
                     }}>{t('audit.columns.ip_address')}</TableCell>
                   </TableRow>
                 </TableHead>
@@ -404,24 +444,16 @@ const AuditLogsPage: React.FC = () => {
                         />
                       </TableCell>
                       <TableCell sx={{ 
-                        width: '15%',
-                        minWidth: '120px'
+                        width: '20%',
+                        minWidth: '150px'
                       }}>
                         <Typography variant="body2" sx={{ fontSize: '0.875rem' }}>
                           {getEntityTypeLabel(log.entity_type)}
                         </Typography>
                       </TableCell>
                       <TableCell sx={{ 
-                        width: '10%',
-                        minWidth: '80px'
-                      }}>
-                        <Typography variant="body2" sx={{ fontSize: '0.875rem' }}>
-                          {log.entity_id}
-                        </Typography>
-                      </TableCell>
-                      <TableCell sx={{ 
-                        width: '14%',
-                        minWidth: '120px'
+                        width: '20%',
+                        minWidth: '150px'
                       }}>
                         <Typography variant="body2" sx={{ 
                           fontSize: '0.875rem',

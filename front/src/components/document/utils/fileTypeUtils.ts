@@ -31,20 +31,22 @@ export const getFileTypeInfo = (fileType: string, fileName?: string): FileTypeIn
     return { icon: PdfIcon, label: 'PDF', color: 'error' };
   }
 
-  // Word документы
-  if (lowerFileType.includes('word') || 
-      lowerFileType.includes('document') || 
-      lowerFileName.endsWith('.doc') || 
-      lowerFileName.endsWith('.docx')) {
-    return { icon: DocIcon, label: 'DOC', color: 'primary' };
-  }
-
-  // Excel файлы
+  // Excel файлы (проверяем раньше Word, так как Excel MIME содержит "document")
   if (lowerFileType.includes('excel') || 
+      lowerFileType.includes('sheet') || 
       lowerFileType.includes('spreadsheet') || 
       lowerFileName.endsWith('.xls') || 
       lowerFileName.endsWith('.xlsx')) {
-    return { icon: ExcelIcon, label: 'XLS', color: 'success' };
+    return { icon: ExcelIcon, label: 'XLSX', color: 'success' };
+  }
+
+  // Word документы
+  if (lowerFileType.includes('word') || 
+      lowerFileType.includes('document') || 
+      lowerFileType.includes('wordprocessing') ||
+      lowerFileName.endsWith('.doc') || 
+      lowerFileName.endsWith('.docx')) {
+    return { icon: DocIcon, label: 'DOCX', color: 'primary' };
   }
 
   // PowerPoint файлы

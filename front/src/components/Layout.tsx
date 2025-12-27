@@ -154,7 +154,7 @@ const Layout: React.FC<LayoutProps> = observer(({
             key={item.id}
             onClick={() => {
               if (item.external) {
-                window.location.href = '/admin';
+                window.open('/admin', '_blank');
               } else {
                 onPageChange(item.id);
               }
@@ -250,7 +250,7 @@ const Layout: React.FC<LayoutProps> = observer(({
                     color="inherit"
                     onClick={() => {
                       if (item.external) {
-                        window.location.href = '/admin';
+                        window.open('/admin', '_blank');
                       } else {
                         onPageChange(item.id);
                       }

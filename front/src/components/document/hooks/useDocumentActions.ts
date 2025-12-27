@@ -75,8 +75,10 @@ export const useDocumentActions = ({ t, onCloseDialog, onRefreshActiveRevisions,
       // Создаем FormData для отправки файла и данных
       const formData = new FormData();
       
-      // Добавляем файл
-      if (documentData.uploadedFile) {
+      // Добавляем файлы (множественные приоритетно)
+      if (documentData.uploadedFiles && Array.isArray(documentData.uploadedFiles) && documentData.uploadedFiles.length > 0) {
+        documentData.uploadedFiles.forEach((f: File) => formData.append('files', f));
+      } else if (documentData.uploadedFile) {
         formData.append('file', documentData.uploadedFile);
       }
       

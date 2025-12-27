@@ -190,6 +190,10 @@ const DocumentViewer: React.FC<DocumentViewerProps> = observer(({
                   onFileUploadWithComment={(file, comment) => {
                     setUploadComment(comment);
                   }}
+                  onFilesUploadWithComment={(files, comment) => {
+                    setUploadComment(comment);
+                    fileUpload.handleFilesUpload(files);
+                  }}
                 />
               ) : documentId ? (
                 <Box sx={{ display: 'flex', gap: 1 }}>
@@ -281,6 +285,7 @@ const DocumentViewer: React.FC<DocumentViewerProps> = observer(({
                           await onCreateDocument?.({
                             ...documentState.documentData,
                             uploadedFile: fileUpload.uploadedFile,
+                            uploadedFiles: fileUpload.uploadedFiles,
                             uploadComment: uploadComment,
                             revisionDescription: projectData.workflowPresetSequence.length > 0 ? projectData.workflowPresetSequence[0].revision_description : null,
                             revisionStep: projectData.workflowPresetSequence.length > 0 ? projectData.workflowPresetSequence[0].revision_step : null,

@@ -2,7 +2,7 @@
 Documents endpoints
 """
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request, Query
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request, Query, BackgroundTasks
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -21,13 +21,14 @@ from app.core.database import get_db
 from app.core.config import settings
 from app.models.user import User
 from app.models.document import Document, DocumentRevision
+from app.models.document import File as FileModel
 from app.models.discipline import Discipline, DocumentType
 from app.models.references import Language, WorkflowStatus
 from app.models.project import Project, ProjectDisciplineDocumentType, ProjectMember
 from app.models.document_workflow_history import DocumentWorkflowHistory
 from app.services.auth import get_current_active_user
 from app.services.minio_service import minio_service
-from app.services.audit_service import log_action
+from app.services.audit_service import log_action, add_log_task
 
 router = APIRouter()
 
@@ -152,13 +153,27 @@ def _get_next_revision_from_sequence(
         return None, None, "01"  # Первая ревизия
     
     # Проверяем статус последней ревизии
-    approved_status = db.query(WorkflowStatus).filter(WorkflowStatus.name == "Approved").first()
+    # Раньше учитывался только статус "Approved", теперь к нему добавлены
+    # "Approved with Comments" и "Not Reviewed" как финальные утверждённые статусы.
+    approved_like_statuses = db.query(WorkflowStatus).filter(
+        WorkflowStatus.name.in_(["Approved", "Approved with Comments", "Not Reviewed"])
+    ).all()
+    approved_like_ids = {s.id for s in approved_like_statuses}
     
-    print(f"DEBUG: _get_next_revision_from_sequence - latest_revision: {latest_revision.number}, workflow_status_id: {latest_revision.workflow_status_id}, approved_status_id: {approved_status.id if approved_status else None}")
+    print(
+        f"DEBUG: _get_next_revision_from_sequence - latest_revision: {latest_revision.number}, "
+        f"workflow_status_id: {latest_revision.workflow_status_id}, "
+        f"approved_like_ids: {approved_like_ids}"
+    )
     
-    if not approved_status or latest_revision.workflow_status_id != approved_status.id:
-        # Если последняя ревизия не утверждена, просто увеличиваем номер
-        print(f"DEBUG: Last revision not approved, using same sequence: {current_revision_description_id}, {current_revision_step_id}, {_bump_revision_string(latest_revision.number)}")
+    if not approved_like_ids or latest_revision.workflow_status_id not in approved_like_ids:
+        # Если последняя ревизия не в одном из утверждённых финальных статусов,
+        # просто увеличиваем номер в рамках той же редакции.
+        print(
+            f"DEBUG: Last revision not approved-like, using same sequence: "
+            f"{current_revision_description_id}, {current_revision_step_id}, "
+            f"{_bump_revision_string(latest_revision.number)}"
+        )
         return current_revision_description_id, current_revision_step_id, _bump_revision_string(latest_revision.number)
     
     # Если последняя ревизия утверждена, ищем следующую редакцию в последовательности
@@ -360,10 +375,25 @@ async def get_documents(
     # Подсчитываем общее количество записей
     total_count = query.count()
     
+    # Подгружаем файлы для всех последних ревизий одним запросом (устранение N+1)
+    from collections import defaultdict
+    latest_revision_ids = [r[1].id for r in results if r[1] is not None]
+    files_by_revision_id: dict[int, list[FileModel]] = defaultdict(list)
+    if latest_revision_ids:
+        all_files = db.query(FileModel).filter(
+            FileModel.revision_id.in_(latest_revision_ids),
+            FileModel.is_deleted == 0
+        ).all()
+        for f in all_files:
+            files_by_revision_id[f.revision_id].append(f)
+    
     # Формируем результат
     result = []
     for row in results:
         doc, latest_revision, discipline, document_type, project_discipline_doc_type = row
+        
+        # Берем файлы из заранее загруженной мапы
+        files_list = files_by_revision_id.get(latest_revision.id if latest_revision else -1, [])
         
         result.append({
             "id": doc.id,
@@ -372,9 +402,20 @@ async def get_documents(
             "description": doc.title_native,  # Для обратной совместимости
             "remarks": doc.remarks,  # Примечания (текстовое поле)
             "number": doc.number,
-            "file_name": latest_revision.file_name if latest_revision else None,
-            "file_size": latest_revision.file_size if latest_revision else None,
-            "file_type": latest_revision.file_type if latest_revision else None,
+            # Получаем информацию о файлах из таблицы files
+            "files": [
+                {
+                    "id": f.id,
+                    "file_name": f.file_name,
+                    "file_size": f.file_size,
+                    "file_type": f.file_type,
+                }
+                for f in files_list
+            ],
+            # Обратная совместимость - берем первый файл для старых полей
+            "file_name": files_list[0].file_name if files_list and len(files_list) > 0 else None,
+            "file_size": files_list[0].file_size if files_list and len(files_list) > 0 else None,
+            "file_type": files_list[0].file_type if files_list and len(files_list) > 0 else None,
             "revision": latest_revision.number if latest_revision else "01",
             "revision_description_id": latest_revision.revision_description_id if latest_revision else None,
             "revision_status_id": latest_revision.revision_status_id if latest_revision else None,
@@ -447,9 +488,6 @@ async def upload_document(
     revision_row = DocumentRevision(
         document_id=db_document.id,
         number="01",  # Первая ревизия
-        file_name=file.filename,
-        file_size=file.size,
-        file_type=file.content_type,
         change_description="First revision - Первая ревизия",
         uploaded_by=current_user.id,
         workflow_status_id=draft_workflow_status.id if draft_workflow_status else None,
@@ -463,6 +501,7 @@ async def upload_document(
     content = await file.read()
     
     # Определяем способ хранения файла
+    file_path = None
     if settings.USE_MINIO:
         # Используем MinIO для хранения
         try:
@@ -487,9 +526,7 @@ async def upload_document(
             if not success:
                 raise HTTPException(status_code=500, detail="Ошибка загрузки файла в MinIO")
             
-            # Сохраняем ключ MinIO в базе данных
-            revision_row.file_path = minio_key
-            db.commit()
+            file_path = minio_key
             
         except Exception as e:
             # Если MinIO недоступен, удаляем созданные записи
@@ -510,17 +547,34 @@ async def upload_document(
         file_path = os.path.join(settings.UPLOAD_DIR, new_filename)
         with open(file_path, "wb") as buffer:
             buffer.write(content)
-        
-        # Сохраняем путь к файлу в базе данных
-        revision_row.file_path = file_path
-        db.commit()
+    
+    # Создаем запись файла в таблице files
+    file_record = FileModel(
+        revision_id=revision_row.id,
+        file_path=file_path,
+        file_name=file.filename,
+        file_size=file.size,
+        file_type=file.content_type,
+        uploaded_by=current_user.id
+    )
+    db.add(file_record)
+    db.commit()
+    
+    # Получаем информацию о файлах из таблицы files
+    files_info = db.query(FileModel).filter(FileModel.revision_id == revision_row.id, FileModel.is_deleted == 0).all()
 
     return {
         "id": db_document.id,
         "title": db_document.title,
-        "file_name": revision_row.file_name,
-        "file_size": revision_row.file_size,
-        "file_type": revision_row.file_type,
+        "files": [
+            {
+                "id": f.id,
+                "file_name": f.file_name,
+                "file_size": f.file_size,
+                "file_type": f.file_type,
+            }
+            for f in files_info
+        ],
         "revision": revision_row.number,
         "revision_status_id": revision_row.revision_status_id,
         "created_at": db_document.created_at
@@ -529,42 +583,80 @@ async def upload_document(
 
 @router.post("/create-with-revision", response_model=dict)
 async def create_document_with_revision(
-    file: UploadFile = File(...),
-    title: str = Form(...),
-    title_native: str = Form(None),
-    remarks: str = Form(None),
-    number: str = Form(None),
-    drs: str = Form(None),
-    project_id: int = Form(...),
-    discipline_id: int = Form(None),
-    document_type_id: int = Form(None),
-    language_id: int = Form(1),
-    revision_description_id: int = Form(None),
-    revision_step_id: int = Form(None),
-    change_description: str = Form(None),
+    request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
     """Создание документа с первой ревизией"""
     
-    # Проверяем размер файла
-    if file.size > settings.MAX_FILE_SIZE:
-        raise HTTPException(status_code=400, detail="Файл слишком большой")
-    
-    # Проверяем тип файла
-    file_extension = file.filename.split('.')[-1].lower() if '.' in file.filename else ''
-    if file_extension and settings.ALLOWED_FILE_TYPES:
+    # Разбираем форму (поддержка множественных файлов: 'files')
+    form = await request.form()
+    # Обязательные и опциональные текстовые поля
+    title = form.get('title')
+    if not title:
+        raise HTTPException(status_code=400, detail="Поле 'title' обязательно")
+    title_native = form.get('title_native')
+    remarks = form.get('remarks')
+    number = form.get('number')
+    drs = form.get('drs')
+    try:
+        project_id = int(form.get('project_id')) if form.get('project_id') else None
+    except Exception:
+        project_id = None
+    try:
+        discipline_id = int(form.get('discipline_id')) if form.get('discipline_id') else None
+    except Exception:
+        discipline_id = None
+    try:
+        document_type_id = int(form.get('document_type_id')) if form.get('document_type_id') else None
+    except Exception:
+        document_type_id = None
+    try:
+        language_id = int(form.get('language_id')) if form.get('language_id') else 1
+    except Exception:
+        language_id = 1
+    try:
+        revision_description_id = int(form.get('revision_description_id')) if form.get('revision_description_id') else None
+    except Exception:
+        revision_description_id = None
+    try:
+        revision_step_id = int(form.get('revision_step_id')) if form.get('revision_step_id') else None
+    except Exception:
+        revision_step_id = None
+    change_description = form.get('change_description')
+
+    # Файлы: поддерживаем и 'files', и 'file' (обратная совместимость)
+    files_to_process: List[UploadFile] = []
+    if 'files' in form:
+        try:
+            files_to_process = form.getlist('files')  # type: ignore
+        except Exception:
+            f = form.get('files')
+            if f:
+                files_to_process = [f]  # type: ignore
+    if not files_to_process and 'file' in form:
+        f = form.get('file')
+        if f:
+            files_to_process = [f]  # type: ignore
+    if not files_to_process:
+        raise HTTPException(status_code=400, detail="Необходимо загрузить хотя бы один файл")
+
+    # Проверка типов и размеров файлов
+    allowed: Optional[set[str]] = None
+    if settings.ALLOWED_FILE_TYPES:
         allowed = {ext.strip().lower() for ext in settings.ALLOWED_FILE_TYPES.split(',') if ext.strip()}
-        if file_extension not in allowed:
-            raise HTTPException(status_code=400, detail="Неподдерживаемый тип файла")
-    
+    for f in files_to_process:
+        if getattr(f, 'size', None) and f.size > settings.MAX_FILE_SIZE:
+            raise HTTPException(status_code=400, detail="Файл слишком большой")
+        file_extension = f.filename.split('.')[-1].lower() if '.' in f.filename else ''
+        if allowed is not None and file_extension and file_extension not in allowed:
+            raise HTTPException(status_code=400, detail=f"Неподдерживаемый тип файла: {f.filename}")
+
     # Получаем информацию о проекте
     project = db.query(Project).filter(Project.id == project_id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Проект не найден")
-    
-    # Читаем содержимое файла один раз
-    content = await file.read()
     
     # Создаем запись документа в базе данных
     db_document = Document(
@@ -591,23 +683,14 @@ async def create_document_with_revision(
     # Получаем ID статуса "Draft" из workflow_statuses
     draft_workflow_status = db.query(WorkflowStatus).filter(WorkflowStatus.name == "Draft").first()
     
-    # Временно сохраняем файл локально для определения пути
+    # Создаем директорию для временных файлов
     upload_dir = os.path.join(settings.UPLOAD_DIR, f"project_{project_id}")
     os.makedirs(upload_dir, exist_ok=True)
-    file_extension = file.filename.split('.')[-1] if '.' in file.filename else ''
-    unique_filename = f"{uuid.uuid4()}.{file_extension}" if file_extension else str(uuid.uuid4())
-    temp_file_path = os.path.join(upload_dir, unique_filename)
-    with open(temp_file_path, "wb") as buffer:
-        buffer.write(content)
     
     # Создаем первую ревизию документа
     revision_row = DocumentRevision(
         document_id=db_document.id,
         number="01",
-        file_path=temp_file_path,  # Временно используем локальный путь
-        file_name=file.filename,
-        file_size=len(content),
-        file_type=file.content_type,
         change_description=change_description or "First revision - Первая ревизия",
         uploaded_by=current_user.id,
         revision_status_id=active_status_id,
@@ -620,44 +703,70 @@ async def create_document_with_revision(
     db.commit()
     db.refresh(revision_row)
     
-    # Определяем способ хранения файла
-    if settings.USE_MINIO:
-        # Используем MinIO для хранения (как в docste1)
-        try:
-            # Генерируем ключ для MinIO
-            document_number = number or f"DOC-{db_document.id:04d}"
-            revision_key_prefix = f"{project.project_code}/{document_number}/{revision_row.number}_{revision_description_id or 1}_{revision_row.id}"
-            file_key = f"{revision_key_prefix}/{file.filename}"
-            
-            # Загружаем файл в MinIO напрямую
-            import aiobotocore.session
-            session = aiobotocore.session.get_session()
-            async with session.create_client(
-                's3',
-                endpoint_url=settings.MINIO_ENDPOINT,
-                aws_access_key_id=settings.MINIO_ACCESS_KEY,
-                aws_secret_access_key=settings.MINIO_SECRET_KEY
-            ) as client:
-                await client.put_object(
-                    Bucket=settings.MINIO_BUCKET,
-                    Key=file_key,
-                    Body=content
-                )
-            
-            # Обновляем путь к файлу в базе данных
-            revision_row.file_path = file_key
-            db.commit()
-            
-            # Удаляем временный локальный файл
-            if os.path.exists(temp_file_path):
-                os.remove(temp_file_path)
-            
-        except Exception as e:
-            # Если MinIO недоступен, оставляем локальный файл
-            pass
-    else:
-        # Используем локальное хранение (файл уже сохранен)
-        pass
+    # Обрабатываем и сохраняем все файлы
+    for f in files_to_process:
+        content = await f.read()
+        # Временный локальный файл
+        file_extension = f.filename.split('.')[-1] if '.' in f.filename else ''
+        unique_filename = f"{uuid.uuid4()}.{file_extension}" if file_extension else str(uuid.uuid4())
+        temp_file_path = os.path.join(upload_dir, unique_filename)
+        with open(temp_file_path, "wb") as buffer:
+            buffer.write(content)
+
+        file_path = temp_file_path
+        if settings.USE_MINIO:
+            try:
+                # Генерация ключа MinIO с учетом кода описания ревизии
+                document_number = number or f"DOC-{db_document.id:04d}"
+                from app.models.references import RevisionDescription
+                rev_desc = None
+                if revision_description_id:
+                    rev_desc = db.query(RevisionDescription).filter(RevisionDescription.id == revision_description_id).first()
+                rev_code = (rev_desc.code if rev_desc and getattr(rev_desc, 'code', None) else "")
+                revision_key_prefix = f"{project.project_code}/{document_number}/{rev_code}{revision_row.number}_{revision_description_id or 1}_{revision_row.id}"
+                file_key = f"{revision_key_prefix}/{f.filename}"
+
+                import aiobotocore.session
+                session = aiobotocore.session.get_session()
+                async with session.create_client(
+                    's3',
+                    endpoint_url=settings.MINIO_ENDPOINT,
+                    aws_access_key_id=settings.MINIO_ACCESS_KEY,
+                    aws_secret_access_key=settings.MINIO_SECRET_KEY
+                ) as client:
+                    await client.put_object(
+                        Bucket=settings.MINIO_BUCKET,
+                        Key=file_key,
+                        Body=content
+                    )
+
+                file_path = file_key
+                if os.path.exists(temp_file_path):
+                    os.remove(temp_file_path)
+            except Exception as e:
+                # Если MinIO недоступен при включённом USE_MINIO, не сохраняем файл локально
+                # и откатываем создание документа/ревизии
+                if os.path.exists(temp_file_path):
+                    os.remove(temp_file_path)
+                # Удаляем уже созданные файлы этой ревизии
+                db.query(FileModel).filter(FileModel.revision_id == revision_row.id).delete()
+                # Удаляем ревизию и документ
+                db.delete(revision_row)
+                db.delete(db_document)
+                db.commit()
+                raise HTTPException(status_code=500, detail=f"Ошибка хранения файла в MinIO: {str(e)}")
+
+        # Создаем запись файла
+        file_record = FileModel(
+            revision_id=revision_row.id,
+            file_path=file_path,
+            file_name=f.filename,
+            file_size=len(content),
+            file_type=f.content_type,
+            uploaded_by=current_user.id
+        )
+        db.add(file_record)
+        db.commit()
     
     # Создаем запись в истории workflow для первой ревизии
     if draft_workflow_status:
@@ -672,7 +781,7 @@ async def create_document_with_revision(
         db.add(workflow_history)
         db.commit()
     
-    # Логирование действия (без Request для Form-запроса)
+    # Логирование действия
     new_values = {
         "id": db_document.id,
         "title": db_document.title,
@@ -681,23 +790,33 @@ async def create_document_with_revision(
         "discipline_id": db_document.discipline_id,
         "document_type_id": db_document.document_type_id,
     }
-    log_action(
-        db=db,
+    add_log_task(
+        background_tasks=background_tasks,
+        request=request,
         user_id=current_user.id,
         action="create",
         entity_type="document",
         entity_id=db_document.id,
         old_values=None,
         new_values=new_values,
-        request=None,  # Request недоступен в Form-запросах
     )
+    
+    # Получаем информацию о файлах из таблицы files
+    files_info = db.query(FileModel).filter(FileModel.revision_id == revision_row.id, FileModel.is_deleted == 0).all()
     
     return {
         "id": db_document.id,
         "title": db_document.title,
         "number": db_document.number,
-        "file_name": revision_row.file_name,
-        "file_size": revision_row.file_size,
+        "files": [
+            {
+                "id": f.id,
+                "file_name": f.file_name,
+                "file_size": f.file_size,
+                "file_type": f.file_type,
+            }
+            for f in files_info
+        ],
         "revision": revision_row.number,
         "created_at": db_document.created_at
     }
@@ -737,14 +856,32 @@ async def get_document(
         if pddt:
             drs_value = pddt.drs
     
+    # Получаем информацию о файлах из таблицы files
+    files_info = []
+    if latest_revision:
+        files_info = db.query(FileModel).filter(
+            FileModel.revision_id == latest_revision.id, 
+            FileModel.is_deleted == 0
+        ).all()
+    
     return {
         "id": document.id,
         "title": document.title,
         "title_native": document.title_native,
         "number": document.number,
-        "file_name": latest_revision.file_name if latest_revision else None,
-        "file_size": latest_revision.file_size if latest_revision else None,
-        "file_type": latest_revision.file_type if latest_revision else None,
+        "files": [
+            {
+                "id": f.id,
+                "file_name": f.file_name,
+                "file_size": f.file_size,
+                "file_type": f.file_type,
+            }
+            for f in files_info
+        ],
+        # Обратная совместимость - берем первый файл для старых полей
+        "file_name": files_info[0].file_name if files_info and len(files_info) > 0 else None,
+        "file_size": files_info[0].file_size if files_info and len(files_info) > 0 else None,
+        "file_type": files_info[0].file_type if files_info and len(files_info) > 0 else None,
         "revision": latest_revision.number if latest_revision else "01",
         "revision_status_id": latest_revision.revision_status_id if latest_revision else None,
         "is_deleted": document.is_deleted,
@@ -771,6 +908,8 @@ async def get_document(
 
 @router.post("/import-by-paths")
 async def import_documents_by_paths(
+    request: Request,
+    background_tasks: BackgroundTasks,
     metadata_file: UploadFile = File(...),
     project_id: int = Form(...),
     files: List[UploadFile] = File(default=[]),
@@ -1216,10 +1355,6 @@ async def import_documents_by_paths(
             revision_row = DocumentRevision(
                 document_id=db_document.id,
                 number="01",  # Первая ревизия всегда "01"
-                file_path=dst_path,
-                file_name=original_name,
-                file_size=(len(file_bytes) if file_bytes is not None else 0),
-                file_type=file_extension,
                 change_description="Импорт по пути",
                 uploaded_by=current_user.id,
                 revision_status_id=active_status_id,  # Добавляем как в одиночном создании
@@ -1231,6 +1366,18 @@ async def import_documents_by_paths(
             db.add(revision_row)
             db.commit()
             db.refresh(revision_row)
+            
+            # Создаем запись файла в таблице files
+            file_record = FileModel(
+                revision_id=revision_row.id,
+                file_path=dst_path,
+                file_name=original_name,
+                file_size=(len(file_bytes) if file_bytes is not None else 0),
+                file_type=file_extension,
+                uploaded_by=current_user.id
+            )
+            db.add(file_record)
+            db.commit()
             
             # Создаем запись в истории workflow для первой ревизии (как в одиночном создании)
             if draft_workflow_status:
@@ -1245,13 +1392,23 @@ async def import_documents_by_paths(
                 db.add(workflow_history)
                 db.commit()
             
+            # Получаем информацию о файлах из таблицы files
+            files_info = db.query(FileModel).filter(FileModel.revision_id == revision_row.id, FileModel.is_deleted == 0).all()
+            
             # Добавляем документ в список только после успешного сохранения в БД
             imported_documents.append({
                 "id": db_document.id,
                 "title": db_document.title,
                 "number": db_document.number,
-                "file_name": revision_row.file_name,
-                "file_size": revision_row.file_size,
+                "files": [
+                    {
+                        "id": f.id,
+                        "file_name": f.file_name,
+                        "file_size": f.file_size,
+                        "file_type": f.file_type,
+                    }
+                    for f in files_info
+                ],
                 "is_deleted": db_document.is_deleted,
                 "drs": None,  # DRS moved to project_discipline_document_types
                 "discipline_id": db_document.discipline_id,
@@ -1274,12 +1431,31 @@ async def import_documents_by_paths(
         "progress": 100,  # Завершено
         "errors": errors
     }
+    
+    # Логирование импорта документов
+    if background_tasks and request:
+        add_log_task(
+            background_tasks=background_tasks,
+            request=request,
+            user_id=current_user.id,
+            action="import",
+            entity_type="document",
+            entity_id=project_id,  # Используем project_id как entity_id для импорта
+            new_values={
+                "project_id": project_id,
+                "total_imported": len(imported_documents),
+                "total_rows": total_rows,
+                "errors_count": len(errors)
+            }
+        )
 
 
 @router.post("/revisions/{revision_id}/release", response_model=dict)
 async def release_revision(
     revision_id: int,
     request: ReleaseRevisionRequest,
+    http_request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -1349,6 +1525,18 @@ async def release_revision(
     db.add(workflow_history)
     db.commit()
     
+    # Логирование выпуска ревизии
+    add_log_task(
+        background_tasks=background_tasks,
+        request=http_request,
+        user_id=current_user.id,
+        action="release_revision",
+        entity_type="document_revision",
+        entity_id=revision_id,
+        old_values={"workflow_status_id": draft_status.id},
+        new_values={"workflow_status_id": in_review_status.id, "document_id": document.id}
+    )
+    
     return {"message": "Ревизия успешно выпущена для внутреннего утверждения"}
 
 
@@ -1385,33 +1573,59 @@ async def list_document_revisions(
         .all()
     )
     
-    return [
-        {
-            "id": v[0].id,
-            "document_id": v[0].document_id,
-            "number": v[0].number,  # Переименовано с revision на number
-            "file_name": v[0].file_name,
-            "file_size": v[0].file_size,
-            "file_type": v[0].file_type,
+    # Пакетно загружаем файлы для всех ревизий (устранение N+1)
+    from collections import defaultdict
+    revision_ids = [v[0].id for v in versions]
+    files_by_revision_id: dict[int, list[FileModel]] = defaultdict(list)
+    if revision_ids:
+        all_files = db.query(FileModel).filter(
+            FileModel.revision_id.in_(revision_ids),
+            FileModel.is_deleted == 0
+        ).all()
+        for f in all_files:
+            files_by_revision_id[f.revision_id].append(f)
+    
+    result = []
+    for v in versions:
+        revision = v[0]
+        files_info = files_by_revision_id.get(revision.id, [])
+        
+        result.append({
+            "id": revision.id,
+            "document_id": revision.document_id,
+            "number": revision.number,  # Переименовано с revision на number
+            "files": [
+                {
+                    "id": f.id,
+                    "file_name": f.file_name,
+                    "file_size": f.file_size,
+                    "file_type": f.file_type,
+                }
+                for f in files_info
+            ],
+            # Обратная совместимость - берем первый файл для старых полей
+            "file_name": files_info[0].file_name if files_info and len(files_info) > 0 else None,
+            "file_size": files_info[0].file_size if files_info and len(files_info) > 0 else None,
+            "file_type": files_info[0].file_type if files_info and len(files_info) > 0 else None,
             "change_description": v[1] if v[1] else "",  # Показываем только комментарий из workflow history, если его нет - пустая строка
-            "uploaded_by": v[0].uploaded_by,
-            "is_deleted": v[0].is_deleted,
-            "created_at": v[0].created_at,
+            "uploaded_by": revision.uploaded_by,
+            "is_deleted": revision.is_deleted,
+            "created_at": revision.created_at,
             # Добавляем поля для связи со справочниками
-            "revision_status_id": v[0].revision_status_id,
-            "revision_description_id": v[0].revision_description_id,
-            "revision_step_id": v[0].revision_step_id,
-            "workflow_status_id": v[0].workflow_status_id,
-        }
-        for v in versions
-    ]
+            "revision_status_id": revision.revision_status_id,
+            "revision_description_id": revision.revision_description_id,
+            "revision_step_id": revision.revision_step_id,
+            "workflow_status_id": revision.workflow_status_id,
+        })
+    
+    return result
 
 
 @router.post("/{document_id}/revisions", response_model=dict)
 async def create_document_revision(
     document_id: int,
-    file: UploadFile = File(...),
-    change_description: Optional[str] = Form(None),
+    request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -1422,24 +1636,34 @@ async def create_document_revision(
     if not document:
         raise HTTPException(status_code=404, detail="Документ не найден")
 
-    # Проверка типа
-    file_extension = file.filename.split(".")[-1].lower() if "." in file.filename else ""
-    if file_extension and settings.ALLOWED_FILE_TYPES:
-        # settings.ALLOWED_FILE_TYPES хранится строкой с запятыми
-        allowed = {ext.strip().lower() for ext in settings.ALLOWED_FILE_TYPES.split(',') if ext.strip()}
-        if file_extension not in allowed:
-            raise HTTPException(status_code=400, detail="Неподдерживаемый тип файла")
+    # Разбираем form-data вручную, поддерживаем keys: 'files' и 'file'
+    form = await request.form()
+    change_description = form.get('change_description')
+    files_to_process: List[UploadFile] = []
+    # getlist поддерживается для FormData
+    if 'files' in form:
+        try:
+            files_to_process = form.getlist('files')  # type: ignore
+        except Exception:
+            # fallback: один файл под ключом files
+            f = form.get('files')
+            if f:
+                files_to_process = [f]  # type: ignore
+    if not files_to_process and 'file' in form:
+        f = form.get('file')
+        if f:
+            files_to_process = [f]  # type: ignore
+    if not files_to_process:
+        raise HTTPException(status_code=400, detail="Файлы не переданы")
 
-    # Читаем содержимое файла один раз
-    content = await file.read()
-    
-    # Временно сохраняем файл локально для определения пути
-    upload_dir = os.path.join(settings.UPLOAD_DIR, f"project_{document.project_id}")
-    os.makedirs(upload_dir, exist_ok=True)
-    unique_filename = f"{uuid.uuid4()}.{file_extension}" if file_extension else str(uuid.uuid4())
-    temp_file_path = os.path.join(upload_dir, unique_filename)
-    with open(temp_file_path, "wb") as buffer:
-        buffer.write(content)
+    # Проверка типов файлов
+    allowed: Optional[set[str]] = None
+    if settings.ALLOWED_FILE_TYPES:
+        allowed = {ext.strip().lower() for ext in settings.ALLOWED_FILE_TYPES.split(',') if ext.strip()}
+    for f in files_to_process:
+        file_extension = f.filename.split(".")[-1].lower() if "." in f.filename else ""
+        if allowed is not None and file_extension and file_extension not in allowed:
+            raise HTTPException(status_code=400, detail=f"Неподдерживаемый тип файла: {f.filename}")
 
     # Получаем ID статуса "Cancelled"
     from app.models.references import RevisionStatus
@@ -1500,10 +1724,15 @@ async def create_document_revision(
             if cancelled_revision:
                 # Если есть отмененная ревизия, проверяем статус последней НЕ отмененной ревизии
                 
-                # Проверяем, утверждена ли последняя ревизия
-                approved_status = db.query(WorkflowStatus).filter(WorkflowStatus.name == "Approved").first()
-                if approved_status and latest_revision.workflow_status_id == approved_status.id:
-                    # Если последняя ревизия утверждена, переходим к следующей последовательности
+                # Проверяем, является ли последняя ревизия утверждённой (в одном из финальных статусов)
+                approved_like_statuses = db.query(WorkflowStatus).filter(
+                    WorkflowStatus.name.in_(["Approved", "Approved with Comments", "Not Reviewed"])
+                ).all()
+                approved_like_ids = {s.id for s in approved_like_statuses}
+                
+                if latest_revision.workflow_status_id in approved_like_ids:
+                    # Если последняя ревизия утверждена (Approved / Approved with Comments / Not Reviewed),
+                    # переходим к следующей последовательности
                     new_revision_description_id, new_revision_step_id, new_revision = _get_next_revision_from_sequence(
                         document_id, 
                         latest_revision.revision_description_id, 
@@ -1559,10 +1788,6 @@ async def create_document_revision(
     revision_row = DocumentRevision(
         document_id=document.id,
         number=new_revision,
-        file_path=temp_file_path,  # Временно используем локальный путь
-        file_name=file.filename,
-        file_size=len(content),
-        file_type=file.content_type or file_extension,
         change_description=change_description,
         uploaded_by=current_user.id,
         revision_status_id=active_status.id if active_status else None,
@@ -1574,49 +1799,73 @@ async def create_document_revision(
     db.commit()
     db.refresh(revision_row)
     
-    # Определяем способ хранения файла
-    if settings.USE_MINIO:
-        # Используем MinIO для хранения
-        try:
-            # Получаем информацию о проекте
-            project = db.query(Project).filter(Project.id == document.project_id).first()
-            if not project:
-                raise HTTPException(status_code=404, detail="Проект не найден")
-            
-            # Генерируем ключ для MinIO
-            document_number = document.number or f"DOC-{document.id:04d}"
-            revision_key_prefix = f"{project.project_code}/{document_number}/{revision_row.number}_{new_revision_description_id or 1}_{revision_row.id}"
-            file_key = f"{revision_key_prefix}/{file.filename}"
-            
-            # Загружаем файл в MinIO напрямую
-            import aiobotocore.session
-            session = aiobotocore.session.get_session()
-            async with session.create_client(
-                's3',
-                endpoint_url=settings.MINIO_ENDPOINT,
-                aws_access_key_id=settings.MINIO_ACCESS_KEY,
-                aws_secret_access_key=settings.MINIO_SECRET_KEY
-            ) as client:
-                await client.put_object(
-                    Bucket=settings.MINIO_BUCKET,
-                    Key=file_key,
-                    Body=content
-                )
-            
-            # Обновляем путь к файлу в базе данных
-            revision_row.file_path = file_key
-            db.commit()
-            
-            # Удаляем временный локальный файл
-            if os.path.exists(temp_file_path):
-                os.remove(temp_file_path)
-            
-        except Exception as e:
-            # Если MinIO недоступен, оставляем локальный файл
-            pass
-    else:
-        # Используем локальное хранение (файл уже сохранен)
-        pass
+    # Обрабатываем и сохраняем все файлы
+    for f in files_to_process:
+        # Читаем содержимое файла
+        content = await f.read()
+
+        # Временно сохраняем файл локально (если не MinIO)
+        upload_dir = os.path.join(settings.UPLOAD_DIR, f"project_{document.project_id}")
+        os.makedirs(upload_dir, exist_ok=True)
+        file_extension = f.filename.split(".")[-1].lower() if "." in f.filename else ""
+        unique_filename = f"{uuid.uuid4()}.{file_extension}" if file_extension else str(uuid.uuid4())
+        temp_file_path = os.path.join(upload_dir, unique_filename)
+        with open(temp_file_path, "wb") as buffer:
+            buffer.write(content)
+
+        # Определяем способ хранения файла
+        file_path = temp_file_path
+        if settings.USE_MINIO:
+            try:
+                # Формируем ключ как в create_document_with_revision
+                import aiobotocore.session
+                session = aiobotocore.session.get_session()
+                document_number = document.number or f"DOC-{document.id:04d}"
+                # Получаем букву кода описания ревизии
+                from app.models.references import RevisionDescription
+                rev_desc = None
+                if revision_row.revision_description_id:
+                    rev_desc = db.query(RevisionDescription).filter(RevisionDescription.id == revision_row.revision_description_id).first()
+                rev_code = (rev_desc.code if rev_desc and getattr(rev_desc, 'code', None) else "")
+                revision_key_prefix = f"{document.project.project_code}/{document_number}/{rev_code}{revision_row.number}_{revision_row.revision_description_id or 1}_{revision_row.id}"
+                file_key = f"{revision_key_prefix}/{f.filename}"
+                async with session.create_client(
+                    's3',
+                    endpoint_url=settings.MINIO_ENDPOINT,
+                    aws_access_key_id=settings.MINIO_ACCESS_KEY,
+                    aws_secret_access_key=settings.MINIO_SECRET_KEY
+                ) as client:
+                    await client.put_object(
+                        Bucket=settings.MINIO_BUCKET,
+                        Key=file_key,
+                        Body=content
+                    )
+                file_path = file_key
+                if os.path.exists(temp_file_path):
+                    os.remove(temp_file_path)
+            except Exception as e:
+                # Если MinIO недоступен при включённом USE_MINIO, не сохраняем файл локально
+                # и откатываем создание новой ревизии
+                if os.path.exists(temp_file_path):
+                    os.remove(temp_file_path)
+                # Удаляем файлы, уже созданные для этой ревизии
+                db.query(FileModel).filter(FileModel.revision_id == revision_row.id).delete()
+                # Удаляем саму ревизию
+                db.delete(revision_row)
+                db.commit()
+                raise HTTPException(status_code=500, detail=f"Ошибка хранения файла в MinIO: {str(e)}")
+
+        # Создаем запись файла в таблице files
+        file_record = FileModel(
+            revision_id=revision_row.id,
+            file_path=file_path,
+            file_name=f.filename,
+            file_size=len(content),
+            file_type=f.content_type or file_extension,
+            uploaded_by=current_user.id
+        )
+        db.add(file_record)
+        db.commit()
     
     # Создаем запись в document_workflow_history для новой ревизии
     from app.models.document_workflow_history import DocumentWorkflowHistory
@@ -1634,12 +1883,38 @@ async def create_document_revision(
     
     db.refresh(document)
 
+    # Получаем информацию о файлах из таблицы files
+    files_info = db.query(FileModel).filter(FileModel.revision_id == revision_row.id, FileModel.is_deleted == 0).all()
+    
+    # Логирование создания ревизии
+    add_log_task(
+        background_tasks=background_tasks,
+        request=request,
+        user_id=current_user.id,
+        action="create_revision",
+        entity_type="document_revision",
+        entity_id=revision_row.id,
+        new_values={
+            "document_id": document_id,
+            "revision_number": revision_row.number,
+            "revision_description_id": revision_row.revision_description_id,
+            "files_count": len(files_info)
+        }
+    )
+    
     return {
         "message": "Новая ревизия создана",
         "document_id": document.id,
         "revision": revision_row.number,
-        "file_name": revision_row.file_name,
-        "file_size": revision_row.file_size,
+        "files": [
+            {
+                "id": f.id,
+                "file_name": f.file_name,
+                "file_size": f.file_size,
+                "file_type": f.file_type,
+            }
+            for f in files_info
+        ],
         "created_at": revision_row.created_at,
     }
 
@@ -1669,32 +1944,38 @@ async def compare_document_revisions(
 
     a = get_revision(r1)
     b = get_revision(r2)
+    
+    # Получаем первый файл из каждой ревизии для сравнения
+    a_file = db.query(FileModel).filter(FileModel.revision_id == a.id, FileModel.is_deleted == 0).first()
+    b_file = db.query(FileModel).filter(FileModel.revision_id == b.id, FileModel.is_deleted == 0).first()
 
-    a_md5 = _compute_md5(a.file_path) if a.file_path else None
-    b_md5 = _compute_md5(b.file_path) if b.file_path else None
+    a_md5 = _compute_md5(a_file.file_path) if a_file and a_file.file_path else None
+    b_md5 = _compute_md5(b_file.file_path) if b_file and b_file.file_path else None
 
     return {
         "document_id": document_id,
         "from": {
             "revision": a.number,
-            "file_name": a.file_name,
-            "file_size": a.file_size,
+            "file_name": a_file.file_name if a_file else None,
+            "file_size": a_file.file_size if a_file else None,
             "md5": a_md5,
         },
         "to": {
             "revision": b.number,
-            "file_name": b.file_name,
-            "file_size": b.file_size,
+            "file_name": b_file.file_name if b_file else None,
+            "file_size": b_file.file_size if b_file else None,
             "md5": b_md5,
         },
         "equal": a_md5 is not None and a_md5 == b_md5,
-        "size_diff": (b.file_size or 0) - (a.file_size or 0),
+        "size_diff": (b_file.file_size or 0 if b_file else 0) - (a_file.file_size or 0 if a_file else 0),
     }
 
 
 @router.get("/{document_id}/download")
 async def download_document(
     document_id: int,
+    request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -1703,77 +1984,161 @@ async def download_document(
     if not document:
         raise HTTPException(status_code=404, detail="Документ не найден")
     
-    # Получаем последнюю версию документа
+    # Получаем последнюю версию документа (только неудаленные)
     latest_revision = db.query(DocumentRevision).filter(
-        DocumentRevision.document_id == document_id
+        DocumentRevision.document_id == document_id,
+        DocumentRevision.is_deleted == 0
     ).order_by(DocumentRevision.created_at.desc()).first()
     
+    if not latest_revision:
+        raise HTTPException(status_code=404, detail="Ревизия не найдена")
+    
     # Проверяем права доступа
-    if not current_user.is_admin and (not latest_revision or latest_revision.uploaded_by != current_user.id):
+    if not current_user.is_admin and latest_revision.uploaded_by != current_user.id:
         raise HTTPException(status_code=403, detail="Нет прав доступа к документу")
     
-    if not latest_revision or not latest_revision.file_path:
+    # Получаем первый файл последней ревизии
+    latest_file = db.query(FileModel).filter(
+        FileModel.revision_id == latest_revision.id, 
+        FileModel.is_deleted == 0
+    ).first()
+    
+    if not latest_file:
         raise HTTPException(status_code=404, detail="Файл не найден")
     
     # Определяем способ получения файла
     if settings.USE_MINIO:
         # Получаем файл из MinIO
         try:
-            # Получаем файл напрямую из MinIO через S3 клиент
             import mimetypes
-            import aiobotocore.session
+            import logging
+            logger = logging.getLogger(__name__)
             
-            session = aiobotocore.session.get_session()
-            async with session.create_client(
-                's3',
-                endpoint_url=settings.MINIO_ENDPOINT,
-                aws_access_key_id=settings.MINIO_ACCESS_KEY,
-                aws_secret_access_key=settings.MINIO_SECRET_KEY
-            ) as client:
-                response = await client.get_object(
-                    Bucket=settings.MINIO_BUCKET,
-                    Key=latest_revision.file_path
-                )
+            # Логируем попытку скачивания
+            logger.info(f"Attempting to download file from MinIO: {latest_file.file_path}")
+            
+            # Используем метод из minio_service
+            content_bytes = await minio_service.download_file(latest_file.file_path)
+            
+            # Если файл не найден, пробуем альтернативные форматы пути
+            if content_bytes is None:
+                # Пробуем разные варианты формата ключа
+                alternative_paths = []
                 
-                # Читаем весь контент в память для правильной передачи
-                content_bytes = await response['Body'].read()
+                # Получаем информацию о ревизии для построения правильного пути
+                import re
+                path_parts = latest_file.file_path.split('/')
+                if len(path_parts) >= 3 and latest_revision:
+                    # Формат: project/document/revision_part/filename
+                    revision_part = path_parts[-2]  # Например, "A01_1_0"
+                    filename = path_parts[-1]
+                    
+                    # Пробуем убрать revision_code из начала и использовать реальный revision_id
+                    match = re.match(r'^([A-Z]?)(\d+)_(\d+)_(\d+)$', revision_part)
+                    if match:
+                        revision_code, rev_num, rev_desc_id, old_rev_id = match.groups()
+                        
+                        # Используем реальные данные из ревизии
+                        real_revision_id = latest_revision.id
+                        real_revision_number = latest_revision.number
+                        real_revision_desc_id = latest_revision.revision_description_id or 1
+                        
+                        # Пробуем формат без revision_code с реальным revision_id
+                        alternative_path = '/'.join(path_parts[:-2]) + f'/{real_revision_number}_{real_revision_desc_id}_{real_revision_id}/{filename}'
+                        alternative_paths.append(alternative_path)
+                        logger.info(f"Trying alternative path format with real revision_id: {alternative_path}")
+                        
+                        # Также пробуем формат с revision_code и реальным revision_id
+                        if revision_code:
+                            alt_path_with_code = '/'.join(path_parts[:-2]) + f'/{revision_code}{real_revision_number}_{real_revision_desc_id}_{real_revision_id}/{filename}'
+                            alternative_paths.append(alt_path_with_code)
+                            logger.info(f"Trying alternative path format with code and real revision_id: {alt_path_with_code}")
                 
-                # Определяем MIME тип
-                mime_type, _ = mimetypes.guess_type(latest_revision.file_name)
-                media_type = mime_type or 'application/octet-stream'
+                # Пробуем все альтернативные пути
+                for alt_path in alternative_paths:
+                    content_bytes = await minio_service.download_file(alt_path)
+                    if content_bytes is not None:
+                        logger.info(f"File found using alternative path: {alt_path}")
+                        # Обновляем путь в базе данных для будущих запросов
+                        latest_file.file_path = alt_path
+                        db.commit()
+                        break
                 
-                # Правильно кодируем имя файла для HTTP заголовков
-                import urllib.parse
-                encoded_filename = urllib.parse.quote(latest_revision.file_name.encode('utf-8'))
-                
-                # Используем Response вместо StreamingResponse для стабильности
-                from fastapi.responses import Response
-                return Response(
-                    content=content_bytes,
-                    media_type=media_type,
-                    headers={
-                        "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}",
-                        "Content-Type": media_type,
-                        "Content-Length": str(len(content_bytes))
-                    }
-                )
+                if content_bytes is None:
+                    raise HTTPException(status_code=404, detail=f"Файл не найден в MinIO: {latest_file.file_path}")
+            
+            # Определяем MIME тип
+            mime_type, _ = mimetypes.guess_type(latest_file.file_name)
+            media_type = mime_type or 'application/octet-stream'
+            
+            # Правильно кодируем имя файла для HTTP заголовков
+            import urllib.parse
+            encoded_filename = urllib.parse.quote(latest_file.file_name.encode('utf-8'))
+            
+            # Логирование скачивания документа
+            add_log_task(
+                background_tasks=background_tasks,
+                request=request,
+                user_id=current_user.id,
+                action="download",
+                entity_type="document",
+                entity_id=document_id,
+                new_values={
+                    "file_name": latest_file.file_name,
+                    "file_size": len(content_bytes),
+                    "revision_id": latest_revision.id
+                }
+            )
+            
+            # Используем Response вместо StreamingResponse для стабильности
+            from fastapi.responses import Response
+            return Response(
+                content=content_bytes,
+                media_type=media_type,
+                headers={
+                    "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}",
+                    "Content-Type": media_type,
+                    "Content-Length": str(len(content_bytes))
+                }
+            )
+        except HTTPException:
+            raise
         except Exception as e:
+            # Логируем ошибку для отладки
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error downloading file from MinIO: {str(e)}, file_path: {latest_file.file_path}")
+            
             # Проверяем, является ли ошибка "файл не найден"
             error_str = str(e).lower()
             if any(keyword in error_str for keyword in ["nosuchkey", "404", "not found", "no such key"]):
-                raise HTTPException(status_code=404, detail="Файл не найден в хранилище")
+                raise HTTPException(status_code=404, detail=f"Файл не найден в хранилище: {latest_file.file_path}")
             elif "access denied" in error_str or "forbidden" in error_str:
                 raise HTTPException(status_code=403, detail="Нет доступа к файлу в хранилище")
             else:
                 raise HTTPException(status_code=500, detail=f"Ошибка получения файла из MinIO: {str(e)}")
     else:
         # Используем локальное хранение
-        if not os.path.exists(latest_revision.file_path):
+        if not os.path.exists(latest_file.file_path):
             raise HTTPException(status_code=404, detail="Файл не найден")
         
+        # Логирование скачивания документа (локальное хранение)
+        add_log_task(
+            background_tasks=background_tasks,
+            request=request,
+            user_id=current_user.id,
+            action="download",
+            entity_type="document",
+            entity_id=document_id,
+            new_values={
+                "file_name": latest_file.file_name,
+                "revision_id": latest_revision.id
+            }
+        )
+        
         return FileResponse(
-            path=latest_revision.file_path,
-            filename=latest_revision.file_name,
+            path=latest_file.file_path,
+            filename=latest_file.file_name,
             media_type='application/octet-stream'
         )
 
@@ -1782,6 +2147,8 @@ async def download_document(
 async def download_document_revision(
     document_id: int,
     revision_id: int,
+    request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -1791,10 +2158,11 @@ async def download_document_revision(
     if not document:
         raise HTTPException(status_code=404, detail="Документ не найден")
     
-    # Проверяем существование ревизии
+    # Проверяем существование ревизии (только неудаленные)
     revision = db.query(DocumentRevision).filter(
         DocumentRevision.id == revision_id,
-        DocumentRevision.document_id == document_id
+        DocumentRevision.document_id == document_id,
+        DocumentRevision.is_deleted == 0
     ).first()
     
     if not revision:
@@ -1809,68 +2177,148 @@ async def download_document_revision(
     if not current_user.is_admin and not project_member:
         raise HTTPException(status_code=403, detail="Нет прав доступа к документу")
     
-    if not revision.file_path:
+    # Получаем первый файл ревизии
+    revision_file = db.query(FileModel).filter(
+        FileModel.revision_id == revision.id, 
+        FileModel.is_deleted == 0
+    ).first()
+    
+    if not revision_file:
         raise HTTPException(status_code=404, detail="Файл не найден")
     
     # Определяем способ получения файла
     if settings.USE_MINIO:
         # Получаем файл из MinIO
         try:
-            # Получаем файл напрямую из MinIO через S3 клиент
             import mimetypes
-            import aiobotocore.session
+            import logging
+            logger = logging.getLogger(__name__)
             
-            session = aiobotocore.session.get_session()
-            async with session.create_client(
-                's3',
-                endpoint_url=settings.MINIO_ENDPOINT,
-                aws_access_key_id=settings.MINIO_ACCESS_KEY,
-                aws_secret_access_key=settings.MINIO_SECRET_KEY
-            ) as client:
-                response = await client.get_object(
-                    Bucket=settings.MINIO_BUCKET,
-                    Key=revision.file_path
-                )
+            # Логируем попытку скачивания
+            logger.info(f"Attempting to download file from MinIO: {revision_file.file_path}")
+            
+            # Используем метод из minio_service
+            content_bytes = await minio_service.download_file(revision_file.file_path)
+            
+            # Если файл не найден, пробуем альтернативные форматы пути
+            if content_bytes is None:
+                # Пробуем разные варианты формата ключа
+                alternative_paths = []
                 
-                # Читаем весь контент в память для правильной передачи
-                content_bytes = await response['Body'].read()
+                # Получаем информацию о ревизии для построения правильного пути
+                import re
+                path_parts = revision_file.file_path.split('/')
+                if len(path_parts) >= 3 and revision:
+                    # Формат: project/document/revision_part/filename
+                    revision_part = path_parts[-2]  # Например, "A01_1_0"
+                    filename = path_parts[-1]
+                    
+                    # Пробуем убрать revision_code из начала и использовать реальный revision_id
+                    match = re.match(r'^([A-Z]?)(\d+)_(\d+)_(\d+)$', revision_part)
+                    if match:
+                        revision_code, rev_num, rev_desc_id, old_rev_id = match.groups()
+                        
+                        # Используем реальные данные из ревизии
+                        real_revision_id = revision.id
+                        real_revision_number = revision.number
+                        real_revision_desc_id = revision.revision_description_id or 1
+                        
+                        # Пробуем формат без revision_code с реальным revision_id
+                        alternative_path = '/'.join(path_parts[:-2]) + f'/{real_revision_number}_{real_revision_desc_id}_{real_revision_id}/{filename}'
+                        alternative_paths.append(alternative_path)
+                        logger.info(f"Trying alternative path format with real revision_id: {alternative_path}")
+                        
+                        # Также пробуем формат с revision_code и реальным revision_id
+                        if revision_code:
+                            alt_path_with_code = '/'.join(path_parts[:-2]) + f'/{revision_code}{real_revision_number}_{real_revision_desc_id}_{real_revision_id}/{filename}'
+                            alternative_paths.append(alt_path_with_code)
+                            logger.info(f"Trying alternative path format with code and real revision_id: {alt_path_with_code}")
                 
-                # Определяем MIME тип
-                mime_type, _ = mimetypes.guess_type(revision.file_name)
-                media_type = mime_type or 'application/octet-stream'
+                # Пробуем все альтернативные пути
+                for alt_path in alternative_paths:
+                    content_bytes = await minio_service.download_file(alt_path)
+                    if content_bytes is not None:
+                        logger.info(f"File found using alternative path: {alt_path}")
+                        # Обновляем путь в базе данных для будущих запросов
+                        revision_file.file_path = alt_path
+                        db.commit()
+                        break
                 
-                # Правильно кодируем имя файла для HTTP заголовков
-                import urllib.parse
-                encoded_filename = urllib.parse.quote(revision.file_name.encode('utf-8'))
-                
-                # Используем Response вместо StreamingResponse для стабильности
-                from fastapi.responses import Response
-                return Response(
-                    content=content_bytes,
-                    media_type=media_type,
-                    headers={
-                        "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}",
-                        "Content-Type": media_type,
-                        "Content-Length": str(len(content_bytes))
-                    }
-                )
+                if content_bytes is None:
+                    raise HTTPException(status_code=404, detail=f"Файл не найден в MinIO: {revision_file.file_path}")
+            
+            # Определяем MIME тип
+            mime_type, _ = mimetypes.guess_type(revision_file.file_name)
+            media_type = mime_type or 'application/octet-stream'
+            
+            # Правильно кодируем имя файла для HTTP заголовков
+            import urllib.parse
+            encoded_filename = urllib.parse.quote(revision_file.file_name.encode('utf-8'))
+            
+            # Логирование скачивания ревизии документа
+            add_log_task(
+                background_tasks=background_tasks,
+                request=request,
+                user_id=current_user.id,
+                action="download",
+                entity_type="document_revision",
+                entity_id=revision_id,
+                new_values={
+                    "file_name": revision_file.file_name,
+                    "file_size": len(content_bytes),
+                    "document_id": document_id
+                }
+            )
+            
+            # Используем Response вместо StreamingResponse для стабильности
+            from fastapi.responses import Response
+            return Response(
+                content=content_bytes,
+                media_type=media_type,
+                headers={
+                    "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}",
+                    "Content-Type": media_type,
+                    "Content-Length": str(len(content_bytes))
+                }
+            )
+        except HTTPException:
+            raise
         except Exception as e:
+            # Логируем ошибку для отладки
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Error downloading file from MinIO: {str(e)}, file_path: {revision_file.file_path}")
+            
             # Проверяем, является ли ошибка "файл не найден"
             error_str = str(e).lower()
             if any(keyword in error_str for keyword in ["nosuchkey", "404", "not found", "no such key"]):
-                raise HTTPException(status_code=404, detail="Файл не найден в хранилище")
+                raise HTTPException(status_code=404, detail=f"Файл не найден в хранилище: {revision_file.file_path}")
             elif "access denied" in error_str or "forbidden" in error_str:
                 raise HTTPException(status_code=403, detail="Нет доступа к файлу в хранилище")
             else:
                 raise HTTPException(status_code=500, detail=f"Ошибка получения файла из MinIO: {str(e)}")
     else:
         # Используем локальное хранение
-        if not os.path.exists(revision.file_path):
+        if not os.path.exists(revision_file.file_path):
             raise HTTPException(status_code=404, detail="Файл не найден")
         
+        # Логирование скачивания ревизии документа (локальное хранение)
+        add_log_task(
+            background_tasks=background_tasks,
+            request=request,
+            user_id=current_user.id,
+            action="download",
+            entity_type="document_revision",
+            entity_id=revision_id,
+            new_values={
+                "file_name": revision_file.file_name,
+                "document_id": document_id
+            }
+        )
+        
         return FileResponse(
-            path=revision.file_path,
-            filename=revision.file_name,
+            path=revision_file.file_path,
+            filename=revision_file.file_name,
             media_type='application/octet-stream'
         )
 
@@ -1879,6 +2327,7 @@ async def download_document_revision(
 async def soft_delete_document(
     document_id: int,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -1932,15 +2381,15 @@ async def soft_delete_document(
     db.commit()
     
     # Логирование действия
-    log_action(
-        db=db,
+    add_log_task(
+        background_tasks=background_tasks,
+        request=request,
         user_id=current_user.id,
         action="delete",
         entity_type="document",
         entity_id=document_id,
         old_values=old_values,
         new_values={"is_deleted": 1},
-        request=request,
     )
     
     return {"message": "Документ и все его ревизии помечены как удаленные", "document_id": document_id}
@@ -2003,6 +2452,8 @@ async def soft_delete_document_revision(
 @router.post("/revisions/{revision_id}/restore")
 async def restore_document_revision(
     revision_id: int,
+    request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -2024,12 +2475,26 @@ async def restore_document_revision(
     revision.is_deleted = 0
     db.commit()
     
+    # Логирование восстановления ревизии
+    add_log_task(
+        background_tasks=background_tasks,
+        request=request,
+        user_id=current_user.id,
+        action="restore_revision",
+        entity_type="document_revision",
+        entity_id=revision_id,
+        old_values={"is_deleted": 1},
+        new_values={"is_deleted": 0, "document_id": document.id}
+    )
+    
     return {"message": "Ревизия восстановлена", "revision_id": revision_id}
 
 
 @router.post("/revisions/{revision_id}/cancel")
 async def cancel_document_revision(
     revision_id: int,
+    request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -2090,9 +2555,22 @@ async def cancel_document_revision(
         raise HTTPException(status_code=400, detail="Можно отменять только последнюю активную ревизию")
     
     # Отменяем ревизию - меняем статус на "Cancelled"
+    old_status_id = revision.revision_status_id
     revision.revision_status_id = cancelled_status.id
     
     db.commit()
+    
+    # Логирование отмены ревизии
+    add_log_task(
+        background_tasks=background_tasks,
+        request=request,
+        user_id=current_user.id,
+        action="cancel_revision",
+        entity_type="document_revision",
+        entity_id=revision_id,
+        old_values={"revision_status_id": old_status_id},
+        new_values={"revision_status_id": cancelled_status.id, "document_id": document.id}
+    )
     
     return {"message": "Ревизия отменена", "revision_id": revision_id}
 
@@ -2102,6 +2580,7 @@ async def update_document(
     document_id: int,
     document_data: DocumentUpdate,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -2162,15 +2641,15 @@ async def update_document(
         "discipline_id": document.discipline_id,
         "document_type_id": document.document_type_id,
     }
-    log_action(
-        db=db,
+    add_log_task(
+        background_tasks=background_tasks,
+        request=request,
         user_id=current_user.id,
         action="update",
         entity_type="document",
         entity_id=document_id,
         old_values=old_values,
         new_values=new_values,
-        request=request,
     )
     
     return {"message": "Документ обновлен", "document_id": document_id}
@@ -2204,6 +2683,14 @@ async def search_document_by_number(
     if not latest_revision:
         return {"found": False, "message": f"У документа '{document_number}' нет ревизий"}
     
+    # Получаем информацию о файлах из таблицы files
+    files_info = []
+    if latest_revision:
+        files_info = db.query(FileModel).filter(
+            FileModel.revision_id == latest_revision.id, 
+            FileModel.is_deleted == 0
+        ).all()
+    
     return {
         "found": True,
         "document": {
@@ -2214,7 +2701,15 @@ async def search_document_by_number(
         "latest_revision": {
             "id": latest_revision.id,
             "number": latest_revision.number,
-            "file_name": latest_revision.file_name,
+            "files": [
+                {
+                    "id": f.id,
+                    "file_name": f.file_name,
+                    "file_size": f.file_size,
+                    "file_type": f.file_type,
+                }
+                for f in files_info
+            ],
             "created_at": latest_revision.created_at
         }
     }

@@ -2,7 +2,7 @@
 Transmittals endpoints
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from typing import List
@@ -12,9 +12,10 @@ from app.core.database import get_db
 from app.models.user import User
 from app.models.transmittal import Transmittal, TransmittalRevision
 from app.models.document import Document, DocumentRevision
+from app.models.document import File as FileModel
 from app.models.references import RevisionStatus
 from app.services.auth import get_current_active_user
-from app.services.audit_service import log_action
+from app.services.audit_service import log_action, add_log_task
 
 router = APIRouter()
 
@@ -41,6 +42,7 @@ class TransmittalRevisionRemove(BaseModel):
 async def delete_transmittal(
     transmittal_id: int,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -64,15 +66,15 @@ async def delete_transmittal(
     db.commit()
 
     # Логирование действия
-    log_action(
-        db=db,
+    add_log_task(
+        background_tasks=background_tasks,
+        request=request,
         user_id=current_user.id,
         action="delete",
         entity_type="transmittal",
         entity_id=transmittal_id,
         old_values=old_values,
         new_values={"is_deleted": 1},
-        request=request,
     )
 
     return {"message": "Трансмиттал удален", "id": transmittal_id}
@@ -120,6 +122,7 @@ async def get_transmittals(
 async def create_transmittal(
     transmittal_data: TransmittalCreate,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -187,15 +190,15 @@ async def create_transmittal(
         "created_by": db_transmittal.created_by,
         "is_deleted": db_transmittal.is_deleted,
     }
-    log_action(
-        db=db,
+    add_log_task(
+        background_tasks=background_tasks,
+        request=request,
         user_id=current_user.id,
         action="create",
         entity_type="transmittal",
         entity_id=db_transmittal.id,
         old_values=None,
         new_values=new_values,
-        request=request,
     )
     
     return {
@@ -219,6 +222,7 @@ async def update_transmittal(
     transmittal_id: int,
     transmittal_data: TransmittalUpdate,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -270,15 +274,15 @@ async def update_transmittal(
         "title": transmittal.title,
         "counterparty_id": transmittal.counterparty_id,
     }
-    log_action(
-        db=db,
+    add_log_task(
+        background_tasks=background_tasks,
+        request=request,
         user_id=current_user.id,
         action="update",
         entity_type="transmittal",
         entity_id=transmittal_id,
         old_values=old_values,
         new_values=new_values,
-        request=request,
     )
     
     return {
@@ -323,8 +327,22 @@ async def get_transmittal(
         TransmittalRevision.transmittal_id == transmittal_id
     ).all()
     
+    # Пакетно загружаем файлы для всех ревизий (устранение N+1)
+    from collections import defaultdict
+    revision_ids = [r[0].id for r in revisions_data]
+    files_by_revision_id = defaultdict(list)
+    if revision_ids:
+        all_files = db.query(FileModel).filter(
+            FileModel.revision_id.in_(revision_ids),
+            FileModel.is_deleted == 0
+        ).all()
+        for f in all_files:
+            files_by_revision_id[f.revision_id].append(f)
+    
     result = []
     for revision, document, tr, rev_descr in revisions_data:
+        files_info = files_by_revision_id.get(revision.id, [])
+        
         result.append({
             "id": revision.id,
             "document_id": document.id,
@@ -332,9 +350,19 @@ async def get_transmittal(
             "document_number": document.number,
             "revision_number": revision.number,
             "revision_description_code": rev_descr.code if rev_descr else None,
-            "file_name": revision.file_name,
-            "file_type": revision.file_type,
-            "file_size": revision.file_size,
+            "files": [
+                {
+                    "id": f.id,
+                    "file_name": f.file_name,
+                    "file_size": f.file_size,
+                    "file_type": f.file_type,
+                }
+                for f in files_info
+            ],
+            # Обратная совместимость - берем первый файл для старых полей
+            "file_name": files_info[0].file_name if files_info and len(files_info) > 0 else None,
+            "file_size": files_info[0].file_size if files_info and len(files_info) > 0 else None,
+            "file_type": files_info[0].file_type if files_info and len(files_info) > 0 else None,
             "created_at": revision.created_at
         })
     
@@ -386,20 +414,45 @@ async def get_transmittal_revisions(
         TransmittalRevision.transmittal_id == transmittal_id
     ).all()
     
+    # Пакетно загружаем файлы для всех ревизий (устранение N+1)
+    from collections import defaultdict
+    revision_ids = [r[0].id for r in revisions_data]
+    files_by_revision_id = defaultdict(list)
+    if revision_ids:
+        all_files = db.query(FileModel).filter(
+            FileModel.revision_id.in_(revision_ids),
+            FileModel.is_deleted == 0
+        ).all()
+        for f in all_files:
+            files_by_revision_id[f.revision_id].append(f)
+    
     result = []
     for revision, document, tr in revisions_data:
+        files_info = files_by_revision_id.get(revision.id, [])
+        
         result.append({
             "id": revision.id,
             "document_id": document.id,
             "document_title": document.title,
             "document_number": document.number,
             "revision_number": revision.number,
-            "file_name": revision.file_name,
-            "file_size": revision.file_size,
+            "files": [
+                {
+                    "id": f.id,
+                    "file_name": f.file_name,
+                    "file_size": f.file_size,
+                    "file_type": f.file_type,
+                }
+                for f in files_info
+            ],
+            # Обратная совместимость - берем первый файл для старых полей
+            "file_name": files_info[0].file_name if files_info and len(files_info) > 0 else None,
+            "file_size": files_info[0].file_size if files_info and len(files_info) > 0 else None,
+            "file_type": files_info[0].file_type if files_info and len(files_info) > 0 else None,
             "created_at": revision.created_at
         })
     
-    return revisions_data
+    return result
 
 @router.post("/{transmittal_id}/revisions", response_model=dict)
 async def add_revisions_to_transmittal(
@@ -538,9 +591,23 @@ async def get_active_revisions(
     # Выполняем запрос
     results = query.all()
     
+    # Пакетно загружаем файлы для всех ревизий (устранение N+1)
+    from collections import defaultdict
+    revision_ids = [r[0].id for r in results]
+    files_by_revision_id = defaultdict(list)
+    if revision_ids:
+        all_files = db.query(FileModel).filter(
+            FileModel.revision_id.in_(revision_ids),
+            FileModel.is_deleted == 0
+        ).all()
+        for f in all_files:
+            files_by_revision_id[f.revision_id].append(f)
+    
     # Формируем результат
     revisions_data = []
     for revision, document, revision_description, workflow_sequence in results:
+        files_info = files_by_revision_id.get(revision.id, [])
+        
         revision_data = {
             "id": revision.id,
             "document_id": document.id,
@@ -548,9 +615,19 @@ async def get_active_revisions(
             "document_number": document.number,
             "revision_number": revision.number,
             "revision_description_code": revision_description.code if revision_description else None,
-            "file_name": revision.file_name,
-            "file_type": revision.file_type,
-            "file_size": revision.file_size,
+            "files": [
+                {
+                    "id": f.id,
+                    "file_name": f.file_name,
+                    "file_size": f.file_size,
+                    "file_type": f.file_type,
+                }
+                for f in files_info
+            ],
+            # Обратная совместимость - берем первый файл для старых полей
+            "file_name": files_info[0].file_name if files_info and len(files_info) > 0 else None,
+            "file_size": files_info[0].file_size if files_info and len(files_info) > 0 else None,
+            "file_type": files_info[0].file_type if files_info and len(files_info) > 0 else None,
             "created_at": revision.created_at,
             "project_id": document.project_id
         }
@@ -563,6 +640,7 @@ async def get_active_revisions(
 async def send_transmittal(
     transmittal_id: int,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -678,15 +756,16 @@ async def send_transmittal(
         "sender_id": current_user.id,
         "action": "send",
     }
-    log_action(
-        db=db,
+    # Логирование отправки трансмиттала
+    add_log_task(
+        background_tasks=background_tasks,
+        request=request,
         user_id=current_user.id,
-        action="update",
+        action="send",
         entity_type="transmittal",
         entity_id=transmittal_id,
         old_values=old_values,
         new_values=new_values,
-        request=request,
     )
     
     return {"message": "Трансмиттал успешно отправлен", "transmittal_id": transmittal.id}
@@ -696,6 +775,7 @@ async def send_transmittal(
 async def receive_transmittal(
     transmittal_id: int,
     request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -739,17 +819,18 @@ async def receive_transmittal(
         "transmittal_date": transmittal.transmittal_date.isoformat() if transmittal.transmittal_date else None,
         "action": "receive",
     }
-    log_action(
-        db=db,
+    # Логирование получения трансмиттала
+    add_log_task(
+        background_tasks=background_tasks,
+        request=request,
         user_id=current_user.id,
-        action="update",
+        action="receive",
         entity_type="transmittal",
         entity_id=transmittal_id,
         old_values=old_values,
         new_values=new_values,
-        request=request,
     )
-    
+
     return {"message": "Трансмиттал успешно получен", "transmittal_id": transmittal.id}
 
 

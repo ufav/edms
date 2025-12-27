@@ -14,6 +14,7 @@ interface DocumentFileUploadProps {
   fileMetadata: {name: string, size: number, type: string} | null;
   validationErrors: {[key: string]: boolean};
   onFileUploadWithComment?: (file: File, comment: string) => void;
+  onFilesUploadWithComment?: (files: File[], comment: string) => void;
 }
 
 const DocumentFileUpload: React.FC<DocumentFileUploadProps> = ({
@@ -22,6 +23,7 @@ const DocumentFileUpload: React.FC<DocumentFileUploadProps> = ({
   fileMetadata,
   validationErrors,
   onFileUploadWithComment,
+  onFilesUploadWithComment,
 }) => {
   const { t } = useTranslation();
   const [uploadModalOpen, setUploadModalOpen] = useState(false);
@@ -42,6 +44,18 @@ const DocumentFileUpload: React.FC<DocumentFileUploadProps> = ({
     setUploadModalOpen(false);
   };
 
+  const handleUploadMultipleWithComment = (files: File[], comment: string) => {
+    // Создаем событие для совместимости (передаем первый файл)
+    const mockEvent = {
+      target: {
+        files
+      }
+    } as unknown as React.ChangeEvent<HTMLInputElement>;
+    handleFileUpload(mockEvent);
+    onFilesUploadWithComment?.(files, comment);
+    setUploadModalOpen(false);
+  };
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -53,6 +67,7 @@ const DocumentFileUpload: React.FC<DocumentFileUploadProps> = ({
           style={{ display: 'none' }}
           onChange={handleFileUpload}
           accept=".pdf,.doc,.docx,.xls,.xlsx,.dwg,.dxf"
+          multiple
         />
         <Button
           variant="contained"
@@ -76,6 +91,7 @@ const DocumentFileUpload: React.FC<DocumentFileUploadProps> = ({
         open={uploadModalOpen}
         onClose={() => setUploadModalOpen(false)}
         onUpload={handleUploadWithComment}
+        onUploadMultiple={handleUploadMultipleWithComment}
       />
     </Box>
   );

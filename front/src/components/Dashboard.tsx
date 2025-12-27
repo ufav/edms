@@ -16,9 +16,10 @@ import ProjectDialog from './project/ProjectDialog';
 import { DocumentViewer } from './document';
 import TransmittalDialog from './transmittal/components/TransmittalDialog';
 import { useDocumentActions } from './document/hooks/useDocumentActions';
+import { disciplineStore } from '../stores/DisciplineStore';
 
 const Dashboard: React.FC = observer(() => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
@@ -43,6 +44,14 @@ const Dashboard: React.FC = observer(() => {
 
   const stats = dashboardStore.getStats();
   const recentActivities = dashboardStore.getRecentActivities(t);
+  const disciplineStats = dashboardStore.getDisciplineStats();
+
+  // Загружаем дисциплины для выбранного проекта (для локализации названий)
+  useEffect(() => {
+    if (projectStore.selectedProject?.id) {
+      disciplineStore.loadDisciplines(projectStore.selectedProject.id);
+    }
+  }, [projectStore.selectedProject]);
 
   const handleCreateProject = () => {
     setCreateProjectOpen(true);
@@ -174,59 +183,91 @@ const Dashboard: React.FC = observer(() => {
         </Grid>
       </Grid>
 
-      {/* Quick Actions */}
+      {/* Quick Actions — временно скрыто */}
+      {/* блок быстрых действий можно вернуть, раскомментировав код ниже */}
+      {/* <Grid container spacing={isMobile ? 2 : 3}>...</Grid> */}
+
       <Grid container spacing={isMobile ? 2 : 3}>
         <Grid item xs={12} md={6}>
           <Paper sx={{ p: isMobile ? 2 : 3, boxShadow: '0 2px 8px rgba(0,0,0,0.1)', border: '1px solid #e0e0e0' }}>
             <Typography variant="h6" gutterBottom>
-              {t('dashboard.quick_actions')}
+              {t('dashboard.discipline_stats_title')}
             </Typography>
-            <Grid container spacing={isMobile ? 1 : 2}>
-              <Grid item xs={12} sm={6}>
-                <Button
-                  variant="contained"
-                  fullWidth
-                  startIcon={<AddIcon />}
-                  onClick={handleCreateProject}
-                  sx={{ mb: 1 }}
-                >
-                  {t('dashboard.new_project')}
-                </Button>
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <Button
-                  variant="contained"
-                  fullWidth
-                  startIcon={<DocumentIcon />}
-                  onClick={handleUploadDocument}
-                  sx={{ mb: 1 }}
-                >
-                  {t('documents.upload')}
-                </Button>
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <Button
-                  variant="outlined"
-                  fullWidth
-                  startIcon={<TransmittalIcon />}
-                  onClick={handleCreateTransmittal}
-                  sx={{ mb: 1 }}
-                >
-                  {t('dashboard.new_transmittal')}
-                </Button>
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <Button
-                  variant="outlined"
-                  fullWidth
-                  startIcon={<UserIcon />}
-                  onClick={handleAddUser}
-                  sx={{ mb: 1 }}
-                >
-                  {t('dashboard.add_user')}
-                </Button>
-              </Grid>
-            </Grid>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: isMobile ? 1.5 : 2 }}>
+              {disciplineStats.length > 0 ? (
+                disciplineStats.map((item) => {
+                  // Пытаемся найти дисциплину в store по id или коду
+                  const discipline =
+                    (item.disciplineId
+                      ? disciplineStore.disciplines.find(d => d.id === item.disciplineId)
+                      : null) ||
+                    (item.disciplineCode
+                      ? disciplineStore.disciplines.find(d => d.code === item.disciplineCode)
+                      : null);
+
+                  const code = discipline?.code || item.disciplineCode;
+                  const name =
+                    i18n.language === 'en'
+                      ? (discipline?.name_en || discipline?.name || item.disciplineName)
+                      : (discipline?.name || item.disciplineName);
+
+                  const hasName = code || name;
+                  const label = hasName
+                    ? `${code ? `${code} - ` : ''}${name || ''}`
+                    : t('document.not_specified');
+
+                  const total = item.documentsCount;
+                  const closed = item.closedDocumentsCount;
+                  const ratio = item.closedRatio || 0;
+                  const percent = Math.round(ratio * 100);
+
+                  return (
+                    <Box
+                      key={item.disciplineId ?? code ?? 'none'}
+                      sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}
+                    >
+                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <Typography variant="body2" sx={{ mr: 1 }} noWrap>
+                          {label}
+                        </Typography>
+                        <Typography variant="body2" sx={{ fontWeight: 'bold', whiteSpace: 'nowrap' }}>
+                          {closed}/{total} ({percent}%)
+                        </Typography>
+                      </Box>
+
+                      {/* Примитивный горизонтальный чарт: доля закрытых документов */}
+                      <Box
+                        sx={{
+                          position: 'relative',
+                          width: '100%',
+                          height: 8,
+                          borderRadius: 999,
+                          backgroundColor: 'grey.200',
+                          overflow: 'hidden',
+                        }}
+                      >
+                        <Box
+                          sx={{
+                            position: 'absolute',
+                            left: 0,
+                            top: 0,
+                            bottom: 0,
+                            width: `${percent}%`,
+                            maxWidth: '100%',
+                            background: 'linear-gradient(90deg, #4caf50, #81c784)',
+                            transition: 'width 0.3s ease',
+                          }}
+                        />
+                      </Box>
+                    </Box>
+                  );
+                })
+              ) : (
+                <Typography variant="body2" color="text.secondary">
+                  {t('dashboard.no_discipline_stats')}
+                </Typography>
+              )}
+            </Box>
           </Paper>
         </Grid>
 

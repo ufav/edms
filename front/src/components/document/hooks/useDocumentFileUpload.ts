@@ -16,30 +16,44 @@ export const useDocumentFileUpload = ({
   onFileRemove
 }: UseDocumentFileUploadProps = {}) => {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const [fileMetadata, setFileMetadata] = useState<FileMetadata | null>(null);
+  const [fileMetadataList, setFileMetadataList] = useState<FileMetadata[]>([]);
   const [isUploadingDocument, setIsUploadingDocument] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Обработка загрузки файла - сохраняем только метаданные
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      // Сохраняем только метаданные, не загружаем файл в память
-      setFileMetadata({
-        name: file.name,
-        size: file.size,
-        type: file.type
-      });
-      setUploadedFile(file);
-      onFileSelect?.(file);
+    const files = event.target.files ? Array.from(event.target.files) : [];
+    if (files.length > 0) {
+      const [first] = files;
+      setUploadedFile(first);
+      setFileMetadata({ name: first.name, size: first.size, type: first.type });
+      setUploadedFiles(files);
+      setFileMetadataList(files.map(f => ({ name: f.name, size: f.size, type: f.type })));
+      onFileSelect?.(first);
+    }
+  };
+
+  // Прямой хэндлер для массива файлов (без input event)
+  const handleFilesUpload = (files: File[]) => {
+    if (files && files.length > 0) {
+      const [first] = files;
+      setUploadedFile(first);
+      setFileMetadata({ name: first.name, size: first.size, type: first.type });
+      setUploadedFiles(files);
+      setFileMetadataList(files.map(f => ({ name: f.name, size: f.size, type: f.type })));
+      onFileSelect?.(first);
     }
   };
 
   // Функция удаления загруженного файла
   const handleRemoveFile = () => {
     setUploadedFile(null);
+    setUploadedFiles([]);
     setFileMetadata(null);
+    setFileMetadataList([]);
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -77,7 +91,9 @@ export const useDocumentFileUpload = ({
   // Функция для полного сброса состояния
   const resetAll = () => {
     setUploadedFile(null);
+    setUploadedFiles([]);
     setFileMetadata(null);
+    setFileMetadataList([]);
     setIsUploadingDocument(false);
     setUploadProgress(0);
     if (fileInputRef.current) {
@@ -88,13 +104,16 @@ export const useDocumentFileUpload = ({
   return {
     // Состояние
     uploadedFile,
+    uploadedFiles,
     fileMetadata,
+    fileMetadataList,
     isUploadingDocument,
     uploadProgress,
     fileInputRef,
     
     // Функции
     handleFileUpload,
+    handleFilesUpload,
     handleRemoveFile,
     openFileDialog,
     createProgressHandler,

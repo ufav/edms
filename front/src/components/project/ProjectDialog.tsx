@@ -19,7 +19,8 @@ import {
   Tabs,
   Tab,
   Autocomplete,
-  Chip
+  Chip,
+  CircularProgress
 } from '@mui/material';
 import { disciplinesApi, projectsApi, projectParticipantsApi, rolesApi } from '../../api/client';
 import referenceDataStore from '../../stores/ReferenceDataStore';
@@ -34,8 +35,10 @@ import WorkflowTab from './WorkflowTab';
 import ParticipantsTab from './ParticipantsTab';
 import UsersTab from './UsersTab';
 import SummaryTab from './SummaryTab';
+import SupportPackTab from './SupportPackTab';
 import { useProjectForm } from './hooks/useProjectForm';
 import { useTranslation } from 'react-i18next';
+import NotificationSnackbar from '../NotificationSnackbar';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { ru } from 'date-fns/locale';
@@ -119,6 +122,21 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
       setHasChanges(true);
     }
   };
+
+  const setPendingSupportFilesWithTracking = (newData: any) => {
+    setPendingSupportFiles(newData);
+    if (mode === 'edit' && isInitialized) {
+      setHasChanges(true);
+    }
+  };
+
+  const setDeletedSupportFileIdsWithTracking = (newData: any) => {
+    setDeletedSupportFileIds(newData);
+    if (mode === 'edit' && isInitialized) {
+      setHasChanges(true);
+    }
+  };
+
   const [importWarnings, setImportWarnings] = useState<string[]>([]);
   const [isMobile] = useState(false);
   const [codeValidation, setCodeValidation] = useState<{
@@ -150,6 +168,12 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
   const [error, setError] = useState<string | null>(null);
   const [tabIndex, setTabIndex] = useState(0);
   const [pendingParticipants, setPendingParticipants] = useState<ProjectParticipant[]>([]);
+  const [pendingSupportFiles, setPendingSupportFiles] = useState<Array<{ file: File; id: string }>>([]);
+  const [deletedSupportFileIds, setDeletedSupportFileIds] = useState<number[]>([]);
+  const [minioErrorNotification, setMinioErrorNotification] = useState<{ open: boolean; message: string }>({
+    open: false,
+    message: ''
+  });
   
   // Состояние для диалога выбора типа документа
   const [documentTypeSelectionOpen, setDocumentTypeSelectionOpen] = useState(false);
@@ -500,8 +524,54 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
             // Не прерываем создание проекта из-за ошибки с участниками
           }
         }
+
+        // Удаляем файлы support pack, если они помечены на удаление
+        if (deletedSupportFileIds.length > 0) {
+          for (const fileId of deletedSupportFileIds) {
+            try {
+              await projectsApi.deleteSupportFile(fileId);
+            } catch (err: any) {
+              console.error('Ошибка при удалении файла support pack:', err);
+            }
+          }
+        }
+
+        // Загружаем файлы support pack, если они есть
+        let hasUploadErrors = false;
+        if (pendingSupportFiles.length > 0) {
+          const uploadErrors: string[] = [];
+          for (const pendingFile of pendingSupportFiles) {
+            try {
+              await projectsApi.uploadSupportFile(newProject.id, pendingFile.file);
+            } catch (err: any) {
+              hasUploadErrors = true;
+              let errorMessage = err.response?.data?.detail || err.message || t('supportPack.upload_error');
+              
+              // Локализация ошибок хранилища
+              if (errorMessage.includes('Хранилище файлов недоступно') || errorMessage.includes('File storage is unavailable') || errorMessage.includes('MinIO недоступен') || errorMessage.includes('MinIO is unavailable')) {
+                errorMessage = t('supportPack.minio_unavailable');
+              } else if (errorMessage.includes('Ошибка сохранения файла в хранилище') || errorMessage.includes('Error saving file to storage') || errorMessage.includes('Ошибка сохранения файла в MinIO') || errorMessage.includes('Error saving file to MinIO')) {
+                errorMessage = t('supportPack.minio_save_error');
+              }
+              
+              uploadErrors.push(`${pendingFile.file.name}: ${errorMessage}`);
+              console.error('Ошибка при загрузке файла support pack:', err);
+            }
+          }
+          if (uploadErrors.length > 0) {
+            setMinioErrorNotification({
+              open: true,
+              message: uploadErrors.length === 1 
+                ? uploadErrors[0]
+                : t('supportPack.upload_errors', { count: uploadErrors.length })
+            });
+          }
+        }
         
-        onSuccess?.(newProject);
+        // Вызываем onSuccess только если нет ошибок загрузки файлов
+        if (!hasUploadErrors) {
+          onSuccess?.(newProject);
+        }
       } else {
         // Редактирование проекта
         await projectsApi.update(projectId!, projectData as any);
@@ -537,8 +607,54 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
           console.error('Ошибка при обновлении участников проекта:', err);
           console.error('Детали ошибки:', err.response?.data);
         }
+
+        // Удаляем файлы support pack, если они помечены на удаление
+        if (deletedSupportFileIds.length > 0) {
+          for (const fileId of deletedSupportFileIds) {
+            try {
+              await projectsApi.deleteSupportFile(fileId);
+            } catch (err: any) {
+              console.error('Ошибка при удалении файла support pack:', err);
+            }
+          }
+        }
+
+        // Загружаем файлы support pack, если они есть
+        let hasUploadErrors = false;
+        if (pendingSupportFiles.length > 0) {
+          const uploadErrors: string[] = [];
+          for (const pendingFile of pendingSupportFiles) {
+            try {
+              await projectsApi.uploadSupportFile(projectId!, pendingFile.file);
+            } catch (err: any) {
+              hasUploadErrors = true;
+              let errorMessage = err.response?.data?.detail || err.message || t('supportPack.upload_error');
+              
+              // Локализация ошибок хранилища
+              if (errorMessage.includes('Хранилище файлов недоступно') || errorMessage.includes('File storage is unavailable') || errorMessage.includes('MinIO недоступен') || errorMessage.includes('MinIO is unavailable')) {
+                errorMessage = t('supportPack.minio_unavailable');
+              } else if (errorMessage.includes('Ошибка сохранения файла в хранилище') || errorMessage.includes('Error saving file to storage') || errorMessage.includes('Ошибка сохранения файла в MinIO') || errorMessage.includes('Error saving file to MinIO')) {
+                errorMessage = t('supportPack.minio_save_error');
+              }
+              
+              uploadErrors.push(`${pendingFile.file.name}: ${errorMessage}`);
+              console.error('Ошибка при загрузке файла support pack:', err);
+            }
+          }
+          if (uploadErrors.length > 0) {
+            setMinioErrorNotification({
+              open: true,
+              message: uploadErrors.length === 1 
+                ? uploadErrors[0]
+                : t('supportPack.upload_errors', { count: uploadErrors.length })
+            });
+          }
+        }
         
-        onSaved?.();
+        // Вызываем onSaved только если нет ошибок загрузки файлов
+        if (!hasUploadErrors) {
+          onSaved?.();
+        }
       }
       
       handleClose();
@@ -702,6 +818,8 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
 
 
   const handleClose = () => {
+    // Очищаем pending файлы при закрытии
+    setPendingSupportFiles([]);
     setFormData({
       name: '',
       project_code: '',
@@ -738,6 +856,8 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
       projectDialogStore.clearProjectCache(projectId);
     }
     
+    setPendingSupportFiles([]);
+    setDeletedSupportFileIds([]);
     setHasChanges(false);
     setIsInitialized(false);
     onClose();
@@ -955,6 +1075,7 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
               <Tab label={t('createProject.tabs.workflow')} />
               <Tab label={t('createProject.tabs.participants')} />
               <Tab label={t('createProject.tabs.users')} />
+              <Tab label={t('createProject.tabs.support_pack')} />
               <Tab label={t('createProject.tabs.summary')} />
             </Tabs>
           </Box>
@@ -1058,8 +1179,30 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
             />
           )}
 
-          {/* Tab 6: Итоги */}
+          {/* Tab 6: Support Pack */}
           {tabIndex === 6 && (
+            <SupportPackTab 
+              projectId={mode === 'edit' ? projectId : undefined}
+              pendingFiles={pendingSupportFiles}
+              deletedFileIds={deletedSupportFileIds}
+              onAddFiles={(files) => {
+                const newFiles = files.map(file => ({
+                  file,
+                  id: `${Date.now()}-${Math.random()}`
+                }));
+                setPendingSupportFilesWithTracking(prev => [...prev, ...newFiles]);
+              }}
+              onRemovePendingFile={(fileId) => {
+                setPendingSupportFilesWithTracking(prev => prev.filter(f => f.id !== fileId));
+              }}
+              onDeleteFile={(fileId) => {
+                setDeletedSupportFileIdsWithTracking(prev => [...prev, fileId]);
+              }}
+            />
+          )}
+
+          {/* Tab 7: Итоги */}
+          {tabIndex === 7 && (
             <SummaryTab
               formData={formData}
               selectedDisciplines={selectedDisciplines}
@@ -1122,6 +1265,7 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
             onClick={handleSubmit}
             variant="contained"
             disabled={submitButtonDisabled}
+            startIcon={saving ? <CircularProgress size={16} color="inherit" /> : null}
           >
             {submitButtonText}
           </Button>
@@ -1421,6 +1565,14 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
           discipline={currentDiscipline}
           documentTypeCode={currentDocumentTypeCode}
           documentTypes={projectDialogStore.documentTypes}
+        />
+
+        {/* Уведомление об ошибке MinIO */}
+        <NotificationSnackbar
+          open={minioErrorNotification.open}
+          message={minioErrorNotification.message}
+          severity="error"
+          onClose={() => setMinioErrorNotification({ open: false, message: '' })}
         />
     </LocalizationProvider>
   );

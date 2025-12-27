@@ -20,11 +20,13 @@ import { enUS } from 'date-fns/locale';
 import {
   Search as SearchIcon,
   Settings as SettingsIcon,
+  Clear as ClearIcon,
+  FileDownload as FileDownloadIcon,
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import { disciplineStore } from '../../../stores/DisciplineStore';
 import { projectStore } from '../../../stores/ProjectStore';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { projectsApi, type DocumentType } from '../../../api/client';
 
 export interface DocumentFiltersProps {
@@ -44,6 +46,8 @@ export interface DocumentFiltersProps {
   onRevisionDescriptionChange: (id: number | null) => void;
   onDateRangeChange: (range: [Date | null, Date | null]) => void;
   onSettingsClick: () => void;
+  onResetFilters: () => void;
+  onExportToExcel: () => void;
 }
 
 export const DocumentFilters: React.FC<DocumentFiltersProps> = ({
@@ -60,6 +64,8 @@ export const DocumentFilters: React.FC<DocumentFiltersProps> = ({
   onRevisionDescriptionChange,
   onDateRangeChange,
   onSettingsClick,
+  onResetFilters,
+  onExportToExcel,
 }) => {
   const { t, i18n } = useTranslation();
   const theme = useTheme();
@@ -120,14 +126,22 @@ export const DocumentFilters: React.FC<DocumentFiltersProps> = ({
   }, [projectStore.selectedProject]);
 
   // Сбрасываем выбранный тип документа при изменении дисциплины
+  const prevDocumentTypesRef = useRef<DocumentType[]>([]);
   useEffect(() => {
     if (selectedDocumentTypeId && documentTypes.length > 0) {
       const typeExists = documentTypes.some(type => type.id === selectedDocumentTypeId);
-      if (!typeExists) {
-        onDocumentTypeChange(null);
+      if (!typeExists && prevDocumentTypesRef.current.length > 0) {
+        // Тип документа больше не существует в новой дисциплине - сбрасываем выбор
+        // Используем setTimeout для отложенного вызова, чтобы избежать обновления во время рендеринга
+        const timeoutId = setTimeout(() => {
+          onDocumentTypeChange(null);
+        }, 0);
+        return () => clearTimeout(timeoutId);
       }
     }
-  }, [documentTypes, selectedDocumentTypeId, onDocumentTypeChange]);
+    prevDocumentTypesRef.current = documentTypes;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [documentTypes, selectedDocumentTypeId]);
 
 
   return (
@@ -137,184 +151,214 @@ export const DocumentFilters: React.FC<DocumentFiltersProps> = ({
       alignItems: 'center', 
       flexWrap: 'wrap',
       flexDirection: isMobile ? 'column' : 'row',
-      mb: 3 // Возвращаем отступ снизу
+      justifyContent: 'space-between',
+      mb: 3
     }}>
-      <TextField
-        placeholder={t('documents.search_placeholder')}
-        value={searchTerm}
-        onChange={(e) => onSearchChange(e.target.value)}
-        InputProps={{
-          startAdornment: (
-            <InputAdornment position="start">
-              <SearchIcon />
-            </InputAdornment>
-          ),
-        }}
-        sx={{ minWidth: isMobile ? '100%' : 300 }}
-      />
-      
-      <LocalizationProvider 
-        adapterLocale={i18n.language === 'en' ? enUS : ru} 
-        dateAdapter={AdapterDateFns}
-      >
-        <Box sx={{ display: 'flex', gap: 1, minWidth: isMobile ? '100%' : 340 }}>
-          <DatePicker
-            label={t('documents.filters.date_from')}
-            value={dateRange[0]}
-            onChange={(date) => onDateRangeChange([date, dateRange[1]])}
-            format="dd.MM.yyyy"
-            slotProps={{
-              textField: {
-                size: 'medium',
-                sx: { 
-                  width: 170
-                }
-              }
-            }}
-          />
-          <DatePicker
-            label={t('documents.filters.date_to')}
-            value={dateRange[1]}
-            onChange={(date) => onDateRangeChange([dateRange[0], date])}
-            format="dd.MM.yyyy"
-            slotProps={{
-              textField: {
-                size: 'medium',
-                sx: { 
-                  width: 170
-                }
-              }
-            }}
-          />
-        </Box>
-      </LocalizationProvider>
-      
-      <FormControl sx={{ minWidth: isMobile ? '100%' : 170 }}>
-        <InputLabel>{t('documents.filters.review_status')}</InputLabel>
-        <Select
-          value={filterStatus}
-          onChange={(e) => onStatusChange(e.target.value)}
-          label={t('documents.filters.review_status')}
-        >
-          <MenuItem value="all">{t('filter.all')}</MenuItem>
-          <MenuItem value="draft">{t('docStatus.draft')}</MenuItem>
-          <MenuItem value="review">{t('docStatus.review')}</MenuItem>
-          <MenuItem value="approved">{t('docStatus.approved')}</MenuItem>
-          <MenuItem value="rejected">{t('docStatus.rejected')}</MenuItem>
-        </Select>
-      </FormControl>
-
-      <FormControl sx={{ minWidth: isMobile ? '100%' : 170 }}>
-        <InputLabel>{t('documents.filters.discipline')}</InputLabel>
-        <Select
-          value={selectedDisciplineId || 'all'}
-          onChange={(e) => onDisciplineChange(e.target.value === 'all' ? null : Number(e.target.value))}
-          label={t('documents.filters.discipline')}
-          renderValue={(value) => {
-            if (value === 'all') return t('filter.all');
-            const discipline = disciplineStore.disciplines.find(d => d.id === value);
-            return discipline ? discipline.code : t('filter.all');
+      {/* Фильтры - слева */}
+      <Box sx={{ 
+        display: 'flex', 
+        gap: 2, 
+        alignItems: 'center', 
+        flexWrap: 'wrap',
+        flex: 1
+      }}>
+        <TextField
+          placeholder={t('documents.search_placeholder')}
+          value={searchTerm}
+          onChange={(e) => onSearchChange(e.target.value)}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon />
+              </InputAdornment>
+            ),
           }}
+          sx={{ minWidth: isMobile ? '100%' : 300 }}
+        />
+        
+        <LocalizationProvider 
+          adapterLocale={i18n.language === 'en' ? enUS : ru} 
+          dateAdapter={AdapterDateFns}
         >
-          <MenuItem value="all">{t('filter.all')}</MenuItem>
-          {disciplineStore.disciplines
-            .sort((a, b) => a.code.localeCompare(b.code))
-            .map((discipline) => (
-            <MenuItem key={discipline.id} value={discipline.id}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
-                <Box sx={{ minWidth: '60px' }}>
-                  {discipline.code}
-                </Box>
-                <Box sx={{ flex: 1, textAlign: 'left', ml: 1 }}>
-                  {i18n.language === 'en' && discipline.name_en && discipline.name_en.trim() ? discipline.name_en : discipline.name}
-                </Box>
-              </Box>
-            </MenuItem>
-          ))}
-        </Select>
-      </FormControl>
+          <Box sx={{ display: 'flex', gap: 1, minWidth: isMobile ? '100%' : 340 }}>
+            <DatePicker
+              label={t('documents.filters.date_from')}
+              value={dateRange[0]}
+              onChange={(date) => onDateRangeChange([date, dateRange[1]])}
+              format="dd.MM.yyyy"
+              slotProps={{
+                textField: {
+                  size: 'medium',
+                  sx: { 
+                    width: 170
+                  }
+                }
+              }}
+            />
+            <DatePicker
+              label={t('documents.filters.date_to')}
+              value={dateRange[1]}
+              onChange={(date) => onDateRangeChange([dateRange[0], date])}
+              format="dd.MM.yyyy"
+              slotProps={{
+                textField: {
+                  size: 'medium',
+                  sx: { 
+                    width: 170
+                  }
+                }
+              }}
+            />
+          </Box>
+        </LocalizationProvider>
+        
+        <FormControl sx={{ minWidth: isMobile ? '100%' : 170 }}>
+          <InputLabel>{t('documents.filters.review_status')}</InputLabel>
+          <Select
+            value={filterStatus}
+            onChange={(e) => onStatusChange(e.target.value)}
+            label={t('documents.filters.review_status')}
+          >
+            <MenuItem value="all">{t('filter.all')}</MenuItem>
+            <MenuItem value="draft">{t('docStatus.draft')}</MenuItem>
+            <MenuItem value="review">{t('docStatus.review')}</MenuItem>
+            <MenuItem value="approved">{t('docStatus.approved')}</MenuItem>
+            <MenuItem value="rejected">{t('docStatus.rejected')}</MenuItem>
+          </Select>
+        </FormControl>
 
-      <FormControl sx={{ minWidth: isMobile ? '100%' : 170 }}>
-        <InputLabel>{t('documents.filters.document_type')}</InputLabel>
-        <Select
-          value={selectedDocumentTypeId || 'all'}
-          onChange={(e) => onDocumentTypeChange(e.target.value === 'all' ? null : Number(e.target.value))}
-          label={t('documents.filters.document_type')}
-          disabled={!selectedDisciplineId || documentTypesLoading}
-          renderValue={(value) => {
-            if (value === 'all') return t('filter.all');
-            const type = documentTypes.find(t => t.id === value);
-            return type ? type.code : t('filter.all');
-          }}
-          MenuProps={{
-            PaperProps: {
-              sx: {
-                maxHeight: 300,
-                '&::-webkit-scrollbar': {
-                  width: '8px',
-                },
-                '&::-webkit-scrollbar-track': {
-                  background: '#f1f1f1',
-                  borderRadius: '4px',
-                },
-                '&::-webkit-scrollbar-thumb': {
-                  background: '#c1c1c1',
-                  borderRadius: '4px',
-                  '&:hover': {
-                    background: '#a8a8a8',
+        <FormControl sx={{ minWidth: isMobile ? '100%' : 170 }}>
+          <InputLabel>{t('documents.filters.discipline')}</InputLabel>
+          <Select
+            value={selectedDisciplineId || 'all'}
+            onChange={(e) => onDisciplineChange(e.target.value === 'all' ? null : Number(e.target.value))}
+            label={t('documents.filters.discipline')}
+            renderValue={(value) => {
+              if (value === 'all') return t('filter.all');
+              const discipline = disciplineStore.disciplines.find(d => d.id === value);
+              return discipline ? discipline.code : t('filter.all');
+            }}
+          >
+            <MenuItem value="all">{t('filter.all')}</MenuItem>
+            {disciplineStore.disciplines
+              .sort((a, b) => a.code.localeCompare(b.code))
+              .map((discipline) => (
+              <MenuItem key={discipline.id} value={discipline.id}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+                  <Box sx={{ minWidth: '60px' }}>
+                    {discipline.code}
+                  </Box>
+                  <Box sx={{ flex: 1, textAlign: 'left', ml: 1 }}>
+                    {i18n.language === 'en' && discipline.name_en && discipline.name_en.trim() ? discipline.name_en : discipline.name}
+                  </Box>
+                </Box>
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+
+        <FormControl sx={{ minWidth: isMobile ? '100%' : 170 }}>
+          <InputLabel>{t('documents.filters.document_type')}</InputLabel>
+          <Select
+            value={selectedDocumentTypeId || 'all'}
+            onChange={(e) => onDocumentTypeChange(e.target.value === 'all' ? null : Number(e.target.value))}
+            label={t('documents.filters.document_type')}
+            disabled={!selectedDisciplineId || documentTypesLoading}
+            renderValue={(value) => {
+              if (value === 'all') return t('filter.all');
+              const type = documentTypes.find(t => t.id === value);
+              return type ? type.code : t('filter.all');
+            }}
+            MenuProps={{
+              PaperProps: {
+                sx: {
+                  maxHeight: 300,
+                  '&::-webkit-scrollbar': {
+                    width: '8px',
+                  },
+                  '&::-webkit-scrollbar-track': {
+                    background: '#f1f1f1',
+                    borderRadius: '4px',
+                  },
+                  '&::-webkit-scrollbar-thumb': {
+                    background: '#c1c1c1',
+                    borderRadius: '4px',
+                    '&:hover': {
+                      background: '#a8a8a8',
+                    },
                   },
                 },
               },
-            },
-          }}
-        >
-          <MenuItem value="all">{t('filter.all')}</MenuItem>
-          {documentTypes
-            .sort((a, b) => a.code.localeCompare(b.code))
-            .map((type) => (
-            <MenuItem key={type.id} value={type.id}>
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
-                <Box sx={{ minWidth: '60px' }}>
-                  {type.code}
+            }}
+          >
+            <MenuItem value="all">{t('filter.all')}</MenuItem>
+            {documentTypes
+              .sort((a, b) => a.code.localeCompare(b.code))
+              .map((type) => (
+              <MenuItem key={type.id} value={type.id}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+                  <Box sx={{ minWidth: '60px' }}>
+                    {type.code}
+                  </Box>
+                  <Box sx={{ flex: 1, textAlign: 'left', ml: 1 }}>
+                    {i18n.language === 'en' && type.name_en && type.name_en.trim() ? type.name_en : type.name}
+                  </Box>
                 </Box>
-                <Box sx={{ flex: 1, textAlign: 'left', ml: 1 }}>
-                  {i18n.language === 'en' && type.name_en && type.name_en.trim() ? type.name_en : type.name}
-                </Box>
-              </Box>
-            </MenuItem>
-          ))}
-        </Select>
-      </FormControl>
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
 
-      <FormControl sx={{ minWidth: isMobile ? '100%' : 170 }}>
-        <InputLabel>{t('documents.filters.revision_description')}</InputLabel>
-        <Select
-          value={selectedRevisionDescriptionId || 'all'}
-          onChange={(e) => onRevisionDescriptionChange(e.target.value === 'all' ? null : Number(e.target.value))}
-          label={t('documents.filters.revision_description')}
-          disabled={revisionDescriptionsLoading}
-          renderValue={(value) => {
-            if (value === 'all') return t('filter.all');
-            const description = revisionDescriptions.find(d => d.id === value);
-            return description ? description.code : t('filter.all');
-          }}
-        >
-          <MenuItem value="all">{t('filter.all')}</MenuItem>
-          {revisionDescriptions
-            .sort((a, b) => a.code.localeCompare(b.code))
-            .map((description) => (
-            <MenuItem key={description.id} value={description.id}>
-              {description.code} - {i18n.language === 'en' && description.description && description.description.trim() ? description.description : description.description_native}
-            </MenuItem>
-          ))}
-        </Select>
-      </FormControl>
+        <FormControl sx={{ minWidth: isMobile ? '100%' : 170 }}>
+          <InputLabel>{t('documents.filters.revision_description')}</InputLabel>
+          <Select
+            value={selectedRevisionDescriptionId || 'all'}
+            onChange={(e) => onRevisionDescriptionChange(e.target.value === 'all' ? null : Number(e.target.value))}
+            label={t('documents.filters.revision_description')}
+            disabled={revisionDescriptionsLoading}
+            renderValue={(value) => {
+              if (value === 'all') return t('filter.all');
+              const description = revisionDescriptions.find(d => d.id === value);
+              return description ? description.code : t('filter.all');
+            }}
+          >
+            <MenuItem value="all">{t('filter.all')}</MenuItem>
+            {revisionDescriptions
+              .sort((a, b) => a.code.localeCompare(b.code))
+              .map((description) => (
+              <MenuItem key={description.id} value={description.id}>
+                {description.code} - {i18n.language === 'en' && description.description && description.description.trim() ? description.description : description.description_native}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+      </Box>
 
-      <Tooltip title={t('documents.settings') || 'Настройки'}>
-        <IconButton onClick={onSettingsClick}>
-          <SettingsIcon />
-        </IconButton>
-      </Tooltip>
+      {/* Кнопки действий - справа */}
+      <Box sx={{ 
+        display: 'flex', 
+        gap: 1, 
+        alignItems: 'center',
+        ml: 'auto'
+      }}>
+        <Tooltip title={t('documents.reset_filters') || 'Сбросить фильтры'}>
+          <IconButton onClick={onResetFilters}>
+            <ClearIcon />
+          </IconButton>
+        </Tooltip>
+
+        <Tooltip title={t('documents.export_to_excel') || 'Экспорт в Excel'}>
+          <IconButton onClick={onExportToExcel}>
+            <FileDownloadIcon />
+          </IconButton>
+        </Tooltip>
+
+        <Tooltip title={t('documents.settings') || 'Настройки'}>
+          <IconButton onClick={onSettingsClick}>
+            <SettingsIcon />
+          </IconButton>
+        </Tooltip>
+      </Box>
     </Box>
   );
 };

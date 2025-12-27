@@ -44,6 +44,7 @@ import { DocumentWorkflowDialog } from './document/components/DocumentWorkflowDi
 import { TransmittalCartModal, useActiveRevisions } from './transmittal';
 import { transmittalCartStore } from '../stores/TransmittalCartStore';
 import { activeRevisionsStore } from '../stores/ActiveRevisionsStore';
+import { useDocumentExport } from './document/hooks/useDocumentExport';
 
 const DocumentsPage: React.FC = observer(() => {
   const { t, i18n } = useTranslation();
@@ -141,7 +142,10 @@ const DocumentsPage: React.FC = observer(() => {
     setSelectedDocumentTypeId,
     setSelectedRevisionDescriptionId,
     setDateRange,
+    resetFilters,
   } = useDocumentFilters();
+
+  const { exportToExcel } = useDocumentExport();
 
   const {
     page,
@@ -439,6 +443,35 @@ const DocumentsPage: React.FC = observer(() => {
           onRevisionDescriptionChange={setSelectedRevisionDescriptionId}
           onDateRangeChange={setDateRange}
           onSettingsClick={() => setSettingsOpen(true)}
+          onResetFilters={resetFilters}
+          onExportToExcel={async () => {
+            try {
+              await exportToExcel({
+                projectId: projectStore.selectedProject?.id,
+                status: filterStatus,
+                search: searchTerm,
+                disciplineId: selectedDisciplineId || undefined,
+                documentTypeId: selectedDocumentTypeId || undefined,
+                revisionDescriptionId: selectedRevisionDescriptionId || undefined,
+                dateFrom: dateRange[0] ? (() => {
+                  const d = dateRange[0]!;
+                  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                })() : undefined,
+                dateTo: dateRange[1] ? (() => {
+                  const d = dateRange[1]!;
+                  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+                })() : undefined,
+                sortBy: orderBy,
+                sortDir: order,
+                visibleCols: visibleCols,
+                columnOrder: columnOrder,
+                language: i18n.language,
+              });
+            } catch (error: any) {
+              console.error('Ошибка при экспорте в Excel:', error);
+              alert(t('documents.export_error') || 'Ошибка при экспорте в Excel');
+            }
+          }}
         />
 
         <Box sx={{ 

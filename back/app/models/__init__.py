@@ -6,7 +6,7 @@ from .project_participant import ProjectParticipant
 from .contact import Contact
 from .company_role import CompanyRole
 from .project_role import ProjectRole
-from .document import Document, DocumentRevision, DocumentReview
+from .document import Document, DocumentRevision, DocumentReview, DocumentApproval, File
 from .document_comments import DocumentComment
 from .document_workflow_history import DocumentWorkflowHistory
 from .transmittal import Transmittal, TransmittalRevision
@@ -31,7 +31,7 @@ __all__ = [
     "Contact",
     "CompanyRole",
     "ProjectRole",
-    "Document", "DocumentRevision", "DocumentReview",
+    "Document", "DocumentRevision", "DocumentReview", "DocumentApproval", "File",
     "DocumentComment",
     "DocumentWorkflowHistory",
     "Transmittal", "TransmittalRevision",

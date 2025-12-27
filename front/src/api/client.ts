@@ -564,6 +564,15 @@ export interface WorkflowStatus {
   created_at: string;
 }
 
+export interface ProjectSupportFile {
+  id: number;
+  file_name: string;
+  file_size?: number;
+  file_type?: string;
+  uploaded_by?: number;
+  created_at?: string;
+}
+
 // API методы для проектов
 export const projectsApi = {
   // Получить все проекты
@@ -670,7 +679,38 @@ export const projectsApi = {
   getWorkflowPresetSequence: async (projectId: number): Promise<any[]> => {
     const response = await apiClient.get(`/projects/${projectId}/workflow-preset/sequence`);
     return response.data;
-  }
+  },
+
+  // Support pack: файлы, связанные с проектом
+  getSupportFiles: async (projectId: number): Promise<ProjectSupportFile[]> => {
+    const response = await apiClient.get(`/projects/${projectId}/support-files`);
+    return response.data;
+  },
+
+  uploadSupportFile: async (
+    projectId: number,
+    file: File
+  ): Promise<ProjectSupportFile> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await apiClient.post(`/projects/${projectId}/support-files`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+
+  deleteSupportFile: async (fileId: number): Promise<void> => {
+    await apiClient.delete(`/projects/support-files/${fileId}`);
+  },
+
+  downloadSupportFile: async (fileId: number): Promise<Blob> => {
+    const response = await apiClient.get(`/projects/support-files/${fileId}/download`, {
+      responseType: 'blob',
+    });
+    return response.data;
+  },
 };
 
 // API методы для документов
@@ -682,7 +722,17 @@ export const documentsApi = {
     if (status) params.status = status;
     // Убираем лимит и офсет - загружаем все документы
     const response = await apiClient.get('/documents/', { params });
-    return response.data;
+    const data = response.data;
+
+    // Бэкенд возвращает Page-структуру: { items, total, page, size, pages }
+    // Для client-side логики здесь нужны только элементы.
+    if (Array.isArray(data)) {
+      return data as Document[];
+    }
+    if (data && Array.isArray(data.items)) {
+      return data.items as Document[];
+    }
+    return [];
   },
 
   // Получить документы с серверной пагинацией

@@ -2,7 +2,7 @@
 API endpoints for document reviews and approvals
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_
 from typing import List, Optional
@@ -17,10 +17,11 @@ class RejectRequest(BaseModel):
 from app.core.database import get_db
 from app.models.user import User
 from app.models.document import Document, DocumentRevision
+from app.models.document import File as FileModel
 from app.models.project import Project, WorkflowPresetSequence
 from app.models.references import WorkflowStatus, RevisionStep, RevisionDescription
 from app.api.v1.endpoints.auth import get_current_user
-from app.services.audit_service import log_action
+from app.services.audit_service import log_action, add_log_task
 
 router = APIRouter()
 
@@ -116,6 +117,18 @@ async def get_pending_approvals(
         for rd in db.query(RevisionDescription).filter(RevisionDescription.id.in_(revision_description_ids)).all():
             revision_descriptions[rd.id] = rd
     
+    # Пакетно загружаем файлы для всех ревизий (устранение N+1)
+    from collections import defaultdict
+    revision_ids = [row[1].id for row in results if row[1] is not None]
+    files_by_revision_id = defaultdict(list)
+    if revision_ids:
+        all_files = db.query(FileModel).filter(
+            FileModel.revision_id.in_(revision_ids),
+            FileModel.is_deleted == 0
+        ).all()
+        for f in all_files:
+            files_by_revision_id[f.revision_id].append(f)
+
     # Формируем результат
     result = []
     for row in results:
@@ -143,6 +156,9 @@ async def get_pending_approvals(
                 "description_native": description.description_native if description else None
             } if description else None
         
+        # Берем файлы из заранее загруженной мапы
+        files_info = files_by_revision_id.get(revision.id, []) if revision else []
+        
         result.append({
             "document_id": doc.id,
             "document_title": doc.title,
@@ -151,9 +167,19 @@ async def get_pending_approvals(
             "project_name": project.name if project else None,
             "revision_id": revision.id if revision else None,
             "revision_number": revision.number if revision else None,
-            "file_name": revision.file_name if revision else None,
-            "file_size": revision.file_size if revision else None,
-            "file_type": revision.file_type if revision else None,
+            "files": [
+                {
+                    "id": f.id,
+                    "file_name": f.file_name,
+                    "file_size": f.file_size,
+                    "file_type": f.file_type,
+                }
+                for f in files_info
+            ],
+            # Обратная совместимость - берем первый файл для старых полей
+            "file_name": files_info[0].file_name if files_info and len(files_info) > 0 else None,
+            "file_size": files_info[0].file_size if files_info and len(files_info) > 0 else None,
+            "file_type": files_info[0].file_type if files_info and len(files_info) > 0 else None,
             "change_description": revision.change_description if revision else None,
             "created_at": revision.created_at if revision else None,
             "uploaded_by": revision.uploaded_by if revision else None,
@@ -172,6 +198,7 @@ async def approve_document(
     document_id: int,
     request: ApproveRequest,
     http_request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -277,15 +304,15 @@ async def approve_document(
         "workflow_status_id": approved_status.id,
         "action": "approve",
     }
-    log_action(
-        db=db,
+    add_log_task(
+        background_tasks=background_tasks,
+        request=http_request,
         user_id=current_user.id,
         action="approve",
         entity_type="document",
         entity_id=document_id,
         old_values=old_values,
         new_values=new_values,
-        request=http_request,
     )
     
     return {
@@ -301,6 +328,7 @@ async def reject_document(
     document_id: int,
     request: RejectRequest,
     http_request: Request,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -409,15 +437,15 @@ async def reject_document(
         "workflow_status_id": rejected_status.id,
         "action": "reject",
     }
-    log_action(
-        db=db,
+    add_log_task(
+        background_tasks=background_tasks,
+        request=http_request,
         user_id=current_user.id,
         action="reject",
         entity_type="document",
         entity_id=document_id,
         old_values=old_values,
         new_values=new_values,
-        request=http_request,
     )
     
     return {

@@ -27,21 +27,23 @@ const DocumentRevisionDialog: React.FC<DocumentRevisionDialogProps> = ({
   onSuccess,
 }) => {
   const { t } = useTranslation();
-  const [newRevisionFile, setNewRevisionFile] = useState<File | null>(null);
+  const [newRevisionFiles, setNewRevisionFiles] = useState<File[]>([]);
   const [changeDescription, setChangeDescription] = useState('');
   const [fileError, setFileError] = useState<string>('');
   const [uploading, setUploading] = useState(false);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      setNewRevisionFile(file);
+    const files = event.target.files ? Array.from(event.target.files) : [];
+    if (files.length > 0) {
+      setNewRevisionFiles(files);
       setFileError('');
+    } else {
+      setNewRevisionFiles([]);
     }
   };
 
   const handleSubmit = async () => {
-    if (!newRevisionFile || !documentId) {
+    if (newRevisionFiles.length === 0 || !documentId) {
       setFileError(t('revision.select_file_error'));
       return;
     }
@@ -51,7 +53,8 @@ const DocumentRevisionDialog: React.FC<DocumentRevisionDialogProps> = ({
 
     try {
       const formData = new FormData();
-      formData.append('file', newRevisionFile);
+      // Добавляем все файлы под ключом 'files' для множественной загрузки
+      newRevisionFiles.forEach((f) => formData.append('files', f));
       formData.append('change_description', changeDescription);
 
       await documentsApi.uploadRevision(documentId, formData);
@@ -89,7 +92,7 @@ const DocumentRevisionDialog: React.FC<DocumentRevisionDialogProps> = ({
   };
 
   const handleClose = () => {
-    setNewRevisionFile(null);
+    setNewRevisionFiles([]);
     setChangeDescription('');
     setFileError('');
     setUploading(false);
@@ -120,10 +123,13 @@ const DocumentRevisionDialog: React.FC<DocumentRevisionDialogProps> = ({
               onChange={handleFileChange}
               style={{ display: 'none' }}
               accept=".pdf,.doc,.docx,.xls,.xlsx,.dwg,.dwt"
+              multiple
             />
             <label htmlFor="revision-file">
               <Button variant="outlined" component="span" fullWidth>
-                {newRevisionFile ? newRevisionFile.name : t('revision.select_file')}
+                {newRevisionFiles.length > 0
+                  ? `${t('revision.select_file')}: ${newRevisionFiles.length}`
+                  : t('revision.select_file')}
               </Button>
             </label>
           </Box>
@@ -141,7 +147,7 @@ const DocumentRevisionDialog: React.FC<DocumentRevisionDialogProps> = ({
         <Button 
           onClick={handleSubmit} 
           variant="contained" 
-          disabled={!newRevisionFile || uploading}
+          disabled={newRevisionFiles.length === 0 || uploading}
         >
           {uploading ? <CircularProgress size={20} /> : t('revision.upload')}
         </Button>

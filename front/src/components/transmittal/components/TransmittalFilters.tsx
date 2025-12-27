@@ -76,43 +76,61 @@ export const TransmittalFilters: React.FC<TransmittalFiltersProps> = ({
       alignItems: 'center', 
       flexWrap: 'wrap',
       flexDirection: isMobile ? 'column' : 'row',
+      justifyContent: 'space-between',
       mb: 3
     }}>
-      <TextField
-        placeholder={t('transmittals.search_placeholder')}
-        value={searchTerm}
-        onChange={(e) => onSearchChange(e.target.value)}
-        InputProps={{
-          startAdornment: (
-            <InputAdornment position="start">
-              <SearchIcon />
-            </InputAdornment>
-          ),
-        }}
-        sx={{ minWidth: isMobile ? '100%' : 300 }}
-      />
-      
-      <FormControl sx={{ minWidth: isMobile ? '100%' : 150 }}>
-        <InputLabel>{t('common.status')}</InputLabel>
-        <Select
-          value={filterStatus}
-          onChange={(e) => onStatusChange(e.target.value)}
-          label={t('common.status')}
-        >
-          <MenuItem value="all">{t('filter.all')}</MenuItem>
-          {statuses.map((status) => (
-            <MenuItem key={status.id} value={status.name.toLowerCase()}>
-              {status.name}
-            </MenuItem>
-          ))}
-        </Select>
-      </FormControl>
+      {/* Фильтры - слева */}
+      <Box sx={{ 
+        display: 'flex', 
+        gap: 2, 
+        alignItems: 'center', 
+        flexWrap: 'wrap',
+        flex: 1
+      }}>
+        <TextField
+          placeholder={t('transmittals.search_placeholder')}
+          value={searchTerm}
+          onChange={(e) => onSearchChange(e.target.value)}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon />
+              </InputAdornment>
+            ),
+          }}
+          sx={{ minWidth: isMobile ? '100%' : 300 }}
+        />
+        
+        <FormControl sx={{ minWidth: isMobile ? '100%' : 150 }}>
+          <InputLabel>{t('common.status')}</InputLabel>
+          <Select
+            value={filterStatus}
+            onChange={(e) => onStatusChange(e.target.value)}
+            label={t('common.status')}
+          >
+            <MenuItem value="all">{t('filter.all')}</MenuItem>
+            {statuses.map((status) => (
+              <MenuItem key={status.id} value={status.name.toLowerCase()}>
+                {status.name}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+      </Box>
 
-      <Tooltip title={t('transmittals.settings.title')}>
-        <IconButton onClick={onSettingsClick}>
-          <SettingsIcon />
-        </IconButton>
-      </Tooltip>
+      {/* Кнопки действий - справа */}
+      <Box sx={{ 
+        display: 'flex', 
+        gap: 1, 
+        alignItems: 'center',
+        ml: 'auto'
+      }}>
+        <Tooltip title={t('transmittals.settings.title')}>
+          <IconButton onClick={onSettingsClick}>
+            <SettingsIcon />
+          </IconButton>
+        </Tooltip>
+      </Box>
     </Box>
   );
 };

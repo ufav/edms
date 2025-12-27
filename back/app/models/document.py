@@ -60,10 +60,6 @@ class DocumentRevision(Base):
     id = Column(Integer, primary_key=True, index=True)
     document_id = Column(Integer, ForeignKey("documents.id", ondelete="CASCADE"))
     number = Column(String(8), nullable=False)  # Номер ревизии (01, 02, 03 и т.д.)
-    file_path = Column(String(500))
-    file_name = Column(String(255))
-    file_size = Column(BigInteger)
-    file_type = Column(String(100))
     change_description = Column(Text)
     uploaded_by = Column(Integer, ForeignKey("users.id"))
     is_deleted = Column(Integer, default=0)  # Флаг удаления: 0 - не удален, 1 - удален
@@ -78,6 +74,7 @@ class DocumentRevision(Base):
     # Relationships (temporarily commented out)
     # document = relationship("Document", back_populates="revisions")
     # uploader = relationship("User", foreign_keys=[uploaded_by])
+    files = relationship("File", back_populates="revision", cascade="all, delete-orphan")
     
     def __repr__(self):
         return f"<DocumentRevision(document_id={self.document_id}, number='{self.number}')>"
@@ -118,3 +115,25 @@ class DocumentApproval(Base):
     
     def __repr__(self):
         return f"<DocumentApproval(document_id={self.document_id}, approver_id={self.approver_id}, status='{self.status}')>"
+
+
+class File(Base):
+    """Файлы, прикрепленные к ревизиям документов"""
+    __tablename__ = "files"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    revision_id = Column(Integer, ForeignKey("document_revisions.id", ondelete="CASCADE"), nullable=False)
+    file_path = Column(String(500), nullable=False)
+    file_name = Column(String(255), nullable=False)
+    file_size = Column(BigInteger)
+    file_type = Column(String(100))
+    uploaded_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    is_deleted = Column(Integer, default=0)  # Флаг удаления: 0 - не удален, 1 - удален
+    
+    # Relationships
+    revision = relationship("DocumentRevision", back_populates="files")
+    uploader = relationship("User", foreign_keys=[uploaded_by])
+    
+    def __repr__(self):
+        return f"<File(id={self.id}, revision_id={self.revision_id}, file_name='{self.file_name}')>"

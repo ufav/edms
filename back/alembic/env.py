@@ -20,6 +20,25 @@ import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
+# Получаем URL базы данных из переменных окружения или настроек
+def get_database_url():
+    """Получает URL базы данных из переменных окружения или настроек"""
+    # Сначала проверяем переменную окружения
+    url = os.getenv('ALEMBIC_DB_URL') or os.getenv('DATABASE_URL')
+    if url:
+        return url
+    
+    # Если нет переменной окружения, пытаемся получить из настроек приложения
+    try:
+        from app.core.config import settings
+        if settings.DATABASE_URL:
+            return settings.DATABASE_URL
+        # Собираем URL из компонентов
+        return f"postgresql://{settings.DB_USER}:{settings.DB_PASSWORD}@{settings.DB_HOST}:{settings.DB_PORT}/{settings.DB_NAME}"
+    except Exception:
+        # Если не получилось, используем значение по умолчанию
+        return "postgresql://postgres:123@localhost:5432/edms"
+
 from app.core.database import Base
 from app.models.user import User
 from app.models.project import Project
@@ -56,7 +75,7 @@ def run_migrations_offline() -> None:
     script output.
 
     """
-    url = config.get_main_option("sqlalchemy.url")
+    url = get_database_url()
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -75,8 +94,13 @@ def run_migrations_online() -> None:
     and associate a connection with the context.
 
     """
+    # Используем URL из настроек приложения
+    database_url = get_database_url()
+    configuration = config.get_section(config.config_ini_section, {})
+    configuration["sqlalchemy.url"] = database_url
+    
     connectable = engine_from_config(
-        config.get_section(config.config_ini_section, {}),
+        configuration,
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
     )

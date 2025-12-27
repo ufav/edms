@@ -17,6 +17,7 @@ interface DocumentFileUploadModalProps {
   open: boolean;
   onClose: () => void;
   onUpload: (file: File, comment: string) => void;
+  onUploadMultiple?: (files: File[], comment: string) => void;
   loading?: boolean;
 }
 
@@ -24,20 +25,27 @@ const DocumentFileUploadModal: React.FC<DocumentFileUploadModalProps> = ({
   open,
   onClose,
   onUpload,
+  onUploadMultiple,
   loading = false,
 }) => {
   const { t } = useTranslation();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
   const [comment, setComment] = useState('');
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (file) {
-      setSelectedFile(file);
+    const files = event.target.files ? Array.from(event.target.files) : [];
+    if (files.length > 0) {
+      setSelectedFile(files[0]);
+      setSelectedFiles(files);
     }
   };
 
   const handleUpload = () => {
+    if (selectedFiles.length > 0 && comment.trim() && onUploadMultiple) {
+      onUploadMultiple(selectedFiles, comment.trim());
+      return;
+    }
     if (selectedFile && comment.trim()) {
       onUpload(selectedFile, comment.trim());
     }
@@ -45,6 +53,7 @@ const DocumentFileUploadModal: React.FC<DocumentFileUploadModalProps> = ({
 
   const handleClose = () => {
     setSelectedFile(null);
+    setSelectedFiles([]);
     setComment('');
     onClose();
   };
@@ -79,6 +88,7 @@ const DocumentFileUploadModal: React.FC<DocumentFileUploadModalProps> = ({
               onChange={handleFileSelect}
               style={{ display: 'none' }}
               id="document-file-input"
+              multiple
             />
             <label htmlFor="document-file-input">
               <Button
@@ -88,7 +98,7 @@ const DocumentFileUploadModal: React.FC<DocumentFileUploadModalProps> = ({
                 sx={{ justifyContent: 'center' }}
                 disabled={loading}
               >
-                {selectedFile ? selectedFile.name : t('document.upload_file_select')}
+                {selectedFiles.length > 0 ? selectedFiles.map(f => f.name).join(', ') : t('document.upload_file_select')}
               </Button>
             </label>
           </Box>
