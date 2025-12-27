@@ -10,6 +10,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+
       - name: Checkout code
         uses: actions/checkout@v4
 
@@ -20,7 +21,10 @@ jobs:
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_KEY }}
           script: |
+            set -e
             cd /home/ubuntu/edms
             git pull origin main
             docker-compose down
-            docker-compose up -d --build
+            docker-compose build --no-cache nginx
+            docker-compose up -d
+            docker ps
