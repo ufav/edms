@@ -9,18 +9,14 @@ interface UseConnectionStatusOptions {
 }
 
 // Получаем базовый URL API (без /api/v1, так как /health в корне)
+// Используем тот же подход, что и в api/client.ts
 const getApiBaseUrl = (): string => {
-  // Используем тот же подход, что и в api/client.ts
-  const apiUrl = (import.meta as any)?.env?.VITE_API_BASE_URL;
+  // Используем тот же базовый URL, что и в api/client.ts
+  const apiUrl = (import.meta as any)?.env?.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
   
-  if (apiUrl) {
-    // Если VITE_API_BASE_URL установлен, убираем /api/v1 из конца
-    return apiUrl.replace(/\/api\/v1$/, '') || apiUrl;
-  }
-  
-  // Если переменная окружения не установлена, используем текущий origin
-  // Это работает как для localhost, так и для удаленного сервера
-  return window.location.origin;
+  // Убираем /api/v1 из конца, чтобы получить базовый URL бэкенда
+  // Например: http://localhost:8000/api/v1 -> http://localhost:8000
+  return apiUrl.replace(/\/api\/v1$/, '') || apiUrl.replace(/\/api\/v1\/?$/, '');
 };
 
 export const useConnectionStatus = (options: UseConnectionStatusOptions = {}) => {
