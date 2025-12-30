@@ -490,4 +490,5 @@ const AuditLogsPage: React.FC = () => {
   );
 };
 
+export { AuditLogsPage };
 export default AuditLogsPage;

@@ -2,7 +2,7 @@
 Projects endpoints
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form, Response, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File, Form, Response
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
@@ -19,7 +19,7 @@ from app.models.discipline import Discipline, DocumentType
 from app.services.auth import get_current_active_user
 from app.services.minio_service import minio_service
 from fastapi.responses import FileResponse
-from app.services.audit_service import log_action, add_log_task
+from app.services.audit_service import log_action
 
 router = APIRouter()
 
@@ -111,8 +111,6 @@ async def get_project_support_files(
 @router.post("/{project_id}/support-files", response_model=ProjectSupportFileResponse)
 async def upload_project_support_file(
     project_id: int,
-    request: Request,
-    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
@@ -169,22 +167,6 @@ async def upload_project_support_file(
     db.commit()
     db.refresh(support_file)
 
-    # Логирование загрузки файла support pack
-    add_log_task(
-        background_tasks=background_tasks,
-        request=request,
-        user_id=current_user.id,
-        action="upload_support_file",
-        entity_type="project_support_file",
-        entity_id=support_file.id,
-        new_values={
-            "project_id": project_id,
-            "file_name": support_file.file_name,
-            "file_size": support_file.file_size,
-            "file_type": support_file.file_type
-        }
-    )
-
     return ProjectSupportFileResponse(
         id=support_file.id,
         file_name=support_file.file_name,
@@ -198,8 +180,6 @@ async def upload_project_support_file(
 @router.delete("/support-files/{file_id}", response_model=dict)
 async def delete_project_support_file(
     file_id: int,
-    request: Request,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
@@ -228,26 +208,12 @@ async def delete_project_support_file(
     support_file.is_deleted = 1
     db.commit()
 
-    # Логирование удаления файла support pack
-    add_log_task(
-        background_tasks=background_tasks,
-        request=request,
-        user_id=current_user.id,
-        action="delete_support_file",
-        entity_type="project_support_file",
-        entity_id=file_id,
-        old_values={"is_deleted": 0, "file_name": support_file.file_name},
-        new_values={"is_deleted": 1, "project_id": project.id}
-    )
-
     return {"status": "ok"}
 
 
 @router.get("/support-files/{file_id}/download")
 async def download_project_support_file(
     file_id: int,
-    request: Request,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
@@ -276,21 +242,6 @@ async def download_project_support_file(
         if content is None:
             raise HTTPException(status_code=404, detail="Файл не найден")
 
-        # Логирование скачивания файла support pack
-        add_log_task(
-            background_tasks=background_tasks,
-            request=request,
-            user_id=current_user.id,
-            action="download",
-            entity_type="project_support_file",
-            entity_id=file_id,
-            new_values={
-                "file_name": support_file.file_name,
-                "file_size": len(content),
-                "project_id": project.id
-            }
-        )
-
         return Response(
             content=content,
             media_type=support_file.file_type or "application/octet-stream",
@@ -303,20 +254,6 @@ async def download_project_support_file(
 
         if not os.path.exists(support_file.file_path):
             raise HTTPException(status_code=404, detail="Файл не найден")
-
-        # Логирование скачивания файла support pack (локальное хранение)
-        add_log_task(
-            background_tasks=background_tasks,
-            request=request,
-            user_id=current_user.id,
-            action="download",
-            entity_type="project_support_file",
-            entity_id=file_id,
-            new_values={
-                "file_name": support_file.file_name,
-                "project_id": project.id
-            }
-        )
 
         return FileResponse(
             path=support_file.file_path,
@@ -480,7 +417,6 @@ async def get_projects(
 async def create_project(
     project_data: ProjectCreate,
     request: Request,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -648,15 +584,15 @@ async def create_project(
         "created_by": db_project.created_by,
         "is_deleted": db_project.is_deleted,
     }
-    add_log_task(
-        background_tasks=background_tasks,
-        request=request,
+    log_action(
+        db=db,
         user_id=current_user.id,
         action="create",
         entity_type="project",
         entity_id=db_project.id,
         old_values=None,
         new_values=new_values,
+        request=request,
     )
     
     return {
@@ -704,7 +640,6 @@ async def update_project(
     project_id: int,
     project_data: ProjectUpdate,
     request: Request,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -855,15 +790,15 @@ async def update_project(
         "created_by": project.created_by,
         "is_deleted": project.is_deleted,
     }
-    add_log_task(
-        background_tasks=background_tasks,
-        request=request,
+    log_action(
+        db=db,
         user_id=current_user.id,
         action="update",
         entity_type="project",
         entity_id=project_id,
         old_values=old_values,
         new_values=new_values,
+        request=request,
     )
 
     return {
@@ -925,8 +860,6 @@ class ProjectMemberCreate(BaseModel):
 async def add_project_member(
     project_id: int,
     member_data: ProjectMemberCreate,
-    request: Request,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -979,21 +912,6 @@ async def add_project_member(
         else:
             raise HTTPException(status_code=500, detail="Ошибка при добавлении участника проекта")
     
-    # Логирование добавления участника проекта
-    add_log_task(
-        background_tasks=background_tasks,
-        request=request,
-        user_id=current_user.id,
-        action="add_member",
-        entity_type="project_member",
-        entity_id=project_member.id,
-        new_values={
-            "project_id": project_id,
-            "user_id": member_data.user_id,
-            "project_role_id": member_data.project_role_id
-        }
-    )
-    
     return {
         "id": project_member.id,
         "project_id": project_member.project_id,
@@ -1036,8 +954,6 @@ async def update_project_member_role(
     project_id: int,
     user_id: int,
     member_data: ProjectMemberCreate,
-    request: Request,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -1085,25 +1001,10 @@ async def update_project_member_role(
         if manager_count <= 1:
             raise HTTPException(status_code=400, detail="Нельзя понизить роль последнего менеджера проекта")
 
-    # Сохраняем старую роль для лога
-    old_role_id = member_to_update.project_role_id
-    
     # Обновляем роль участника
     member_to_update.project_role_id = member_data.project_role_id
     db.commit()
     db.refresh(member_to_update)
-    
-    # Логирование обновления роли участника проекта
-    add_log_task(
-        background_tasks=background_tasks,
-        request=request,
-        user_id=current_user.id,
-        action="update_member",
-        entity_type="project_member",
-        entity_id=member_to_update.id,
-        old_values={"project_role_id": old_role_id, "project_id": project_id, "user_id": user_id},
-        new_values={"project_role_id": member_data.project_role_id}
-    )
     
     return {
         "id": member_to_update.id,
@@ -1117,8 +1018,6 @@ async def update_project_member_role(
 async def remove_project_member(
     project_id: int,
     user_id: int,
-    request: Request,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -1159,28 +1058,8 @@ async def remove_project_member(
         if manager_count <= 1:
             raise HTTPException(status_code=400, detail="Нельзя удалить последнего менеджера проекта")
 
-    # Сохраняем данные для лога перед удалением
-    member_id = member_to_remove.id
-    member_role_id = member_to_remove.project_role_id
-    
     db.delete(member_to_remove)
     db.commit()
-    
-    # Логирование удаления участника проекта
-    add_log_task(
-        background_tasks=background_tasks,
-        request=request,
-        user_id=current_user.id,
-        action="remove_member",
-        entity_type="project_member",
-        entity_id=member_id,
-        old_values={
-            "project_id": project_id,
-            "user_id": user_id,
-            "project_role_id": member_role_id
-        },
-        new_values=None
-    )
     
     return {"message": "Участник удален из проекта"}
 
@@ -1189,7 +1068,6 @@ async def remove_project_member(
 async def delete_project(
     project_id: int,
     request: Request,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -1218,15 +1096,15 @@ async def delete_project(
     db.commit()
     
     # Логирование действия
-    add_log_task(
-        background_tasks=background_tasks,
-        request=request,
+    log_action(
+        db=db,
         user_id=current_user.id,
         action="delete",
         entity_type="project",
         entity_id=project_id,
         old_values=old_values,
         new_values={"is_deleted": 1},
+        request=request,
     )
     
     return {"message": "Проект удален"}

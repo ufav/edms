@@ -26,7 +26,7 @@ import {
 import { useTranslation } from 'react-i18next';
 import { disciplineStore } from '../../../stores/DisciplineStore';
 import { projectStore } from '../../../stores/ProjectStore';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useLayoutEffect } from 'react';
 import { projectsApi, type DocumentType } from '../../../api/client';
 
 export interface DocumentFiltersProps {
@@ -127,20 +127,26 @@ export const DocumentFilters: React.FC<DocumentFiltersProps> = ({
 
   // Сбрасываем выбранный тип документа при изменении дисциплины
   const prevDocumentTypesRef = useRef<DocumentType[]>([]);
+  const onDocumentTypeChangeRef = useRef(onDocumentTypeChange);
+  
+  // Обновляем ref функции при каждом рендере
   useEffect(() => {
+    onDocumentTypeChangeRef.current = onDocumentTypeChange;
+  }, [onDocumentTypeChange]);
+  
+  useLayoutEffect(() => {
+    // Обновляем ref только после проверки, чтобы избежать обновления во время рендеринга
+    const prevTypes = prevDocumentTypesRef.current;
+    prevDocumentTypesRef.current = documentTypes;
+    
     if (selectedDocumentTypeId && documentTypes.length > 0) {
       const typeExists = documentTypes.some(type => type.id === selectedDocumentTypeId);
-      if (!typeExists && prevDocumentTypesRef.current.length > 0) {
+      if (!typeExists && prevTypes.length > 0) {
         // Тип документа больше не существует в новой дисциплине - сбрасываем выбор
-        // Используем setTimeout для отложенного вызова, чтобы избежать обновления во время рендеринга
-        const timeoutId = setTimeout(() => {
-          onDocumentTypeChange(null);
-        }, 0);
-        return () => clearTimeout(timeoutId);
+        // Используем useLayoutEffect для синхронного обновления до отрисовки
+        onDocumentTypeChangeRef.current(null);
       }
     }
-    prevDocumentTypesRef.current = documentTypes;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [documentTypes, selectedDocumentTypeId]);
 
 

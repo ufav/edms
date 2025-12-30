@@ -54,6 +54,7 @@ from app.models.references import (
 # from app.models.document_v2 import UniqueDocument, DocumentRevision, UploadedFile, TransmittalRevision
 from app.models.discipline import Discipline, DocumentType
 from app.models.user_settings import UserSettings
+from app.models.support import SupportTicket, SupportMessage, SupportTicketFile
 
 target_metadata = Base.metadata
 

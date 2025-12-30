@@ -27,7 +27,7 @@ import AppPagination from './AppPagination';
 const ProjectsPage: React.FC = observer(() => {
   const { canEditProject, canDeleteProject, isAdmin, isOperator, isViewer } = useCurrentUser();
   const permissions = usePermissions();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const deleteDialog = useDeleteDialog();
@@ -175,6 +175,7 @@ const ProjectsPage: React.FC = observer(() => {
           rowsPerPage={rowsPerPage}
           insetLeft={240}
           align="right"
+          leftInfo={`${t('common.total_projects', { count: totalCount }).replace('{count}', totalCount.toLocaleString(i18n.language === 'ru' ? 'ru-RU' : 'en-US'))}`}
         />
       )}
 

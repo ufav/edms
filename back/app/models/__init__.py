@@ -17,6 +17,7 @@ from .transmittal_import_settings import TransmittalImportSettings
 #     DocumentStatus, ApprovalStatus
 # )
 from .notification import Notification, AuditLog
+from .support import SupportTicket, SupportMessage, SupportTicketFile
 from .references import (
     RevisionStatus, RevisionDescription, RevisionStep, Originator, ReviewCode,
     Language, Department, Company, UserRole
@@ -39,6 +40,7 @@ __all__ = [
     # "WorkflowTemplate", "WorkflowStep", "DocumentWorkflow", "DocumentApproval", "DocumentHistory",
     # "DocumentStatus", "ApprovalStatus",
     "Notification", "AuditLog",
+    "SupportTicket", "SupportMessage", "SupportTicketFile",
     "RevisionStatus", "RevisionDescription", "RevisionStep", "Originator", "ReviewCode",
     "Language", "Department", "Company", "UserRole",
     # "UniqueDocument", "DocumentRevision", "UploadedFile", "TransmittalRevision"

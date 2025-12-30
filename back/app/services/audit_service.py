@@ -2,15 +2,12 @@
 Audit logging service for EDMS
 """
 
-import logging
 from typing import Optional, Dict, Any
 from sqlalchemy.orm import Session
 from fastapi import Request, BackgroundTasks
-
-from app.models.notification import AuditLog
 from app.core.database import get_db
 
-logger = logging.getLogger(__name__)
+from app.models.notification import AuditLog
 
 
 def get_client_ip(request: Request) -> Optional[str]:
@@ -41,9 +38,9 @@ def log_action(
     old_values: Optional[Dict[str, Any]] = None,
     new_values: Optional[Dict[str, Any]] = None,
     request: Optional[Request] = None,
-) -> Optional[AuditLog]:
+) -> AuditLog:
     """
-    Логирование действия пользователя (синхронная версия с обработкой ошибок)
+    Логирование действия пользователя
     
     Args:
         db: Сессия базы данных
@@ -56,112 +53,111 @@ def log_action(
         request: FastAPI Request объект для получения IP и User-Agent
     
     Returns:
-        AuditLog: Созданная запись лога или None при ошибке
+        AuditLog: Созданная запись лога
     """
-    try:
-        audit_log = AuditLog(
-            user_id=user_id,
-            action=action,
-            entity_type=entity_type,
-            entity_id=entity_id,
-            old_values=old_values,
-            new_values=new_values,
-        )
-        
-        if request:
-            audit_log.ip_address = get_client_ip(request)
-            audit_log.user_agent = get_user_agent(request)
-        
-        db.add(audit_log)
-        db.commit()
-        db.refresh(audit_log)
-        
-        return audit_log
-    except Exception as e:
-        logger.error(f"Failed to save audit log: {e}", exc_info=True)
-        db.rollback()
-        return None
-
-
-async def log_action_background(
-    user_id: int,
-    action: str,
-    entity_type: str,
-    entity_id: int,
-    old_values: Optional[Dict[str, Any]] = None,
-    new_values: Optional[Dict[str, Any]] = None,
-    ip_address: Optional[str] = None,
-    user_agent: Optional[str] = None,
-):
-    """
-    Фоновая задача для логирования действия пользователя
-    
-    Args:
-        user_id: ID пользователя, выполнившего действие
-        action: Тип действия (create, update, delete, etc.)
-        entity_type: Тип сущности (user, document, project, etc.)
-        entity_id: ID сущности
-        old_values: Старые значения (для update)
-        new_values: Новые значения (для create/update)
-        ip_address: IP адрес клиента
-        user_agent: User-Agent клиента
-    """
-    db = next(get_db())
-    try:
-        audit_log = AuditLog(
-            user_id=user_id,
-            action=action,
-            entity_type=entity_type,
-            entity_id=entity_id,
-            old_values=old_values,
-            new_values=new_values,
-            ip_address=ip_address,
-            user_agent=user_agent,
-        )
-        db.add(audit_log)
-        db.commit()
-    except Exception as e:
-        logger.error(f"Failed to save audit log in background task: {e}", exc_info=True)
-        db.rollback()
-    finally:
-        db.close()
-
-
-def add_log_task(
-    background_tasks: BackgroundTasks,
-    request: Request,
-    user_id: int,
-    action: str,
-    entity_type: str,
-    entity_id: int,
-    old_values: Optional[Dict[str, Any]] = None,
-    new_values: Optional[Dict[str, Any]] = None,
-):
-    """
-    Добавляет задачу логирования в BackgroundTasks
-    
-    Args:
-        background_tasks: FastAPI BackgroundTasks объект
-        request: FastAPI Request объект для получения IP и User-Agent
-        user_id: ID пользователя, выполнившего действие
-        action: Тип действия (create, update, delete, etc.)
-        entity_type: Тип сущности (user, document, project, etc.)
-        entity_id: ID сущности
-        old_values: Старые значения (для update)
-        new_values: Новые значения (для create/update)
-    """
-    ip_address = get_client_ip(request) if request else None
-    user_agent = get_user_agent(request) if request else None
-    
-    background_tasks.add_task(
-        log_action_background,
+    audit_log = AuditLog(
         user_id=user_id,
         action=action,
         entity_type=entity_type,
         entity_id=entity_id,
         old_values=old_values,
         new_values=new_values,
-        ip_address=ip_address,
-        user_agent=user_agent,
     )
+    
+    if request:
+        audit_log.ip_address = get_client_ip(request)
+        audit_log.user_agent = get_user_agent(request)
+    
+    db.add(audit_log)
+    db.commit()
+    db.refresh(audit_log)
+    
+    return audit_log
+
+
+def add_log_task(
+    background_tasks: BackgroundTasks,
+    request: Request,
+    action: str,
+    entity_type: str,
+    entity_id: int,
+    user_id: int,
+    details: Optional[str] = None,
+    old_values: Optional[Dict[str, Any]] = None,
+    new_values: Optional[Dict[str, Any]] = None,
+):
+    """
+    Добавляет задачу логирования в BackgroundTasks для асинхронного выполнения
+    
+    Args:
+        background_tasks: FastAPI BackgroundTasks объект
+        request: FastAPI Request объект для получения IP и User-Agent
+        action: Тип действия (create, update, delete, etc.)
+        entity_type: Тип сущности (user, document, project, etc.)
+        entity_id: ID сущности
+        user_id: ID пользователя, выполнившего действие
+        details: Дополнительные детали действия
+        old_values: Старые значения (для update)
+        new_values: Новые значения (для create/update)
+    """
+    background_tasks.add_task(
+        log_action_background,
+        request,
+        user_id,
+        action,
+        entity_type,
+        entity_id,
+        details,
+        old_values,
+        new_values,
+    )
+
+
+def log_action_background(
+    request: Request,
+    user_id: int,
+    action: str,
+    entity_type: str,
+    entity_id: int,
+    details: Optional[str] = None,
+    old_values: Optional[Dict[str, Any]] = None,
+    new_values: Optional[Dict[str, Any]] = None,
+):
+    """
+    Фоновая функция для логирования действия
+    
+    Args:
+        request: FastAPI Request объект
+        user_id: ID пользователя
+        action: Тип действия
+        entity_type: Тип сущности
+        entity_id: ID сущности
+        details: Дополнительные детали
+        old_values: Старые значения
+        new_values: Новые значения
+    """
+    try:
+        # Создаем новую сессию БД для фоновой задачи
+        db = next(get_db())
+        
+        # Формируем new_values с details, если они есть
+        final_new_values = new_values or {}
+        if details:
+            final_new_values['details'] = details
+        
+        log_action(
+            db=db,
+            user_id=user_id,
+            action=action,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            old_values=old_values,
+            new_values=final_new_values if final_new_values else None,
+            request=request,
+        )
+    except Exception as e:
+        # Логируем ошибку, но не прерываем выполнение
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error in background audit logging: {str(e)}")
 

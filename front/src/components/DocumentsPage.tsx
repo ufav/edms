@@ -463,9 +463,6 @@ const DocumentsPage: React.FC = observer(() => {
                 })() : undefined,
                 sortBy: orderBy,
                 sortDir: order,
-                visibleCols: visibleCols,
-                columnOrder: columnOrder,
-                language: i18n.language,
               });
             } catch (error: any) {
               console.error('Ошибка при экспорте в Excel:', error);
@@ -595,8 +592,8 @@ const DocumentsPage: React.FC = observer(() => {
           <Box
             sx={{
               position: 'fixed',
-              bottom: 20,
-              right: 20,
+              bottom: 90,
+              right: 24,
               zIndex: 1000,
             }}
           >

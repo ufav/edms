@@ -2,7 +2,7 @@
 Authentication endpoints
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Response, Request, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status, Response, Request
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
@@ -13,7 +13,8 @@ from app.core.config import settings
 from app.models.user import User
 from app.schemas.auth import Token, UserCreate, UserLogin
 from app.services.auth import authenticate_user, create_access_token, get_password_hash, verify_password, get_current_user
-from app.services.audit_service import add_log_task
+from datetime import timedelta
+from app.core.config import settings
 
 router = APIRouter()
 
@@ -54,13 +55,7 @@ async def register(user_data: UserCreate, db: Session = Depends(get_db)):
     }
 
 @router.post("/login", response_model=Token)
-async def login(
-    response: Response,
-    request: Request,
-    background_tasks: BackgroundTasks,
-    form_data: OAuth2PasswordRequestForm = Depends(),
-    db: Session = Depends(get_db)
-):
+async def login(response: Response, form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
     """Аутентификация пользователя"""
     
     user = authenticate_user(db, form_data.username, form_data.password)
@@ -84,17 +79,6 @@ async def login(
         secure=False,
         samesite="lax",
         max_age=int(refresh_expires.total_seconds())
-    )
-    
-    # Логирование входа
-    add_log_task(
-        background_tasks=background_tasks,
-        request=request,
-        user_id=user.id,
-        action="login",
-        entity_type="user",
-        entity_id=user.id,
-        new_values={"username": user.username, "email": user.email}
     )
     
     return {
@@ -157,8 +141,6 @@ async def read_users_me(current_user: User = Depends(get_current_user)):
 async def change_password(
     old_password: str,
     new_password: str,
-    request: Request,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -172,41 +154,4 @@ async def change_password(
     db.add(current_user)
     db.commit()
 
-    # Логирование смены пароля
-    add_log_task(
-        background_tasks=background_tasks,
-        request=request,
-        user_id=current_user.id,
-        action="change_password",
-        entity_type="user",
-        entity_id=current_user.id,
-        new_values={"username": current_user.username}
-    )
-
     return {"message": "Пароль успешно изменен"}
-
-
-@router.post("/logout", response_model=dict)
-async def logout(
-    request: Request,
-    background_tasks: BackgroundTasks,
-    current_user: User = Depends(get_current_user),
-    response: Response = None
-):
-    """Выход пользователя из системы"""
-    # Очищаем refresh токен из cookie
-    if response:
-        response.delete_cookie(key="refresh_token", httponly=True, samesite="lax")
-    
-    # Логирование выхода
-    add_log_task(
-        background_tasks=background_tasks,
-        request=request,
-        user_id=current_user.id,
-        action="logout",
-        entity_type="user",
-        entity_id=current_user.id,
-        new_values={"username": current_user.username}
-    )
-    
-    return {"message": "Выход выполнен успешно"}

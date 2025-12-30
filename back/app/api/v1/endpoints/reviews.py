@@ -2,7 +2,7 @@
 API endpoints for document reviews and approvals
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_
 from typing import List, Optional
@@ -21,7 +21,7 @@ from app.models.document import File as FileModel
 from app.models.project import Project, WorkflowPresetSequence
 from app.models.references import WorkflowStatus, RevisionStep, RevisionDescription
 from app.api.v1.endpoints.auth import get_current_user
-from app.services.audit_service import log_action, add_log_task
+from app.services.audit_service import log_action
 
 router = APIRouter()
 
@@ -198,7 +198,6 @@ async def approve_document(
     document_id: int,
     request: ApproveRequest,
     http_request: Request,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -304,15 +303,15 @@ async def approve_document(
         "workflow_status_id": approved_status.id,
         "action": "approve",
     }
-    add_log_task(
-        background_tasks=background_tasks,
-        request=http_request,
+    log_action(
+        db=db,
         user_id=current_user.id,
         action="approve",
         entity_type="document",
         entity_id=document_id,
         old_values=old_values,
         new_values=new_values,
+        request=http_request,
     )
     
     return {
@@ -328,7 +327,6 @@ async def reject_document(
     document_id: int,
     request: RejectRequest,
     http_request: Request,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -437,15 +435,15 @@ async def reject_document(
         "workflow_status_id": rejected_status.id,
         "action": "reject",
     }
-    add_log_task(
-        background_tasks=background_tasks,
-        request=http_request,
+    log_action(
+        db=db,
         user_id=current_user.id,
         action="reject",
         entity_type="document",
         entity_id=document_id,
         old_values=old_values,
         new_values=new_values,
+        request=http_request,
     )
     
     return {

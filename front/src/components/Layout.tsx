@@ -31,9 +31,12 @@ import {
   Settings as SettingsIcon,
   AccountTree as WorkflowIcon,
   History as HistoryIcon,
+  Support as SupportIcon,
 } from '@mui/icons-material';
 import ProjectSelector from './ProjectSelector';
 import ProfileDialog from './ProfileDialog';
+import SupportFab from './support/SupportFab';
+import SupportTicketsListDialog from './support/SupportTicketsListDialog';
 import { useTranslation } from 'react-i18next';
 import { observer } from 'mobx-react-lite';
 import { projectStore } from '../stores/ProjectStore';
@@ -61,6 +64,7 @@ const Layout: React.FC<LayoutProps> = observer(({
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [supportTicketsOpen, setSupportTicketsOpen] = useState(false);
   const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 0 });
   const menuRef = useRef<HTMLDivElement>(null);
   const theme = useTheme();
@@ -321,6 +325,12 @@ const Layout: React.FC<LayoutProps> = observer(({
                 </ListItemIcon>
                 <ListItemText>{t('menu.profile')}</ListItemText>
               </MenuItem>
+              <MenuItem onClick={() => { handleClose(); setSupportTicketsOpen(true); }}>
+                <ListItemIcon>
+                  <SupportIcon fontSize="small" />
+                </ListItemIcon>
+                <ListItemText>{t('support.my_tickets') || 'Мои обращения'}</ListItemText>
+              </MenuItem>
               <Divider />
               <MenuItem onClick={() => {
                 handleClose();
@@ -383,6 +393,19 @@ const Layout: React.FC<LayoutProps> = observer(({
 
       {/* Profile Dialog */}
       <ProfileDialog open={profileOpen} onClose={() => setProfileOpen(false)} username={user?.username || undefined} />
+      
+      {/* Support Tickets Dialog */}
+      <SupportTicketsListDialog
+        open={supportTicketsOpen}
+        onClose={() => setSupportTicketsOpen(false)}
+        onCreateNew={() => {
+          // Открываем диалог создания через FAB
+          // Можно также добавить отдельное состояние для создания
+        }}
+      />
+      
+      {/* Support FAB - только для создания нового тикета */}
+      <SupportFab />
     </Box>
   );
 });

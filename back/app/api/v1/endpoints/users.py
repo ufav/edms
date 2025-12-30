@@ -2,7 +2,7 @@
 Users endpoints
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 from typing import List, Dict, Any
 
@@ -10,7 +10,7 @@ from app.core.database import get_db
 from app.models.user import User
 from app.services.auth import get_current_active_user, get_password_hash
 from app.schemas.auth import UserCreate, UserUpdate
-from app.services.audit_service import log_action, add_log_task
+from app.services.audit_service import log_action
 
 router = APIRouter()
 
@@ -77,7 +77,6 @@ async def get_user(
 async def create_user(
     user_data: UserCreate,
     request: Request,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -115,15 +114,15 @@ async def create_user(
     db.refresh(new_user)
     
     # Логирование действия
-    add_log_task(
-        background_tasks=background_tasks,
-        request=request,
+    log_action(
+        db=db,
         user_id=current_user.id,
         action="create",
         entity_type="user",
         entity_id=new_user.id,
         old_values=None,
         new_values=user_to_dict(new_user),
+        request=request,
     )
     
     return {
@@ -143,7 +142,6 @@ async def update_user(
     user_id: int,
     user_data: UserUpdate,
     request: Request,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -185,15 +183,15 @@ async def update_user(
     db.refresh(user)
     
     # Логирование действия
-    add_log_task(
-        background_tasks=background_tasks,
-        request=request,
+    log_action(
+        db=db,
         user_id=current_user.id,
         action="update",
         entity_type="user",
         entity_id=user.id,
         old_values=old_values,
         new_values=user_to_dict(user),
+        request=request,
     )
     
     return {
@@ -212,7 +210,6 @@ async def update_user(
 async def delete_user(
     user_id: int,
     request: Request,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -239,15 +236,15 @@ async def delete_user(
     db.commit()
     
     # Логирование действия
-    add_log_task(
-        background_tasks=background_tasks,
-        request=request,
+    log_action(
+        db=db,
         user_id=current_user.id,
         action="delete",
         entity_type="user",
         entity_id=user_id,
         old_values=old_values,
         new_values=None,
+        request=request,
     )
     
     return None

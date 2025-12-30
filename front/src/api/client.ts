@@ -1422,6 +1422,48 @@ apiClient.interceptors.response.use(
   }
 );
 
+export const supportApi = {
+  // Создание тикета
+  createTicket: async (formData: FormData): Promise<any> => {
+    const response = await apiClient.post('/support/tickets', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+  
+  // Получение списка тикетов
+  getTickets: async (): Promise<any[]> => {
+    const response = await apiClient.get('/support/tickets');
+    return response.data;
+  },
+  
+  // Получение тикета с сообщениями
+  getTicket: async (ticketId: number): Promise<any> => {
+    const response = await apiClient.get(`/support/tickets/${ticketId}`);
+    return response.data;
+  },
+  
+  // Отправка сообщения в тикет
+  createMessage: async (ticketId: number, formData: FormData): Promise<any> => {
+    const response = await apiClient.post(`/support/tickets/${ticketId}/messages`, formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+  
+  // Скачивание файла
+  downloadFile: async (ticketId: number, fileId: number): Promise<Blob> => {
+    const response = await apiClient.get(`/support/tickets/${ticketId}/files/${fileId}/download`, {
+      responseType: 'blob',
+    });
+    return response.data;
+  },
+};
+
 export const workflowApi = {
   // Workflow Templates
   getTemplates: async (disciplineId?: number, documentTypeId?: number): Promise<WorkflowTemplate[]> => {

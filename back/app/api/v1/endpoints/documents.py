@@ -2,7 +2,7 @@
 Documents endpoints
 """
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, Request, Query
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
@@ -28,7 +28,7 @@ from app.models.project import Project, ProjectDisciplineDocumentType, ProjectMe
 from app.models.document_workflow_history import DocumentWorkflowHistory
 from app.services.auth import get_current_active_user
 from app.services.minio_service import minio_service
-from app.services.audit_service import log_action, add_log_task
+from app.services.audit_service import log_action
 
 router = APIRouter()
 
@@ -584,7 +584,6 @@ async def upload_document(
 @router.post("/create-with-revision", response_model=dict)
 async def create_document_with_revision(
     request: Request,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -781,7 +780,7 @@ async def create_document_with_revision(
         db.add(workflow_history)
         db.commit()
     
-    # Логирование действия
+    # Логирование действия (без Request для Form-запроса)
     new_values = {
         "id": db_document.id,
         "title": db_document.title,
@@ -790,15 +789,15 @@ async def create_document_with_revision(
         "discipline_id": db_document.discipline_id,
         "document_type_id": db_document.document_type_id,
     }
-    add_log_task(
-        background_tasks=background_tasks,
-        request=request,
+    log_action(
+        db=db,
         user_id=current_user.id,
         action="create",
         entity_type="document",
         entity_id=db_document.id,
         old_values=None,
         new_values=new_values,
+        request=None,  # Request недоступен в Form-запросах
     )
     
     # Получаем информацию о файлах из таблицы files
@@ -908,8 +907,6 @@ async def get_document(
 
 @router.post("/import-by-paths")
 async def import_documents_by_paths(
-    request: Request,
-    background_tasks: BackgroundTasks,
     metadata_file: UploadFile = File(...),
     project_id: int = Form(...),
     files: List[UploadFile] = File(default=[]),
@@ -1431,31 +1428,12 @@ async def import_documents_by_paths(
         "progress": 100,  # Завершено
         "errors": errors
     }
-    
-    # Логирование импорта документов
-    if background_tasks and request:
-        add_log_task(
-            background_tasks=background_tasks,
-            request=request,
-            user_id=current_user.id,
-            action="import",
-            entity_type="document",
-            entity_id=project_id,  # Используем project_id как entity_id для импорта
-            new_values={
-                "project_id": project_id,
-                "total_imported": len(imported_documents),
-                "total_rows": total_rows,
-                "errors_count": len(errors)
-            }
-        )
 
 
 @router.post("/revisions/{revision_id}/release", response_model=dict)
 async def release_revision(
     revision_id: int,
     request: ReleaseRevisionRequest,
-    http_request: Request,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -1524,18 +1502,6 @@ async def release_revision(
     )
     db.add(workflow_history)
     db.commit()
-    
-    # Логирование выпуска ревизии
-    add_log_task(
-        background_tasks=background_tasks,
-        request=http_request,
-        user_id=current_user.id,
-        action="release_revision",
-        entity_type="document_revision",
-        entity_id=revision_id,
-        old_values={"workflow_status_id": draft_status.id},
-        new_values={"workflow_status_id": in_review_status.id, "document_id": document.id}
-    )
     
     return {"message": "Ревизия успешно выпущена для внутреннего утверждения"}
 
@@ -1625,7 +1591,6 @@ async def list_document_revisions(
 async def create_document_revision(
     document_id: int,
     request: Request,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -1886,22 +1851,6 @@ async def create_document_revision(
     # Получаем информацию о файлах из таблицы files
     files_info = db.query(FileModel).filter(FileModel.revision_id == revision_row.id, FileModel.is_deleted == 0).all()
     
-    # Логирование создания ревизии
-    add_log_task(
-        background_tasks=background_tasks,
-        request=request,
-        user_id=current_user.id,
-        action="create_revision",
-        entity_type="document_revision",
-        entity_id=revision_row.id,
-        new_values={
-            "document_id": document_id,
-            "revision_number": revision_row.number,
-            "revision_description_id": revision_row.revision_description_id,
-            "files_count": len(files_info)
-        }
-    )
-    
     return {
         "message": "Новая ревизия создана",
         "document_id": document.id,
@@ -1974,8 +1923,6 @@ async def compare_document_revisions(
 @router.get("/{document_id}/download")
 async def download_document(
     document_id: int,
-    request: Request,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -2075,21 +2022,6 @@ async def download_document(
             import urllib.parse
             encoded_filename = urllib.parse.quote(latest_file.file_name.encode('utf-8'))
             
-            # Логирование скачивания документа
-            add_log_task(
-                background_tasks=background_tasks,
-                request=request,
-                user_id=current_user.id,
-                action="download",
-                entity_type="document",
-                entity_id=document_id,
-                new_values={
-                    "file_name": latest_file.file_name,
-                    "file_size": len(content_bytes),
-                    "revision_id": latest_revision.id
-                }
-            )
-            
             # Используем Response вместо StreamingResponse для стабильности
             from fastapi.responses import Response
             return Response(
@@ -2122,20 +2054,6 @@ async def download_document(
         if not os.path.exists(latest_file.file_path):
             raise HTTPException(status_code=404, detail="Файл не найден")
         
-        # Логирование скачивания документа (локальное хранение)
-        add_log_task(
-            background_tasks=background_tasks,
-            request=request,
-            user_id=current_user.id,
-            action="download",
-            entity_type="document",
-            entity_id=document_id,
-            new_values={
-                "file_name": latest_file.file_name,
-                "revision_id": latest_revision.id
-            }
-        )
-        
         return FileResponse(
             path=latest_file.file_path,
             filename=latest_file.file_name,
@@ -2147,8 +2065,6 @@ async def download_document(
 async def download_document_revision(
     document_id: int,
     revision_id: int,
-    request: Request,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -2255,21 +2171,6 @@ async def download_document_revision(
             import urllib.parse
             encoded_filename = urllib.parse.quote(revision_file.file_name.encode('utf-8'))
             
-            # Логирование скачивания ревизии документа
-            add_log_task(
-                background_tasks=background_tasks,
-                request=request,
-                user_id=current_user.id,
-                action="download",
-                entity_type="document_revision",
-                entity_id=revision_id,
-                new_values={
-                    "file_name": revision_file.file_name,
-                    "file_size": len(content_bytes),
-                    "document_id": document_id
-                }
-            )
-            
             # Используем Response вместо StreamingResponse для стабильности
             from fastapi.responses import Response
             return Response(
@@ -2302,20 +2203,6 @@ async def download_document_revision(
         if not os.path.exists(revision_file.file_path):
             raise HTTPException(status_code=404, detail="Файл не найден")
         
-        # Логирование скачивания ревизии документа (локальное хранение)
-        add_log_task(
-            background_tasks=background_tasks,
-            request=request,
-            user_id=current_user.id,
-            action="download",
-            entity_type="document_revision",
-            entity_id=revision_id,
-            new_values={
-                "file_name": revision_file.file_name,
-                "document_id": document_id
-            }
-        )
-        
         return FileResponse(
             path=revision_file.file_path,
             filename=revision_file.file_name,
@@ -2327,7 +2214,6 @@ async def download_document_revision(
 async def soft_delete_document(
     document_id: int,
     request: Request,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -2381,15 +2267,15 @@ async def soft_delete_document(
     db.commit()
     
     # Логирование действия
-    add_log_task(
-        background_tasks=background_tasks,
-        request=request,
+    log_action(
+        db=db,
         user_id=current_user.id,
         action="delete",
         entity_type="document",
         entity_id=document_id,
         old_values=old_values,
         new_values={"is_deleted": 1},
+        request=request,
     )
     
     return {"message": "Документ и все его ревизии помечены как удаленные", "document_id": document_id}
@@ -2452,8 +2338,6 @@ async def soft_delete_document_revision(
 @router.post("/revisions/{revision_id}/restore")
 async def restore_document_revision(
     revision_id: int,
-    request: Request,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -2475,26 +2359,12 @@ async def restore_document_revision(
     revision.is_deleted = 0
     db.commit()
     
-    # Логирование восстановления ревизии
-    add_log_task(
-        background_tasks=background_tasks,
-        request=request,
-        user_id=current_user.id,
-        action="restore_revision",
-        entity_type="document_revision",
-        entity_id=revision_id,
-        old_values={"is_deleted": 1},
-        new_values={"is_deleted": 0, "document_id": document.id}
-    )
-    
     return {"message": "Ревизия восстановлена", "revision_id": revision_id}
 
 
 @router.post("/revisions/{revision_id}/cancel")
 async def cancel_document_revision(
     revision_id: int,
-    request: Request,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -2555,22 +2425,9 @@ async def cancel_document_revision(
         raise HTTPException(status_code=400, detail="Можно отменять только последнюю активную ревизию")
     
     # Отменяем ревизию - меняем статус на "Cancelled"
-    old_status_id = revision.revision_status_id
     revision.revision_status_id = cancelled_status.id
     
     db.commit()
-    
-    # Логирование отмены ревизии
-    add_log_task(
-        background_tasks=background_tasks,
-        request=request,
-        user_id=current_user.id,
-        action="cancel_revision",
-        entity_type="document_revision",
-        entity_id=revision_id,
-        old_values={"revision_status_id": old_status_id},
-        new_values={"revision_status_id": cancelled_status.id, "document_id": document.id}
-    )
     
     return {"message": "Ревизия отменена", "revision_id": revision_id}
 
@@ -2580,7 +2437,6 @@ async def update_document(
     document_id: int,
     document_data: DocumentUpdate,
     request: Request,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -2641,15 +2497,15 @@ async def update_document(
         "discipline_id": document.discipline_id,
         "document_type_id": document.document_type_id,
     }
-    add_log_task(
-        background_tasks=background_tasks,
-        request=request,
+    log_action(
+        db=db,
         user_id=current_user.id,
         action="update",
         entity_type="document",
         entity_id=document_id,
         old_values=old_values,
         new_values=new_values,
+        request=request,
     )
     
     return {"message": "Документ обновлен", "document_id": document_id}

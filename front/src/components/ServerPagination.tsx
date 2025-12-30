@@ -1,5 +1,6 @@
 import React from 'react';
 import { Box, Pagination, Typography } from '@mui/material';
+import ConnectionStatusDot from './ConnectionStatusDot';
 
 export interface ServerPaginationProps {
   // Server pagination data
@@ -35,23 +36,21 @@ const ServerPagination: React.FC<ServerPaginationProps> = ({
 }) => {
   const totalPages = Math.max(1, Math.ceil(total / size));
 
-  // Фрагмент для текста — рендерится в fixed Box
-  const leftInfoElement = leftInfo && (
-    <Typography
-      variant="body2"
+  // Индикатор статуса слева
+  const statusIndicator = (
+    <Box
       sx={{
         position: 'absolute',  // Absolute относительно fixed Box
-        left: 30,  // Небольшой отступ: ~16px от левого края экрана (подкрутите: 1=8px, 3=24px)
+        left: 30,  // Небольшой отступ: ~16px от левого края экрана
         top: '50%',  // Вертикально по центру
         transform: 'translateY(-50%)',  // Точный центр по вертикали
-        color: 'text.secondary',
-        fontWeight: 500,
+        display: 'flex',
+        alignItems: 'center',
         zIndex: 1,  // Над пагинацией, если перекрытие
-        fontStyle: 'italic',
       }}
     >
-      {leftInfo}
-    </Typography>
+      <ConnectionStatusDot />
+    </Box>
   );
 
   const container = (
@@ -65,7 +64,22 @@ const ServerPagination: React.FC<ServerPaginationProps> = ({
       width: '100%',
       boxSizing: 'border-box',
       mr: align === 'right' ? 1 : 0,
+      gap: 2, // Отступ между текстом и пагинацией
     }}>
+      {leftInfo && (
+        <Typography
+          variant="body2"
+          sx={{
+            color: 'text.secondary',
+            fontWeight: 500,
+            fontStyle: 'italic',
+            whiteSpace: 'nowrap',
+            flexShrink: 0,
+          }}
+        >
+          {leftInfo}
+        </Typography>
+      )}
       <Box sx={{ display: 'flex', alignItems: 'center' }}>
         <Pagination
           count={totalPages}
@@ -91,7 +105,7 @@ const ServerPagination: React.FC<ServerPaginationProps> = ({
   );
 
   if (!fixedBottom) {
-    // Fallback для не-fixed: текст в flex слева
+    // Fallback для не-fixed: индикатор слева, текст и пагинация справа
     return (
       <Box sx={{
         position: 'relative',
@@ -104,12 +118,44 @@ const ServerPagination: React.FC<ServerPaginationProps> = ({
         boxSizing: 'border-box',
         mr: align === 'right' ? 1 : 0,
       }}>
+        <Box sx={{ position: 'absolute', left: 30, display: 'flex', alignItems: 'center' }}>
+          <ConnectionStatusDot />
+        </Box>
         {leftInfo && (
-          <Typography variant="body2" sx={{ color: 'text.secondary', fontWeight: 500, mr: 2 }}>
+          <Typography 
+            variant="body2" 
+            sx={{ 
+              color: 'text.secondary', 
+              fontWeight: 500,
+              fontStyle: 'italic',
+              whiteSpace: 'nowrap',
+              flexShrink: 0,
+              mr: 2 
+            }}
+          >
             {leftInfo}
           </Typography>
         )}
-        {container}
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          <Pagination
+            count={totalPages}
+            page={page}
+            onChange={onPageChange}
+            color={color === 'standard' ? 'standard' : color}
+            showFirstButton
+            showLastButton
+            siblingCount={1}
+            boundaryCount={1}
+            size={paginationSize}
+            sx={{
+              '& .MuiPagination-ul': {
+                flexWrap: 'nowrap',
+                alignItems: 'center',
+                gap: 0.5,
+              }
+            }}
+          />
+        </Box>
       </Box>
     );
   }
@@ -128,8 +174,8 @@ const ServerPagination: React.FC<ServerPaginationProps> = ({
       paddingRight: { xs: 2, md: 4 },
       backgroundColor: 'white',
     }}>
-      {leftInfoElement}  {/* Текст слева от экрана */}
-      {container}  {/* Пагинация справа */}
+      {statusIndicator}  {/* Индикатор статуса слева */}
+      {container}  {/* Текст и пагинация справа */}
     </Box>
   );
 };

@@ -134,3 +134,5 @@ export const TransmittalFilters: React.FC<TransmittalFiltersProps> = ({
     </Box>
   );
 };
+
+export default TransmittalFilters;

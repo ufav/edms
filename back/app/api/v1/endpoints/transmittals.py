@@ -2,7 +2,7 @@
 Transmittals endpoints
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Request, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from typing import List
@@ -15,7 +15,7 @@ from app.models.document import Document, DocumentRevision
 from app.models.document import File as FileModel
 from app.models.references import RevisionStatus
 from app.services.auth import get_current_active_user
-from app.services.audit_service import log_action, add_log_task
+from app.services.audit_service import log_action
 
 router = APIRouter()
 
@@ -42,7 +42,6 @@ class TransmittalRevisionRemove(BaseModel):
 async def delete_transmittal(
     transmittal_id: int,
     request: Request,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -66,15 +65,15 @@ async def delete_transmittal(
     db.commit()
 
     # Логирование действия
-    add_log_task(
-        background_tasks=background_tasks,
-        request=request,
+    log_action(
+        db=db,
         user_id=current_user.id,
         action="delete",
         entity_type="transmittal",
         entity_id=transmittal_id,
         old_values=old_values,
         new_values={"is_deleted": 1},
+        request=request,
     )
 
     return {"message": "Трансмиттал удален", "id": transmittal_id}
@@ -122,7 +121,6 @@ async def get_transmittals(
 async def create_transmittal(
     transmittal_data: TransmittalCreate,
     request: Request,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -190,15 +188,15 @@ async def create_transmittal(
         "created_by": db_transmittal.created_by,
         "is_deleted": db_transmittal.is_deleted,
     }
-    add_log_task(
-        background_tasks=background_tasks,
-        request=request,
+    log_action(
+        db=db,
         user_id=current_user.id,
         action="create",
         entity_type="transmittal",
         entity_id=db_transmittal.id,
         old_values=None,
         new_values=new_values,
+        request=request,
     )
     
     return {
@@ -222,7 +220,6 @@ async def update_transmittal(
     transmittal_id: int,
     transmittal_data: TransmittalUpdate,
     request: Request,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -274,15 +271,15 @@ async def update_transmittal(
         "title": transmittal.title,
         "counterparty_id": transmittal.counterparty_id,
     }
-    add_log_task(
-        background_tasks=background_tasks,
-        request=request,
+    log_action(
+        db=db,
         user_id=current_user.id,
         action="update",
         entity_type="transmittal",
         entity_id=transmittal_id,
         old_values=old_values,
         new_values=new_values,
+        request=request,
     )
     
     return {
@@ -640,7 +637,6 @@ async def get_active_revisions(
 async def send_transmittal(
     transmittal_id: int,
     request: Request,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -756,16 +752,15 @@ async def send_transmittal(
         "sender_id": current_user.id,
         "action": "send",
     }
-    # Логирование отправки трансмиттала
-    add_log_task(
-        background_tasks=background_tasks,
-        request=request,
+    log_action(
+        db=db,
         user_id=current_user.id,
-        action="send",
+        action="update",
         entity_type="transmittal",
         entity_id=transmittal_id,
         old_values=old_values,
         new_values=new_values,
+        request=request,
     )
     
     return {"message": "Трансмиттал успешно отправлен", "transmittal_id": transmittal.id}
@@ -775,7 +770,6 @@ async def send_transmittal(
 async def receive_transmittal(
     transmittal_id: int,
     request: Request,
-    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
@@ -819,18 +813,17 @@ async def receive_transmittal(
         "transmittal_date": transmittal.transmittal_date.isoformat() if transmittal.transmittal_date else None,
         "action": "receive",
     }
-    # Логирование получения трансмиттала
-    add_log_task(
-        background_tasks=background_tasks,
-        request=request,
+    log_action(
+        db=db,
         user_id=current_user.id,
-        action="receive",
+        action="update",
         entity_type="transmittal",
         entity_id=transmittal_id,
         old_values=old_values,
         new_values=new_values,
+        request=request,
     )
-
+    
     return {"message": "Трансмиттал успешно получен", "transmittal_id": transmittal.id}
 
 
