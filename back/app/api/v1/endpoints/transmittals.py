@@ -541,6 +541,7 @@ async def get_active_revisions(
     # Основной запрос для получения последних активных ревизий со статусом "Draft" и requires_transmittal = true
     from app.models.project import WorkflowPresetSequence, Project
     from sqlalchemy import func
+    from sqlalchemy.orm import load_only
     
     # Сначала находим последние ревизии для каждого документа
     latest_revisions_subquery = db.query(
@@ -551,11 +552,26 @@ async def get_active_revisions(
     ).group_by(DocumentRevision.document_id).subquery()
     
     # Основной запрос для получения последних ревизий со статусом "Draft" и requires_transmittal = true
+    # Используем load_only для DocumentRevision, чтобы не загружать несуществующие поля file_path, file_name и т.д.
     query = db.query(
         DocumentRevision,
         Document,
         RevisionDescription,
         WorkflowPresetSequence
+    ).options(
+        load_only(
+            DocumentRevision.id,
+            DocumentRevision.document_id,
+            DocumentRevision.number,
+            DocumentRevision.change_description,
+            DocumentRevision.uploaded_by,
+            DocumentRevision.is_deleted,
+            DocumentRevision.created_at,
+            DocumentRevision.revision_status_id,
+            DocumentRevision.revision_description_id,
+            DocumentRevision.revision_step_id,
+            DocumentRevision.workflow_status_id
+        )
     ).join(
         latest_revisions_subquery,
         DocumentRevision.id == latest_revisions_subquery.c.latest_revision_id
