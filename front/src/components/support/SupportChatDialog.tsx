@@ -27,6 +27,13 @@ const SupportFileImage: React.FC<{
   const imageUrlRef = useRef<string | null>(null);
 
   useEffect(() => {
+    // Проверяем, что fileId валиден
+    if (!fileId || fileId === null) {
+      setError(true);
+      setLoading(false);
+      return;
+    }
+    
     let isMounted = true;
     
     const loadImage = async () => {
@@ -282,6 +289,27 @@ const SupportChatDialog: React.FC<SupportChatDialogProps> = ({ open, ticketId, o
   }, []);
 
   const renderFilePreview = useCallback((file: { id: number; file_name: string; file_path: string; file_size: number; mime_type: string }, onDownload: () => void) => {
+    // Проверяем, что file.id существует и не равен null
+    if (!file.id) {
+      return (
+        <Box
+          sx={{
+            width: 200,
+            height: 200,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            border: '1px solid #ddd',
+            borderRadius: 1,
+            bgcolor: '#f5f5f5',
+          }}
+        >
+          <Typography variant="caption" color="text.secondary">
+            Ошибка: ID файла отсутствует
+          </Typography>
+        </Box>
+      );
+    }
     return (
       <SupportFileImage 
         ticketId={ticketId}

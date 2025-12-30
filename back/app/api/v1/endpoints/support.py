@@ -143,6 +143,7 @@ async def create_support_ticket(
                     mime_type=file.content_type,
                 )
                 db.add(ticket_file)
+                db.flush()  # Получаем ID файла
                 uploaded_files.append({
                     'id': ticket_file.id,
                     'file_name': ticket_file.file_name,
@@ -302,7 +303,7 @@ async def create_support_message(
     ticket_id: int,
     request: Request,
     background_tasks: BackgroundTasks,
-    message_text: str = Form(...),
+    message_text: str = Form(default=""),
     files: List[UploadFile] = File(default=[]),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
@@ -350,6 +351,10 @@ async def create_support_message(
         
         for file in files:
             try:
+                # Проверяем, что файл валиден
+                if not file.filename:
+                    continue  # Пропускаем файлы без имени
+                
                 # Читаем содержимое файла
                 file_content = await file.read()
                 
@@ -359,7 +364,7 @@ async def create_support_message(
                 
                 # Проверка типа файла (только изображения)
                 allowed_types = ['image/jpeg', 'image/png', 'image/gif', 'image/webp']
-                if file.content_type not in allowed_types:
+                if not file.content_type or file.content_type not in allowed_types:
                     raise HTTPException(status_code=400, detail=f"Файл {file.filename} должен быть изображением")
                 
                 # Генерируем уникальное имя файла
@@ -388,6 +393,7 @@ async def create_support_message(
                     mime_type=file.content_type,
                 )
                 db.add(ticket_file)
+                db.flush()  # Получаем ID файла
                 uploaded_files.append({
                     'id': ticket_file.id,
                     'file_name': ticket_file.file_name,

@@ -61,27 +61,11 @@ async def get_pending_approvals(
     ).group_by(DocumentRevision.document_id).subquery()
     
     # Запрос с информацией о последовательности для определения доступности кнопок
-    # Используем load_only для DocumentRevision, чтобы не загружать несуществующие поля file_path, file_name и т.д.
-    from sqlalchemy.orm import load_only
     query = db.query(
         Document,
         DocumentRevision,
         Project,
         WorkflowPresetSequence
-    ).options(
-        load_only(
-            DocumentRevision.id,
-            DocumentRevision.document_id,
-            DocumentRevision.number,
-            DocumentRevision.change_description,
-            DocumentRevision.uploaded_by,
-            DocumentRevision.is_deleted,
-            DocumentRevision.created_at,
-            DocumentRevision.revision_status_id,
-            DocumentRevision.revision_description_id,
-            DocumentRevision.revision_step_id,
-            DocumentRevision.workflow_status_id
-        )
     ).outerjoin(
         latest_revision_subquery,
         Document.id == latest_revision_subquery.c.document_id
