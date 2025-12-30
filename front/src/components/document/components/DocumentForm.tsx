@@ -9,6 +9,7 @@ import {
   MenuItem,
   Typography,
   Skeleton,
+  InputAdornment,
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { languageStore } from '../../../stores/LanguageStore';
@@ -184,7 +185,16 @@ const DocumentForm: React.FC<DocumentFormProps> = ({
               value={documentData.title || ''}
               onChange={(isCreating || isEditing) ? (e) => setDocumentData({title: e.target.value}) : undefined}
               fullWidth
-              InputProps={{ readOnly: !isCreating && !isEditing }}
+              InputProps={{
+                readOnly: !isCreating && !isEditing,
+                endAdornment: (isCreating || isEditing) ? (
+                  <InputAdornment position="end">
+                    <Typography variant="caption" color="text.secondary">
+                      {(documentData.title || '').length}
+                    </Typography>
+                  </InputAdornment>
+                ) : undefined,
+              }}
               size="small"
               variant="standard"
               error={validationErrors.title}
@@ -196,7 +206,16 @@ const DocumentForm: React.FC<DocumentFormProps> = ({
               value={documentData.title_native || ''}
               onChange={(isCreating || isEditing) ? (e) => setDocumentData({title_native: e.target.value}) : undefined}
               fullWidth
-              InputProps={{ readOnly: !isCreating && !isEditing }}
+              InputProps={{
+                readOnly: !isCreating && !isEditing,
+                endAdornment: (isCreating || isEditing) ? (
+                  <InputAdornment position="end">
+                    <Typography variant="caption" color="text.secondary">
+                      {(documentData.title_native || '').length}
+                    </Typography>
+                  </InputAdornment>
+                ) : undefined,
+              }}
               size="small"
               variant="standard"
             />

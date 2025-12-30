@@ -268,16 +268,18 @@ const ChatDialog: React.FC<ChatDialogProps> = ({
                 content: '""',
                 position: 'absolute',
                 bottom: 0,
-                [isOwnMessage ? 'right' : 'left']: '-8px',
                 width: 0,
                 height: 0,
                 borderStyle: 'solid',
                 ...(isOwnMessage
                   ? {
-                      borderWidth: '0 0 12px 12px',
-                      borderColor: 'transparent transparent #dcf8c6 transparent',
+                      right: '-8px',
+                      borderWidth: '0 12px 12px 0',
+                      borderColor: 'transparent #dcf8c6 transparent transparent',
+                      transform: 'scaleX(-1)',
                     }
                   : {
+                      left: '-8px',
                       borderWidth: '0 12px 12px 0',
                       borderColor: 'transparent #ffffff transparent transparent',
                     }),
@@ -389,7 +391,7 @@ const ChatDialog: React.FC<ChatDialogProps> = ({
         },
       }}
       TransitionComponent={Slide}
-      TransitionProps={{ direction: 'left' }}
+      TransitionProps={{ direction: 'left' } as any}
     >
       {/* Заголовок */}
       <Box sx={{ 
@@ -610,5 +612,4 @@ const ChatDialog: React.FC<ChatDialogProps> = ({
 };
 
 export default ChatDialog;
-export type { ChatMessage, ChatDialogProps };
 

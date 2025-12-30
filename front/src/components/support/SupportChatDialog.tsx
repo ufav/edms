@@ -14,6 +14,10 @@ interface SupportChatDialogProps {
   onClose: () => void;
 }
 
+// Кеш для blob'ов изображений (ключ: ticketId-fileId)
+const imageBlobCache = new Map<string, Blob>();
+const imageUrlCache = new Map<string, string>();
+
 // Компонент для отображения изображения из тикета (вынесен за пределы для предотвращения пересоздания)
 const SupportFileImage: React.FC<{ 
   ticketId: number; 
@@ -34,20 +38,46 @@ const SupportFileImage: React.FC<{
       return;
     }
     
+    const cacheKey = `${ticketId}-${fileId}`;
+    
+    // Проверяем кеш
+    const cachedUrl = imageUrlCache.get(cacheKey);
+    if (cachedUrl) {
+      setImageUrl(cachedUrl);
+      imageUrlRef.current = cachedUrl;
+      setLoading(false);
+      return;
+    }
+    
     let isMounted = true;
     
     const loadImage = async () => {
       try {
         setLoading(true);
         setError(false);
-        const blob = await supportApi.downloadFile(ticketId, fileId);
+        
+        // Проверяем кеш blob'ов
+        const cachedBlob = imageBlobCache.get(cacheKey);
+        let blob: Blob;
+        
+        if (cachedBlob) {
+          blob = cachedBlob;
+        } else {
+          blob = await supportApi.downloadFile(ticketId, fileId);
+          // Сохраняем blob в кеш
+          imageBlobCache.set(cacheKey, blob);
+        }
+        
         if (isMounted) {
-          // Освобождаем предыдущий URL, если есть
-          if (imageUrlRef.current) {
+          // Освобождаем предыдущий URL, если есть (но не из кеша)
+          if (imageUrlRef.current && !imageUrlCache.has(cacheKey)) {
             URL.revokeObjectURL(imageUrlRef.current);
           }
+          
           const url = URL.createObjectURL(blob);
           imageUrlRef.current = url;
+          // Сохраняем URL в кеш
+          imageUrlCache.set(cacheKey, url);
           setImageUrl(url);
           setLoading(false);
         }
@@ -64,7 +94,8 @@ const SupportFileImage: React.FC<{
     
     return () => {
       isMounted = false;
-      if (imageUrlRef.current) {
+      // Не освобождаем URL из кеша при размонтировании
+      if (imageUrlRef.current && !imageUrlCache.has(cacheKey)) {
         URL.revokeObjectURL(imageUrlRef.current);
         imageUrlRef.current = null;
       }
@@ -146,31 +177,8 @@ const SupportChatDialog: React.FC<SupportChatDialogProps> = ({ open, ticketId, o
   const [error, setError] = useState<string | null>(null);
   const [imagePreview, setImagePreview] = useState<{ url: string; fileName: string; fileId: number } | null>(null);
 
-  // WebSocket для real-time обновлений
-  const { isConnected } = useSupportWebSocket({
-    ticketId,
-    enabled: open,
-    onMessage: (newMessage) => {
-      // Добавляем новое сообщение в список
-      setMessages((prev) => {
-        // Проверяем, нет ли уже такого сообщения (избегаем дубликатов)
-        const exists = prev.some((msg) => msg.id === newMessage.id);
-        if (exists) {
-          return prev;
-        }
-        return [...prev, convertSupportMessageToChatMessage(newMessage)];
-      });
-    },
-    onConnected: () => {
-      console.log('WebSocket connected for ticket', ticketId);
-    },
-    onError: (err) => {
-      console.error('WebSocket error:', err);
-    },
-  });
-
   // Конвертация сообщения поддержки в универсальный формат
-  const convertSupportMessageToChatMessage = (msg: any): ChatMessage => {
+  const convertSupportMessageToChatMessage = useCallback((msg: any): ChatMessage => {
     // Определяем, является ли сообщение "своим" (от текущего пользователя)
     const isOwnMessage = msg.sender_type === 'user' && msg.sender_id === userStore.currentUser?.id;
     
@@ -185,7 +193,36 @@ const SupportChatDialog: React.FC<SupportChatDialogProps> = ({ open, ticketId, o
       // Добавляем флаг для определения "своих" сообщений
       is_own: isOwnMessage,
     };
-  };
+  }, []);
+
+  // Мемоизируем колбэки, чтобы они не пересоздавались при каждом рендере
+  const handleWebSocketMessage = useCallback((newMessage: any) => {
+    setMessages((prev) => {
+      // Проверяем, нет ли уже такого сообщения (избегаем дубликатов)
+      const exists = prev.some((msg) => msg.id === newMessage.id);
+      if (exists) {
+        return prev;
+      }
+      return [...prev, convertSupportMessageToChatMessage(newMessage)];
+    });
+  }, [convertSupportMessageToChatMessage]);
+  
+  const handleWebSocketConnected = useCallback(() => {
+    console.log('WebSocket connected for ticket', ticketId);
+  }, [ticketId]);
+  
+  const handleWebSocketError = useCallback((err: Event) => {
+    console.error('WebSocket error:', err);
+  }, []);
+
+  // WebSocket для real-time обновлений
+  const { isConnected } = useSupportWebSocket({
+    ticketId,
+    enabled: open,
+    onMessage: handleWebSocketMessage,
+    onConnected: handleWebSocketConnected,
+    onError: handleWebSocketError,
+  });
 
   // Загружаем тикет при открытии диалога
   const loadTicket = useCallback(async () => {
@@ -215,7 +252,7 @@ const SupportChatDialog: React.FC<SupportChatDialogProps> = ({ open, ticketId, o
     } finally {
       setLoading(false);
     }
-  }, [ticketId, t]);
+  }, [ticketId, t, convertSupportMessageToChatMessage]);
 
   useEffect(() => {
     if (open) {
@@ -223,7 +260,7 @@ const SupportChatDialog: React.FC<SupportChatDialogProps> = ({ open, ticketId, o
     }
   }, [open, ticketId, loadTicket]);
 
-  const handleSendMessage = async (text: string, files?: File[]): Promise<void> => {
+  const handleSendMessage = useCallback(async (text: string, files?: File[]): Promise<void> => {
     const formData = new FormData();
     formData.append('message_text', text || ' ');
     
@@ -243,7 +280,7 @@ const SupportChatDialog: React.FC<SupportChatDialogProps> = ({ open, ticketId, o
       }
       return [...prev, convertSupportMessageToChatMessage(newMessage)];
     });
-  };
+  }, [ticketId, convertSupportMessageToChatMessage]);
 
   const getStatusColor = (status: string) => {
     switch (status) {

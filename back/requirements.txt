@@ -35,3 +35,6 @@ boto3==1.37.1
 
 fastapi-pagination==0.14.3
 sqladmin==0.18.0
+
+# Telegram Bot
+python-telegram-bot==20.7

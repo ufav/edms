@@ -26,8 +26,9 @@ import {
 import { useTranslation } from 'react-i18next';
 import { disciplineStore } from '../../../stores/DisciplineStore';
 import { projectStore } from '../../../stores/ProjectStore';
-import { useEffect, useState, useRef, useLayoutEffect } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { projectsApi, type DocumentType } from '../../../api/client';
+import { observer } from 'mobx-react-lite';
 
 export interface DocumentFiltersProps {
   // Состояния фильтров
@@ -50,7 +51,7 @@ export interface DocumentFiltersProps {
   onExportToExcel: () => void;
 }
 
-export const DocumentFilters: React.FC<DocumentFiltersProps> = ({
+export const DocumentFilters: React.FC<DocumentFiltersProps> = observer(({
   searchTerm,
   filterStatus,
   selectedDisciplineId,
@@ -80,16 +81,23 @@ export const DocumentFilters: React.FC<DocumentFiltersProps> = ({
   const [revisionDescriptionsLoading, setRevisionDescriptionsLoading] = useState(false);
 
   // Загружаем типы документов при изменении дисциплины
+  const selectedProjectRef = useRef(projectStore.selectedProject);
+  
+  useEffect(() => {
+    selectedProjectRef.current = projectStore.selectedProject;
+  }, [projectStore.selectedProject]);
+  
   useEffect(() => {
     const loadDocumentTypes = async () => {
-      if (!selectedDisciplineId || !projectStore.selectedProject) {
+      const currentProject = selectedProjectRef.current;
+      if (!selectedDisciplineId || !currentProject) {
         setDocumentTypes([]);
         return;
       }
 
       setDocumentTypesLoading(true);
       try {
-        const types = await projectsApi.getDocumentTypes(projectStore.selectedProject.id, selectedDisciplineId);
+        const types = await projectsApi.getDocumentTypes(currentProject.id, selectedDisciplineId);
         setDocumentTypes(types);
       } catch (error) {
         console.error('Error loading document types:', error);
@@ -100,19 +108,20 @@ export const DocumentFilters: React.FC<DocumentFiltersProps> = ({
     };
 
     loadDocumentTypes();
-  }, [selectedDisciplineId, projectStore.selectedProject]);
+  }, [selectedDisciplineId]);
 
   // Загружаем revision descriptions при монтировании
   useEffect(() => {
     const loadRevisionDescriptions = async () => {
-      if (!projectStore.selectedProject) {
+      const currentProject = selectedProjectRef.current;
+      if (!currentProject) {
         setRevisionDescriptions([]);
         return;
       }
 
       try {
         setRevisionDescriptionsLoading(true);
-        const descriptions = await projectsApi.getRevisionDescriptions(projectStore.selectedProject.id);
+        const descriptions = await projectsApi.getRevisionDescriptions(currentProject.id);
         setRevisionDescriptions(descriptions);
       } catch (error) {
         console.error('Error loading revision descriptions:', error);
@@ -123,18 +132,19 @@ export const DocumentFilters: React.FC<DocumentFiltersProps> = ({
     };
 
     loadRevisionDescriptions();
-  }, [projectStore.selectedProject]);
+  }, []);
 
   // Сбрасываем выбранный тип документа при изменении дисциплины
   const prevDocumentTypesRef = useRef<DocumentType[]>([]);
-  const onDocumentTypeChangeRef = useRef(onDocumentTypeChange);
+  const resetTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
-  // Обновляем ref функции при каждом рендере
   useEffect(() => {
-    onDocumentTypeChangeRef.current = onDocumentTypeChange;
-  }, [onDocumentTypeChange]);
-  
-  useLayoutEffect(() => {
+    // Очищаем предыдущий таймаут, если он есть
+    if (resetTimeoutRef.current) {
+      clearTimeout(resetTimeoutRef.current);
+      resetTimeoutRef.current = null;
+    }
+    
     // Обновляем ref только после проверки, чтобы избежать обновления во время рендеринга
     const prevTypes = prevDocumentTypesRef.current;
     prevDocumentTypesRef.current = documentTypes;
@@ -143,11 +153,22 @@ export const DocumentFilters: React.FC<DocumentFiltersProps> = ({
       const typeExists = documentTypes.some(type => type.id === selectedDocumentTypeId);
       if (!typeExists && prevTypes.length > 0) {
         // Тип документа больше не существует в новой дисциплине - сбрасываем выбор
-        // Используем useLayoutEffect для синхронного обновления до отрисовки
-        onDocumentTypeChangeRef.current(null);
+        // Используем requestAnimationFrame для отложенного вызова после завершения рендеринга
+        resetTimeoutRef.current = setTimeout(() => {
+          onDocumentTypeChange(null);
+          resetTimeoutRef.current = null;
+        }, 0);
       }
     }
-  }, [documentTypes, selectedDocumentTypeId]);
+    
+    // Очистка при размонтировании
+    return () => {
+      if (resetTimeoutRef.current) {
+        clearTimeout(resetTimeoutRef.current);
+        resetTimeoutRef.current = null;
+      }
+    };
+  }, [documentTypes, selectedDocumentTypeId, onDocumentTypeChange]);
 
 
   return (
@@ -247,6 +268,7 @@ export const DocumentFilters: React.FC<DocumentFiltersProps> = ({
           >
             <MenuItem value="all">{t('filter.all')}</MenuItem>
             {disciplineStore.disciplines
+              .slice()
               .sort((a, b) => a.code.localeCompare(b.code))
               .map((discipline) => (
               <MenuItem key={discipline.id} value={discipline.id}>
@@ -299,6 +321,7 @@ export const DocumentFilters: React.FC<DocumentFiltersProps> = ({
           >
             <MenuItem value="all">{t('filter.all')}</MenuItem>
             {documentTypes
+              .slice()
               .sort((a, b) => a.code.localeCompare(b.code))
               .map((type) => (
               <MenuItem key={type.id} value={type.id}>
@@ -330,6 +353,7 @@ export const DocumentFilters: React.FC<DocumentFiltersProps> = ({
           >
             <MenuItem value="all">{t('filter.all')}</MenuItem>
             {revisionDescriptions
+              .slice()
               .sort((a, b) => a.code.localeCompare(b.code))
               .map((description) => (
               <MenuItem key={description.id} value={description.id}>
@@ -367,4 +391,5 @@ export const DocumentFilters: React.FC<DocumentFiltersProps> = ({
       </Box>
     </Box>
   );
-};
+});
+

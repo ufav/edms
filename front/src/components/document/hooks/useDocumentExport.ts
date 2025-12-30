@@ -369,14 +369,27 @@ export const useDocumentExport = (): UseDocumentExportReturn => {
       const fileName = `documents_${projectName}_${new Date().toISOString().split('T')[0]}.xlsx`;
 
       // Сохраняем файл с поддержкой стилей
-      // xlsx-js-style требует использования writeFile с опциями
+      // Используем XLSX.write с типом 'array' и создаем Blob для скачивания в браузере
       const wopts: any = { 
         bookType: 'xlsx', 
         bookSST: false, 
-        type: 'binary',
+        type: 'array', // Используем 'array' вместо 'binary' для браузера
         cellStyles: true 
       };
-      XLSX.writeFile(wb, fileName, wopts);
+      
+      // Генерируем массив байтов
+      const wbout = XLSX.write(wb, wopts);
+      
+      // Создаем Blob и скачиваем файл
+      const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
     } catch (error: any) {
       console.error('Ошибка при экспорте в Excel:', error);
       throw error;

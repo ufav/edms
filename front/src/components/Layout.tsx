@@ -331,6 +331,23 @@ const Layout: React.FC<LayoutProps> = observer(({
                 </ListItemIcon>
                 <ListItemText>{t('support.my_tickets') || 'Мои обращения'}</ListItemText>
               </MenuItem>
+              {userStore.currentUser?.is_admin && (
+                <MenuItem onClick={async () => {
+                  handleClose();
+                  try {
+                    const { supportApi } = await import('../api/client');
+                    const result = await supportApi.startTelegramPolling();
+                    alert(result.message || 'Polling запущен');
+                  } catch (error: any) {
+                    alert('Ошибка: ' + (error.response?.data?.detail || error.message || 'Неизвестная ошибка'));
+                  }
+                }}>
+                  <ListItemIcon>
+                    <SupportIcon fontSize="small" />
+                  </ListItemIcon>
+                  <ListItemText>Запустить Telegram Polling</ListItemText>
+                </MenuItem>
+              )}
               <Divider />
               <MenuItem onClick={() => {
                 handleClose();

@@ -592,7 +592,7 @@ const DocumentsPage: React.FC = observer(() => {
           <Box
             sx={{
               position: 'fixed',
-              bottom: 90,
+              bottom: 130,
               right: 24,
               zIndex: 1000,
             }}

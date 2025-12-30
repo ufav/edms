@@ -21,7 +21,7 @@ const SupportFab: React.FC = () => {
           onClick={handleOpenCreate}
           sx={{
             position: 'fixed',
-            bottom: 24,
+            bottom: 60,
             right: 24,
             zIndex: 1000,
           }}

@@ -20,6 +20,9 @@ export const setAuthToken = (token: string) => {
 export const removeAuthToken = () => {
   ACCESS_TOKEN = null;
 };
+export const getAuthToken = (): string | null => {
+  return ACCESS_TOKEN;
+};
 
 // Unauthorized handler that the app can set to react on 401 (e.g., logout)
 let onUnauthorized: (() => void) | null = null;
@@ -1460,6 +1463,24 @@ export const supportApi = {
     const response = await apiClient.get(`/support/tickets/${ticketId}/files/${fileId}/download`, {
       responseType: 'blob',
     });
+    return response.data;
+  },
+  
+  // Получение chat_id из Telegram
+  getTelegramChatId: async (): Promise<any> => {
+    const response = await apiClient.get('/support/telegram/get-chat-id');
+    return response.data;
+  },
+  
+  // Установка webhook для Telegram бота
+  setupTelegramWebhook: async (webhookUrl: string): Promise<any> => {
+    const response = await apiClient.post(`/support/telegram/setup-webhook?webhook_url=${encodeURIComponent(webhookUrl)}`);
+    return response.data;
+  },
+  
+  // Запуск polling для локальной разработки (без webhook)
+  startTelegramPolling: async (): Promise<any> => {
+    const response = await apiClient.post('/support/telegram/start-polling');
     return response.data;
   },
 };

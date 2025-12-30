@@ -57,9 +57,11 @@ class DisciplineStore {
 
   // Очистка дисциплин
   clearDisciplines() {
-    this.disciplines = [];
-    this.loadedProjectId = null;
-    this.error = null;
+    runInAction(() => {
+      this.disciplines = [];
+      this.loadedProjectId = null;
+      this.error = null;
+    });
   }
 }
 

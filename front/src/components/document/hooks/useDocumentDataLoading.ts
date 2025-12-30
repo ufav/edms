@@ -24,7 +24,10 @@ export const useDocumentDataLoading = (): UseDocumentDataLoadingReturn => {
       // Загружаем дисциплины проекта для фильтров
       disciplineStore.loadDisciplines(projectId);
     } else {
-      disciplineStore.clearDisciplines();
+      // Используем setTimeout для отложенного вызова, чтобы избежать обновления во время рендеринга
+      setTimeout(() => {
+        disciplineStore.clearDisciplines();
+      }, 0);
     }
   }, [projectStore.selectedProject]);
 
