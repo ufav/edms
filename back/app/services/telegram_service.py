@@ -32,8 +32,8 @@ class TelegramService:
         return {
             "keyboard": [
                 [
-                    {"text": "📋 /tickets"},
-                    {"text": "❓ /help"}
+                    {"text": "📋 Тикеты"},
+                    {"text": "❓ Справка"}
                 ]
             ],
             "resize_keyboard": True,
@@ -176,7 +176,8 @@ class TelegramService:
         user_name: str,
         subject: str,
         message: str,
-        has_files: bool = False
+        has_files: bool = False,
+        files: Optional[List[dict]] = None
     ) -> bool:
         """
         Отправляет уведомление о новом тикете администратору
@@ -187,6 +188,7 @@ class TelegramService:
             subject: Тема тикета
             message: Первое сообщение
             has_files: Есть ли прикрепленные файлы
+            files: Список файлов с информацией (id, file_path, mime_type, file_name)
         
         Returns:
             True если уведомление отправлено успешно
@@ -197,10 +199,8 @@ class TelegramService:
         text = f"🔔 <b>Новый тикет #{ticket_id}</b>\n\n"
         text += f"👤 <b>Пользователь:</b> {user_name}\n"
         text += f"📋 <b>Тема:</b> {subject}\n"
-        text += f"💬 <b>Сообщение:</b>\n{message}\n"
-        
-        if has_files:
-            text += "\n📎 Прикреплены файлы"
+        if message and message.strip() and message.strip() != " ":
+            text += f"💬 <b>Сообщение:</b>\n{message}\n"
         
         # Добавляем кнопки для ответа и закрытия
         reply_markup = {
@@ -215,6 +215,78 @@ class TelegramService:
                 }
             ]]
         }
+        
+        # Если есть файлы-изображения, отправляем их
+        if files:
+            from app.services.minio_service import minio_service
+            from app.core.config import settings
+            
+            image_files = [f for f in files if f.get('mime_type', '').startswith('image/')]
+            
+            if image_files:
+                # Отправляем первое изображение с текстом как подпись
+                first_image = image_files[0]
+                try:
+                    if settings.USE_MINIO:
+                        # Загружаем файл из MinIO
+                        file_data = await minio_service.download_file(first_image.get('file_path', ''))
+                        if file_data:
+                            caption = text
+                            if len(image_files) > 1:
+                                caption += f"\n\n📎 И еще {len(image_files) - 1} файл(ов)"
+                            
+                            await self.send_photo_bytes(
+                                chat_id=self.admin_chat_id,
+                                photo_bytes=file_data,
+                                caption=caption,
+                                filename=first_image.get('file_name', 'image.jpg')
+                            )
+                            
+                            # Отправляем остальные изображения
+                            for img_file in image_files[1:]:
+                                try:
+                                    file_data = await minio_service.download_file(img_file.get('file_path', ''))
+                                    if file_data:
+                                        await self.send_photo_bytes(
+                                            chat_id=self.admin_chat_id,
+                                            photo_bytes=file_data,
+                                            filename=img_file.get('file_name', 'image.jpg')
+                                        )
+                                except Exception as e:
+                                    logger.error(f"Error sending additional image: {e}")
+                            
+                            # Если есть не-изображения, отправляем текстовое сообщение
+                            non_image_files = [f for f in files if not f.get('mime_type', '').startswith('image/')]
+                            if non_image_files:
+                                file_names = ', '.join([f.get('file_name', 'файл') for f in non_image_files])
+                                await self.send_message(
+                                    chat_id=self.admin_chat_id,
+                                    text=f"📎 Прикреплены файлы: {file_names}",
+                                    reply_markup=reply_markup
+                                )
+                            else:
+                                # Отправляем кнопки отдельным сообщением, если все файлы - изображения
+                                await self.send_message(
+                                    chat_id=self.admin_chat_id,
+                                    text=" ",
+                                    reply_markup=reply_markup
+                                )
+                            return True
+                except Exception as e:
+                    logger.error(f"Error sending image to Telegram: {e}")
+                    # Если не удалось отправить изображение, отправляем текстовое сообщение
+                    text += "\n📎 Прикреплены файлы"
+                    return await self.send_message(
+                        chat_id=self.admin_chat_id,
+                        text=text,
+                        reply_markup=reply_markup
+                    )
+            else:
+                # Если есть файлы, но не изображения
+                file_names = ', '.join([f.get('file_name', 'файл') for f in files])
+                text += f"\n📎 Прикреплены файлы: {file_names}"
+        elif has_files:
+            text += "\n📎 Прикреплены файлы"
         
         # Для уведомлений о тикетах используем только inline-клавиатуру
         # Постоянную клавиатуру устанавливаем отдельно

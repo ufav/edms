@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import { getAuthToken } from '../api/client';
+import { getAuthToken } from '../../../api/client';
 
 interface WebSocketMessage {
   type: string;
@@ -8,7 +8,7 @@ interface WebSocketMessage {
   user_id?: number;
 }
 
-interface UseSupportWebSocketOptions {
+export interface UseSupportWebSocketOptions {
   ticketId: number;
   enabled: boolean;
   onMessage?: (message: any) => void;
@@ -26,8 +26,8 @@ export const useSupportWebSocket = ({
   const [isConnected, setIsConnected] = useState(false);
   const reconnectAttemptsRef = useRef(0);
   const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const pingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const shouldReconnectRef = useRef(true);
   const isConnectingRef = useRef(false);
   

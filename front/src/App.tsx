@@ -4,7 +4,7 @@ import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import Login from './components/Login';
 import Layout from './components/Layout';
-import SupportFab from './components/support/SupportFab';
+import { SupportFab } from './components/support';
 import Dashboard from './components/Dashboard';
 import ProjectsPage from './components/ProjectsPage';
 import DocumentsPage from './components/DocumentsPage';

@@ -64,6 +64,8 @@ export interface ChatDialogProps {
   showStatusChip?: boolean;
   statusChip?: React.ReactNode;
   onNewMessage?: (message: ChatMessage) => void; // Для WebSocket
+  disabled?: boolean; // Отключить отправку сообщений
+  actionButton?: React.ReactNode; // Дополнительная кнопка действий
 }
 
 const CommentSkeleton = () => (
@@ -99,6 +101,8 @@ const ChatDialog: React.FC<ChatDialogProps> = ({
   showStatusChip = false,
   statusChip,
   onNewMessage,
+  disabled = false,
+  actionButton,
 }) => {
   const { t } = useTranslation();
   const [newMessage, setNewMessage] = useState('');
@@ -145,9 +149,9 @@ const ChatDialog: React.FC<ChatDialogProps> = ({
 
   const defaultGetSenderName = (message: ChatMessage) => {
     if (message.user_name) return message.user_name;
-    if (message.sender_type === 'user') return t('support.you') || 'Вы';
     if (message.sender_type === 'support') return t('support.support') || 'Поддержка';
-    return 'Неизвестно';
+    // Для пользователя имя будет определяться через is_own в renderMessage
+    return 'Пользователь';
   };
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -209,7 +213,7 @@ const ChatDialog: React.FC<ChatDialogProps> = ({
     }
   };
 
-  const renderMessage = (message: ChatMessage) => {
+  const renderMessage = (message: ChatMessage, index: number) => {
     const messageText = message.content || message.message_text || '';
     const senderName = getSenderName ? getSenderName(message) : defaultGetSenderName(message);
     const dateStr = formatDate ? formatDate(message.created_at) : defaultFormatDate(message.created_at);
@@ -219,13 +223,68 @@ const ChatDialog: React.FC<ChatDialogProps> = ({
       ? message.is_own 
       : (message.sender_type === 'user' || message.user_id !== undefined);
 
+    // Проверяем, нужно ли показывать имя отправителя
+    // Показываем имя, если:
+    // 1. Это первое сообщение
+    // 2. Предыдущее сообщение от другого отправителя
+    // 3. Разница во времени больше 5 минут
+    const shouldShowSenderName = (() => {
+      if (index === 0) return true;
+      
+      const prevMessage = messages[index - 1];
+      if (!prevMessage) return true;
+      
+      const prevIsOwn = prevMessage.is_own !== undefined 
+        ? prevMessage.is_own 
+        : (prevMessage.sender_type === 'user' || prevMessage.user_id !== undefined);
+      
+      // Если предыдущее сообщение от другого отправителя
+      if (prevIsOwn !== isOwnMessage) return true;
+      
+      // Проверяем разницу во времени (5 минут = 300000 мс)
+      const currentTime = new Date(message.created_at).getTime();
+      const prevTime = new Date(prevMessage.created_at).getTime();
+      const timeDiff = currentTime - prevTime;
+      
+      if (timeDiff > 5 * 60 * 1000) return true; // Больше 5 минут
+      
+      return false;
+    })();
+
+    // Проверяем, является ли это последним сообщением в группе
+    // (для показа треугольника только у последнего сообщения)
+    const isLastInGroup = (() => {
+      // Если это последнее сообщение в списке
+      if (index === messages.length - 1) return true;
+      
+      const nextMessage = messages[index + 1];
+      if (!nextMessage) return true;
+      
+      const nextIsOwn = nextMessage.is_own !== undefined 
+        ? nextMessage.is_own 
+        : (nextMessage.sender_type === 'user' || nextMessage.user_id !== undefined);
+      
+      // Если следующее сообщение от другого отправителя
+      if (nextIsOwn !== isOwnMessage) return true;
+      
+      // Проверяем разницу во времени (5 минут = 300000 мс)
+      const currentTime = new Date(message.created_at).getTime();
+      const nextTime = new Date(nextMessage.created_at).getTime();
+      const timeDiff = nextTime - currentTime;
+      
+      if (timeDiff > 5 * 60 * 1000) return true; // Больше 5 минут
+      
+      return false;
+    })();
+
     return (
       <Box
         key={message.id}
         sx={{
           display: 'flex',
           justifyContent: isOwnMessage ? 'flex-end' : 'flex-start',
-          mb: 1.5,
+          // Одинаковое маленькое расстояние между всеми сообщениями (как в WhatsApp)
+          mb: 0.25,
           px: 1,
         }}
       >
@@ -237,19 +296,19 @@ const ChatDialog: React.FC<ChatDialogProps> = ({
             alignItems: isOwnMessage ? 'flex-end' : 'flex-start',
           }}
         >
-          {/* Имя отправителя (только для чужих сообщений) */}
-          {!isOwnMessage && (
+          {/* Имя отправителя (показываем для всех, если нужно) */}
+          {shouldShowSenderName && (
             <Typography
               variant="caption"
               sx={{
                 color: 'text.secondary',
-                mb: 0.5,
+                mb: 0.25, // Уменьшаем отступ у имени, чтобы расстояние было одинаковым
                 px: 1,
                 fontSize: '0.75rem',
                 fontWeight: 500,
               }}
             >
-              {senderName}
+              {isOwnMessage ? (t('support.you') || 'Вы') : senderName}
             </Typography>
           )}
 
@@ -263,27 +322,29 @@ const ChatDialog: React.FC<ChatDialogProps> = ({
               backgroundColor: isOwnMessage ? '#dcf8c6' : '#ffffff',
               boxShadow: '0 1px 2px rgba(0, 0, 0, 0.1)',
               border: isOwnMessage ? 'none' : '1px solid #e5e5e5',
-              // Хвостик (tail) как в WhatsApp
-              '&::before': {
-                content: '""',
-                position: 'absolute',
-                bottom: 0,
-                width: 0,
-                height: 0,
-                borderStyle: 'solid',
-                ...(isOwnMessage
-                  ? {
-                      right: '-8px',
-                      borderWidth: '0 12px 12px 0',
-                      borderColor: 'transparent #dcf8c6 transparent transparent',
-                      transform: 'scaleX(-1)',
-                    }
-                  : {
-                      left: '-8px',
-                      borderWidth: '0 12px 12px 0',
-                      borderColor: 'transparent #ffffff transparent transparent',
-                    }),
-              },
+              // Хвостик (tail) как в WhatsApp - только у последнего сообщения в группе
+              ...(isLastInGroup && {
+                '&::before': {
+                  content: '""',
+                  position: 'absolute',
+                  bottom: 0,
+                  width: 0,
+                  height: 0,
+                  borderStyle: 'solid',
+                  ...(isOwnMessage
+                    ? {
+                        right: '-8px',
+                        borderWidth: '0 12px 12px 0',
+                        borderColor: 'transparent #dcf8c6 transparent transparent',
+                        transform: 'scaleX(-1)',
+                      }
+                    : {
+                        left: '-8px',
+                        borderWidth: '0 12px 12px 0',
+                        borderColor: 'transparent #ffffff transparent transparent',
+                      }),
+                },
+              }),
             }}
           >
             <Typography
@@ -417,7 +478,9 @@ const ChatDialog: React.FC<ChatDialogProps> = ({
               </Box>
             )}
           </Box>
-          <IconButton 
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            {actionButton}
+            <IconButton 
             onClick={onClose} 
             size="small"
             sx={{ 
@@ -427,6 +490,7 @@ const ChatDialog: React.FC<ChatDialogProps> = ({
           >
             <CloseIcon />
           </IconButton>
+          </Box>
         </Box>
       </Box>
 
@@ -482,7 +546,7 @@ const ChatDialog: React.FC<ChatDialogProps> = ({
           </Box>
         ) : (
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-            {messages.map((message) => renderMessage(message))}
+            {messages.map((message, index) => renderMessage(message, index))}
             <div ref={messagesEndRef} />
           </Box>
         )}
@@ -568,7 +632,7 @@ const ChatDialog: React.FC<ChatDialogProps> = ({
             value={newMessage}
             onChange={(e) => setNewMessage(e.target.value)}
             placeholder={placeholder || t('support.type_message') || 'Введите сообщение...'}
-            disabled={submitting}
+            disabled={disabled || submitting}
             variant="outlined"
             size="small"
             sx={{ 
@@ -590,7 +654,7 @@ const ChatDialog: React.FC<ChatDialogProps> = ({
             variant="contained"
             startIcon={submitting ? <CircularProgress size={16} /> : <SendIcon />}
             onClick={handleSubmit}
-            disabled={submitting || (!newMessage.trim() && files.length === 0)}
+            disabled={disabled || submitting || (!newMessage.trim() && files.length === 0)}
             sx={{
               borderRadius: 2,
               px: 3,

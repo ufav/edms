@@ -32,11 +32,13 @@ import {
   AccountTree as WorkflowIcon,
   History as HistoryIcon,
   Support as SupportIcon,
+  Notifications as NotificationsIcon,
 } from '@mui/icons-material';
 import ProjectSelector from './ProjectSelector';
 import ProfileDialog from './ProfileDialog';
-import SupportFab from './support/SupportFab';
-import SupportTicketsListDialog from './support/SupportTicketsListDialog';
+import NotificationsDialog from './NotificationsDialog';
+import { SupportFab, SupportTicketsListDialog, SupportChatDialog } from './support';
+import { notificationsApi } from '../api/client';
 import { useTranslation } from 'react-i18next';
 import { observer } from 'mobx-react-lite';
 import { projectStore } from '../stores/ProjectStore';
@@ -62,9 +64,14 @@ const Layout: React.FC<LayoutProps> = observer(({
   onProjectSelect
 }) => {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const [notificationsAnchorEl, setNotificationsAnchorEl] = useState<null | HTMLElement>(null);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [supportTicketsOpen, setSupportTicketsOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
+  const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
+  const [selectedTicketId, setSelectedTicketId] = useState<number | null>(null);
+  const [chatOpen, setChatOpen] = useState(false);
   const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 0 });
   const menuRef = useRef<HTMLDivElement>(null);
   const theme = useTheme();
@@ -74,6 +81,11 @@ const Layout: React.FC<LayoutProps> = observer(({
 
   const handleMenu = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
+  };
+
+  const handleNotificationsMenu = (event: React.MouseEvent<HTMLElement>) => {
+    setNotificationsAnchorEl(event.currentTarget);
+    setNotificationsOpen(true);
   };
 
   // Функция для обновления позиции индикатора
@@ -113,6 +125,23 @@ const Layout: React.FC<LayoutProps> = observer(({
   useEffect(() => {
     updateIndicator();
   }, [projectStore.selectedProject]);
+
+  // Загружаем количество непрочитанных уведомлений
+  useEffect(() => {
+    const loadUnreadCount = async () => {
+      try {
+        const count = await notificationsApi.getUnreadCount();
+        setUnreadNotificationsCount(count);
+      } catch (error) {
+        console.error('Error loading unread notifications count:', error);
+      }
+    };
+
+    loadUnreadCount();
+    // Обновляем каждые 30 секунд
+    const interval = setInterval(loadUnreadCount, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleClose = () => {
     setAnchorEl(null);
@@ -279,6 +308,19 @@ const Layout: React.FC<LayoutProps> = observer(({
 
           {/* User Menu */}
           <Box sx={{ ml: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
+            {/* Notifications Button */}
+            <IconButton
+              size="large"
+              aria-label="notifications"
+              onClick={handleNotificationsMenu}
+              color="inherit"
+            >
+              <Badge badgeContent={unreadNotificationsCount > 0 ? unreadNotificationsCount : undefined} color="error">
+                <NotificationsIcon />
+              </Badge>
+            </IconButton>
+            
+            {/* Profile Button */}
             <IconButton
               size="large"
               aria-label="account of current user"
@@ -337,15 +379,15 @@ const Layout: React.FC<LayoutProps> = observer(({
                   try {
                     const { supportApi } = await import('../api/client');
                     const result = await supportApi.startTelegramPolling();
-                    alert(result.message || 'Polling запущен');
+                    alert(result.message || t('support.telegram.polling_started') || 'Polling запущен');
                   } catch (error: any) {
-                    alert('Ошибка: ' + (error.response?.data?.detail || error.message || 'Неизвестная ошибка'));
+                    alert((t('support.telegram.polling_error') || 'Ошибка') + ': ' + (error.response?.data?.detail || error.message || t('common.unknown_error') || 'Неизвестная ошибка'));
                   }
                 }}>
                   <ListItemIcon>
                     <SupportIcon fontSize="small" />
                   </ListItemIcon>
-                  <ListItemText>Запустить Telegram Polling</ListItemText>
+                  <ListItemText>{t('support.telegram.start_polling') || 'Запустить Telegram Polling'}</ListItemText>
                 </MenuItem>
               )}
               <Divider />
@@ -411,6 +453,27 @@ const Layout: React.FC<LayoutProps> = observer(({
       {/* Profile Dialog */}
       <ProfileDialog open={profileOpen} onClose={() => setProfileOpen(false)} username={user?.username || undefined} />
       
+      {/* Notifications Popover */}
+      <NotificationsDialog
+        open={notificationsOpen}
+        anchorEl={notificationsAnchorEl}
+        onClose={() => {
+          setNotificationsOpen(false);
+          setNotificationsAnchorEl(null);
+          // Обновляем счетчик при закрытии
+          notificationsApi.getUnreadCount().then(setUnreadNotificationsCount).catch(console.error);
+        }}
+        onNotificationClick={(notification) => {
+          // Если уведомление связано с тикетом, открываем чат с этим тикетом
+          if (notification.related_entity_type === 'support_ticket' && notification.related_entity_id) {
+            setNotificationsOpen(false);
+            setNotificationsAnchorEl(null);
+            setSelectedTicketId(notification.related_entity_id);
+            setChatOpen(true);
+          }
+        }}
+      />
+      
       {/* Support Tickets Dialog */}
       <SupportTicketsListDialog
         open={supportTicketsOpen}
@@ -420,6 +483,18 @@ const Layout: React.FC<LayoutProps> = observer(({
           // Можно также добавить отдельное состояние для создания
         }}
       />
+      
+      {/* Support Chat Dialog - для открытия конкретного тикета */}
+      {selectedTicketId !== null && (
+        <SupportChatDialog
+          open={chatOpen}
+          ticketId={selectedTicketId}
+          onClose={() => {
+            setChatOpen(false);
+            setSelectedTicketId(null);
+          }}
+        />
+      )}
       
       {/* Support FAB - только для создания нового тикета */}
       <SupportFab />

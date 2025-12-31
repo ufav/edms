@@ -17,7 +17,7 @@ import {
 } from '@mui/material';
 import { Close as CloseIcon, Add as AddIcon } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
-import { supportApi } from '../../api/client';
+import { supportApi } from '../../../api/client';
 import SupportChatDialog from './SupportChatDialog';
 
 interface SupportTicketsListDialogProps {

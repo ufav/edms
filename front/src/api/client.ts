@@ -1458,6 +1458,12 @@ export const supportApi = {
     return response.data;
   },
   
+  // Возврат тикета в работу
+  reopenTicket: async (ticketId: number): Promise<any> => {
+    const response = await apiClient.post(`/support/tickets/${ticketId}/reopen`);
+    return response.data;
+  },
+  
   // Скачивание файла
   downloadFile: async (ticketId: number, fileId: number): Promise<Blob> => {
     const response = await apiClient.get(`/support/tickets/${ticketId}/files/${fileId}/download`, {
@@ -1910,5 +1916,31 @@ export const auditLogsApi = {
   },
 };
 
+
+export const notificationsApi = {
+  // Получить уведомления пользователя
+  getNotifications: async (unreadOnly: boolean = false, limit: number = 50): Promise<any[]> => {
+    const response = await apiClient.get('/notifications/', { 
+      params: { unread_only: unreadOnly, limit } 
+    });
+    return response.data;
+  },
+
+  // Получить количество непрочитанных уведомлений
+  getUnreadCount: async (): Promise<number> => {
+    const response = await apiClient.get('/notifications/unread-count/');
+    return response.data.count || 0;
+  },
+
+  // Отметить уведомление как прочитанное
+  markAsRead: async (notificationId: number): Promise<void> => {
+    await apiClient.post(`/notifications/${notificationId}/mark-read/`);
+  },
+
+  // Отметить все уведомления как прочитанные
+  markAllAsRead: async (): Promise<void> => {
+    await apiClient.post('/notifications/mark-all-read/');
+  },
+};
 
 export default apiClient;

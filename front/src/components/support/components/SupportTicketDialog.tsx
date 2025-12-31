@@ -14,7 +14,7 @@ import {
 } from '@mui/material';
 import { Close as CloseIcon, CloudUpload as CloudUploadIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
-import { supportApi } from '../../api/client';
+import { supportApi } from '../../../api/client';
 
 interface SupportTicketDialogProps {
   open: boolean;
@@ -269,9 +269,9 @@ const SupportTicketDialog: React.FC<SupportTicketDialogProps> = ({ open, onClose
           onClick={handleSubmit}
           variant="contained"
           disabled={loading || !subject.trim() || !message.trim()}
-          startIcon={loading ? <CircularProgress size={20} /> : null}
+          startIcon={loading ? <CircularProgress size={20} color="inherit" /> : null}
         >
-          {loading ? t('common.sending') || 'Отправка...' : t('support.send') || 'Отправить'}
+          {loading ? (t('common.sending') || t('support.sending') || 'Отправка...') : (t('support.send') || 'Отправить')}
         </Button>
       </DialogActions>
     </Dialog>

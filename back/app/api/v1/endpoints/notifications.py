@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from pydantic import BaseModel
+from datetime import timezone
 
 from app.core.database import get_db
 from app.models.user import User
@@ -27,6 +28,8 @@ class NotificationResponse(BaseModel):
     read_at: Optional[str]
     document_id: Optional[int]
     document_title: Optional[str]
+    related_entity_type: Optional[str] = None
+    related_entity_id: Optional[int] = None
     created_at: str
 
     class Config:
@@ -50,12 +53,17 @@ async def get_notifications(
     current_user: User = Depends(get_current_active_user)
 ):
     """Получить уведомления пользователя"""
-    notification_service = NotificationService()
-    notifications = await notification_service.get_user_notifications(
-        user_id=current_user.id,
-        unread_only=unread_only,
-        limit=limit
+    from sqlalchemy.orm import joinedload
+    
+    # Загружаем уведомления с документом через eager loading
+    query = db.query(Notification).options(joinedload(Notification.document)).filter(
+        Notification.user_id == current_user.id
     )
+    
+    if unread_only:
+        query = query.filter(Notification.is_read == False)
+    
+    notifications = query.order_by(Notification.created_at.desc()).limit(limit).all()
     
     # Преобразуем в response format
     result = []
@@ -63,6 +71,13 @@ async def get_notifications(
         document_title = None
         if notification.document:
             document_title = notification.document.title
+        
+        # Убеждаемся, что created_at имеет timezone info
+        created_at_iso = notification.created_at.isoformat()
+        # Если timezone не указан, добавляем 'Z' для UTC
+        if notification.created_at.tzinfo is None:
+            # Это не должно происходить, но на всякий случай
+            created_at_iso = notification.created_at.replace(tzinfo=timezone.utc).isoformat()
         
         result.append(NotificationResponse(
             id=notification.id,
@@ -74,7 +89,9 @@ async def get_notifications(
             read_at=notification.read_at.isoformat() if notification.read_at else None,
             document_id=notification.document_id,
             document_title=document_title,
-            created_at=notification.created_at.isoformat()
+            related_entity_type=notification.related_entity_type,
+            related_entity_id=notification.related_entity_id,
+            created_at=created_at_iso
         ))
     
     return result
@@ -149,5 +166,7 @@ async def create_notification(
         read_at=notification.read_at.isoformat() if notification.read_at else None,
         document_id=notification.document_id,
         document_title=notification.document.title if notification.document else None,
+        related_entity_type=notification.related_entity_type,
+        related_entity_id=notification.related_entity_id,
         created_at=notification.created_at.isoformat()
     )

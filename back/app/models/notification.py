@@ -2,7 +2,7 @@
 Notification and Audit models for EDMS
 """
 
-from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey, JSON
+from sqlalchemy import Column, Integer, String, Text, Boolean, DateTime, ForeignKey, JSON, text
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -21,7 +21,7 @@ class Notification(Base):
     document_id = Column(Integer, ForeignKey("documents.id"), nullable=True)
     related_entity_type = Column(String(50))
     related_entity_id = Column(Integer)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=text("timezone('UTC', now())"))
     
     # Relationships
     user = relationship("User")
@@ -42,7 +42,7 @@ class AuditLog(Base):
     new_values = Column(JSON)
     ip_address = Column(String(45))  # IPv6 support
     user_agent = Column(Text)
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    created_at = Column(DateTime(timezone=True), server_default=text("timezone('UTC', now())"))
     
     # Relationships
     user = relationship("User")

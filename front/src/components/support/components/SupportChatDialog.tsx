@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
-import { Chip, Box, Typography, CircularProgress, Dialog, IconButton, Backdrop } from '@mui/material';
-import { Close as CloseIcon, Download as DownloadIcon } from '@mui/icons-material';
+import { Chip, Box, Typography, CircularProgress, Dialog, IconButton, Backdrop, Button } from '@mui/material';
+import { Close as CloseIcon, Download as DownloadIcon, Refresh as RefreshIcon } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
-import { supportApi } from '../../api/client';
-import { useSupportWebSocket } from '../../hooks/useSupportWebSocket';
-import { userStore } from '../../stores/UserStore';
-import ChatDialog from '../common/ChatDialog';
-import type { ChatMessage } from '../common/ChatDialog';
+import { supportApi } from '../../../api/client';
+import { useSupportWebSocket } from '../hooks/useSupportWebSocket';
+import { userStore } from '../../../stores/UserStore';
+import ChatDialog from '../../common/ChatDialog';
+import type { ChatMessage } from '../../common/ChatDialog';
 
 interface SupportChatDialogProps {
   open: boolean;
@@ -25,6 +25,7 @@ const SupportFileImage: React.FC<{
   fileName: string;
   onImageClick: (url: string, fileName: string, fileId: number) => void;
 }> = React.memo(({ ticketId, fileId, fileName, onImageClick }) => {
+  const { t } = useTranslation();
   const [imageUrl, setImageUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -142,7 +143,7 @@ const SupportFileImage: React.FC<{
         }}
       >
         <Typography variant="caption" color="text.secondary">
-          Ошибка загрузки
+          {t('support.errors.load_error') || 'Ошибка загрузки'}
         </Typography>
       </Box>
     );
@@ -261,6 +262,11 @@ const SupportChatDialog: React.FC<SupportChatDialogProps> = ({ open, ticketId, o
   }, [open, ticketId, loadTicket]);
 
   const handleSendMessage = useCallback(async (text: string, files?: File[]): Promise<void> => {
+    // Проверяем, что тикет не закрыт
+    if (ticket?.status === 'closed') {
+      throw new Error(t('support.ticket_closed_message') || 'Тикет закрыт. Для продолжения обсуждения верните тикет в работу.');
+    }
+    
     const formData = new FormData();
     formData.append('message_text', text || ' ');
     
@@ -270,17 +276,37 @@ const SupportChatDialog: React.FC<SupportChatDialogProps> = ({ open, ticketId, o
       });
     }
 
-    const newMessage = await supportApi.createMessage(ticketId, formData);
-    
-    // Добавляем отправленное сообщение сразу в список
-    setMessages((prev) => {
-      const exists = prev.some((msg) => msg.id === newMessage.id);
-      if (exists) {
-        return prev;
+    try {
+      const newMessage = await supportApi.createMessage(ticketId, formData);
+      
+      // Добавляем отправленное сообщение сразу в список
+      setMessages((prev) => {
+        const exists = prev.some((msg) => msg.id === newMessage.id);
+        if (exists) {
+          return prev;
+        }
+        return [...prev, convertSupportMessageToChatMessage(newMessage)];
+      });
+    } catch (err: any) {
+      // Если ошибка 403 (тикет закрыт), показываем сообщение
+      if (err?.response?.status === 403) {
+        throw new Error(err.response.data.detail || t('support.ticket_closed_message') || 'Тикет закрыт. Для продолжения обсуждения верните тикет в работу.');
       }
-      return [...prev, convertSupportMessageToChatMessage(newMessage)];
-    });
-  }, [ticketId, convertSupportMessageToChatMessage]);
+      throw err;
+    }
+  }, [ticketId, ticket?.status, convertSupportMessageToChatMessage, t]);
+  
+  const handleReopenTicket = useCallback(async () => {
+    try {
+      setError(null);
+      const response = await supportApi.reopenTicket(ticketId);
+      // Обновляем тикет
+      await loadTicket();
+    } catch (err: any) {
+      const errorMessage = err?.response?.data?.detail || err?.message || t('support.reopen_error') || 'Ошибка при возврате тикета в работу';
+      setError(errorMessage);
+    }
+  }, [ticketId, loadTicket, t]);
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -318,7 +344,7 @@ const SupportChatDialog: React.FC<SupportChatDialogProps> = ({ open, ticketId, o
     if (message.sender_type === 'support') {
       return t('support.support') || 'Поддержка';
     }
-    return 'Неизвестно';
+    return t('support.errors.unknown_sender') || 'Неизвестно';
   };
 
   const handleImageClick = useCallback((url: string, fileName: string, fileId: number) => {
@@ -342,7 +368,7 @@ const SupportChatDialog: React.FC<SupportChatDialogProps> = ({ open, ticketId, o
           }}
         >
           <Typography variant="caption" color="text.secondary">
-            Ошибка: ID файла отсутствует
+            {t('support.errors.file_id_missing') || 'Ошибка: ID файла отсутствует'}
           </Typography>
         </Box>
       );
@@ -355,23 +381,25 @@ const SupportChatDialog: React.FC<SupportChatDialogProps> = ({ open, ticketId, o
         onImageClick={handleImageClick}
       />
     );
-  }, [ticketId, handleImageClick]);
+  }, [ticketId, handleImageClick, t]);
 
+  const isClosed = ticket?.status === 'closed';
+  
   return (
     <>
       <ChatDialog
         open={open}
         onClose={onClose}
-        title={ticket?.subject || `Тикет #${ticketId}`}
+        title={ticket?.subject || t('support.ticket_number', { number: ticketId }) || `Тикет #${ticketId}`}
         messages={messages}
         loading={loading}
         error={error}
         onSendMessage={handleSendMessage}
         onLoadMessages={loadTicket}
-        placeholder={t('support.type_message') || 'Введите сообщение...'}
+        placeholder={isClosed ? (t('support.ticket_closed_placeholder') || 'Тикет закрыт. Верните тикет в работу, чтобы продолжить обсуждение.') : (t('support.type_message') || 'Введите сообщение...')}
         emptyMessage={t('support.no_messages') || 'Нет сообщений'}
         emptySubmessage={t('support.be_first') || 'Будьте первым, кто оставит сообщение'}
-        allowFiles={true}
+        allowFiles={!isClosed}
         maxFileSize={5 * 1024 * 1024}
         allowedFileTypes={['image/jpeg', 'image/png', 'image/gif', 'image/webp']}
         renderFilePreview={renderFilePreview}
@@ -386,6 +414,20 @@ const SupportChatDialog: React.FC<SupportChatDialogProps> = ({ open, ticketId, o
               size="small"
               sx={{ mt: 0.5 }}
             />
+          ) : undefined
+        }
+        disabled={isClosed}
+        actionButton={
+          isClosed ? (
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={<RefreshIcon />}
+              onClick={handleReopenTicket}
+              sx={{ ml: 2 }}
+            >
+              {t('support.reopen_ticket') || 'Вернуть в работу'}
+            </Button>
           ) : undefined
         }
       />
@@ -484,3 +526,4 @@ const SupportChatDialog: React.FC<SupportChatDialogProps> = ({ open, ticketId, o
 };
 
 export default SupportChatDialog;
+

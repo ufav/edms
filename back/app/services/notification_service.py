@@ -3,7 +3,7 @@ Notification service for sending and managing notifications
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
@@ -24,11 +24,15 @@ class NotificationService:
         title: str,
         message: str,
         document_id: Optional[int] = None,
-        priority: str = 'medium'
+        priority: str = 'medium',
+        related_entity_type: Optional[str] = None,
+        related_entity_id: Optional[int] = None
     ) -> Notification:
         """Создает новое уведомление"""
         db = next(get_db())
         try:
+            # Не устанавливаем created_at явно - позволим PostgreSQL установить его через server_default
+            # Это гарантирует правильную работу с timezone базы данных
             notification = Notification(
                 user_id=user_id,
                 type=type,
@@ -37,7 +41,9 @@ class NotificationService:
                 document_id=document_id,
                 priority=priority,
                 is_read=False,
-                created_at=datetime.utcnow()
+                related_entity_type=related_entity_type,
+                related_entity_id=related_entity_id
+                # created_at будет установлен автоматически через server_default=func.now()
             )
             
             db.add(notification)
@@ -90,8 +96,14 @@ class NotificationService:
             
             if notification:
                 notification.is_read = True
-                notification.read_at = datetime.utcnow()
+                # Используем SQL для установки времени в UTC
+                from sqlalchemy import text
+                db.execute(
+                    text("UPDATE notifications SET read_at = timezone('UTC', now()) WHERE id = :id"),
+                    {"id": notification_id}
+                )
                 db.commit()
+                db.refresh(notification)
                 return True
             
             return False
@@ -107,15 +119,21 @@ class NotificationService:
         """Отмечает все уведомления пользователя как прочитанные"""
         db = next(get_db())
         try:
+            # Сначала обновляем is_read
             updated_count = db.query(Notification).filter(
                 and_(
                     Notification.user_id == user_id,
                     Notification.is_read == False
                 )
             ).update({
-                'is_read': True,
-                'read_at': datetime.utcnow()
+                'is_read': True
             })
+            # Затем устанавливаем read_at через SQL для правильной работы с timezone
+            from sqlalchemy import text
+            db.execute(
+                text("UPDATE notifications SET read_at = timezone('UTC', now()) WHERE user_id = :user_id AND is_read = true AND read_at IS NULL"),
+                {"user_id": user_id}
+            )
             
             db.commit()
             logger.info(f"Marked {updated_count} notifications as read for user {user_id}")
