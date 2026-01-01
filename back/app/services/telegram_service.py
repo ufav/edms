@@ -63,6 +63,10 @@ class TelegramService:
             logger.warning("Telegram bot is not configured")
             return False
         
+        if not self.base_url:
+            logger.error("Telegram bot base_url is not set. Check TELEGRAM_BOT_TOKEN in .env")
+            return False
+        
         try:
             url = f"{self.base_url}/sendMessage"
             payload = {

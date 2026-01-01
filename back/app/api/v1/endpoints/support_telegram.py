@@ -397,14 +397,17 @@ async def process_telegram_update(update: dict, db: Session = None):
             
             # Отвечаем на callback query
             try:
-                callback_query_id = callback_query["id"]
-                answer_url = f"{telegram_service.base_url}/answerCallbackQuery"
-                # В production используем verify=True, в development - verify=False
-                verify_ssl = not settings.DEBUG
-                async with httpx.AsyncClient(timeout=10.0, verify=verify_ssl) as client:
-                    await client.post(answer_url, json={
-                        "callback_query_id": callback_query_id
-                    })
+                if not telegram_service.base_url:
+                    logger.error("Telegram bot base_url is not set. Check TELEGRAM_BOT_TOKEN in .env")
+                else:
+                    callback_query_id = callback_query["id"]
+                    answer_url = f"{telegram_service.base_url}/answerCallbackQuery"
+                    # В production используем verify=True, в development - verify=False
+                    verify_ssl = not settings.DEBUG
+                    async with httpx.AsyncClient(timeout=10.0, verify=verify_ssl) as client:
+                        await client.post(answer_url, json={
+                            "callback_query_id": callback_query_id
+                        })
             except Exception as e:
                 logger.error(f"Error answering callback query: {e}")
             
