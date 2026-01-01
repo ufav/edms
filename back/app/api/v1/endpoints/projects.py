@@ -16,6 +16,7 @@ from app.models.user import User
 from app.models.project import Project, ProjectMember, ProjectDisciplineDocumentType, ProjectSupportFile
 from app.models.project_participant import ProjectParticipant
 from app.models.discipline import Discipline, DocumentType
+from app.models.area import Area
 from app.services.auth import get_current_active_user
 from app.services.minio_service import minio_service
 from fastapi.responses import FileResponse
@@ -49,6 +50,7 @@ class ProjectCreate(BaseModel):
     workflow_preset_id: int = None  # ID выбранного workflow пресета
     members: List[ProjectMemberData] = []  # Список участников-пользователей
     participants: List[ProjectParticipantData] = []  # Список участников-компаний
+    area_ids: List[int] = []  # Список ID участков тех. процесса из справочника
 
 class ProjectUpdate(BaseModel):
     name: str = None
@@ -65,6 +67,7 @@ class ProjectUpdate(BaseModel):
     selected_revision_descriptions: List[int] | None = None
     selected_revision_steps: List[int] | None = None
     workflow_preset_id: int | None = None
+    area_ids: List[int] | None = None  # Список ID участков тех. процесса из справочника
 
 
 class ProjectSupportFileResponse(BaseModel):
@@ -573,6 +576,16 @@ async def create_project(
                 )
                 db.add(project_participant)
     
+    # Добавляем участки тех. процесса (areas) из справочника, если переданы
+    if project_data.area_ids:
+        # Проверяем, что все areas существуют в справочнике
+        areas = db.query(Area).filter(Area.id.in_(project_data.area_ids), Area.is_active == True).all()
+        if len(areas) != len(project_data.area_ids):
+            raise HTTPException(status_code=400, detail="Один или несколько участков тех процесса не найдены в справочнике")
+        
+        # Присваиваем areas проекту (SQLAlchemy автоматически обработает промежуточную таблицу)
+        db_project.areas = areas
+    
     db.commit()
     
     # Логирование действия
@@ -777,6 +790,16 @@ async def update_project(
                     notes=participant_data.notes
                 )
                 db.add(project_participant)
+
+    # Обновляем участки тех. процесса (areas), если переданы
+    if project_data.area_ids is not None:
+        # Проверяем, что все areas существуют в справочнике
+        areas = db.query(Area).filter(Area.id.in_(project_data.area_ids), Area.is_active == True).all()
+        if len(areas) != len(project_data.area_ids):
+            raise HTTPException(status_code=400, detail="Один или несколько участков тех процесса не найдены в справочнике")
+        
+        # Присваиваем areas проекту (SQLAlchemy автоматически обработает промежуточную таблицу)
+        project.areas = areas
 
     db.commit()
     db.refresh(project)
@@ -1145,6 +1168,41 @@ async def get_project_disciplines(
             "description": discipline.description
         }
         for discipline in disciplines
+    ]
+
+
+@router.get("/{project_id}/areas", response_model=List[dict])
+async def get_project_areas(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Получение участков тех. процесса проекта"""
+    project = db.query(Project).filter(Project.id == project_id, Project.is_deleted == 0).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Проект не найден")
+    
+    check_project_access(project, current_user, db)
+    
+    # Получаем areas проекта через промежуточную таблицу project_areas
+    from app.models.project import project_areas
+    areas = db.query(Area).join(
+        project_areas,
+        Area.id == project_areas.c.area_id
+    ).filter(
+        project_areas.c.project_id == project_id,
+        Area.is_active == True
+    ).all()
+    
+    return [
+        {
+            "id": area.id,
+            "code": area.code,
+            "name": area.name,
+            "description": area.description,
+            "is_active": area.is_active
+        }
+        for area in areas
     ]
 
 

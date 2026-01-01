@@ -79,14 +79,16 @@ const SupportTicketsListDialog: React.FC<SupportTicketsListDialogProps> = ({
   };
 
   const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'new':
+    // Нормализуем статус к верхнему регистру для сравнения
+    const normalizedStatus = status.toUpperCase();
+    switch (normalizedStatus) {
+      case 'NEW':
         return 'default';
-      case 'in_progress':
+      case 'IN_PROGRESS':
         return 'primary';
-      case 'resolved':
+      case 'RESOLVED':
         return 'success';
-      case 'closed':
+      case 'CLOSED':
         return 'default';
       default:
         return 'default';
@@ -94,7 +96,9 @@ const SupportTicketsListDialog: React.FC<SupportTicketsListDialogProps> = ({
   };
 
   const getStatusLabel = (status: string) => {
-    return t(`support.status.${status}`) || status;
+    // Преобразуем статус в нижний регистр для ключа локализации
+    const statusKey = status.toLowerCase();
+    return t(`support.status.${statusKey}`) || status;
   };
 
   const formatDate = (dateString: string) => {

@@ -17,6 +17,7 @@ export interface ColumnVisibility {
   created_by: boolean;
   discipline: boolean;
   document_type: boolean;
+  area: boolean;
   actions: boolean;
 }
 
@@ -62,6 +63,7 @@ const defaultColumnVisibility: ColumnVisibility = {
   created_by: true,
   discipline: true,
   document_type: true,
+  area: true,
   actions: true,
 };
 
@@ -76,11 +78,12 @@ const defaultColumnOrder: ColumnOrder[] = [
   { column: 'language', order: 8 },
   { column: 'discipline', order: 9 },
   { column: 'document_type', order: 10 },
-  { column: 'drs', order: 11 },
-  { column: 'date', order: 12 },
-  { column: 'updated_at', order: 13 },
-  { column: 'created_by', order: 14 },
-  { column: 'actions', order: 15 },
+  { column: 'area', order: 11 },
+  { column: 'drs', order: 12 },
+  { column: 'date', order: 13 },
+  { column: 'updated_at', order: 14 },
+  { column: 'created_by', order: 15 },
+  { column: 'actions', order: 16 },
 ];
 
 export const useDocumentSettings = (): UseDocumentSettingsReturn => {

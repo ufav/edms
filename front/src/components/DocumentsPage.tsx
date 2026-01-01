@@ -135,12 +135,14 @@ const DocumentsPage: React.FC = observer(() => {
     selectedDisciplineId,
     selectedDocumentTypeId,
     selectedRevisionDescriptionId,
+    selectedAreaId,
     dateRange,
     setFilterStatus,
     setSearchTerm,
     setSelectedDisciplineId,
     setSelectedDocumentTypeId,
     setSelectedRevisionDescriptionId,
+    setSelectedAreaId,
     setDateRange,
     resetFilters,
   } = useDocumentFilters();
@@ -165,6 +167,7 @@ const DocumentsPage: React.FC = observer(() => {
     disciplineId: selectedDisciplineId,
     documentTypeId: selectedDocumentTypeId,
     revisionDescriptionId: selectedRevisionDescriptionId,
+    areaId: selectedAreaId,
     dateFrom: dateRange[0] ? (() => {
       const d = dateRange[0]!;
       return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -435,12 +438,14 @@ const DocumentsPage: React.FC = observer(() => {
           selectedDisciplineId={selectedDisciplineId}
           selectedDocumentTypeId={selectedDocumentTypeId}
           selectedRevisionDescriptionId={selectedRevisionDescriptionId}
+          selectedAreaId={selectedAreaId}
           dateRange={dateRange}
           onSearchChange={setSearchTerm}
           onStatusChange={setFilterStatus}
           onDisciplineChange={setSelectedDisciplineId}
           onDocumentTypeChange={setSelectedDocumentTypeId}
           onRevisionDescriptionChange={setSelectedRevisionDescriptionId}
+          onAreaChange={setSelectedAreaId}
           onDateRangeChange={setDateRange}
           onSettingsClick={() => setSettingsOpen(true)}
           onResetFilters={resetFilters}
@@ -453,6 +458,7 @@ const DocumentsPage: React.FC = observer(() => {
                 disciplineId: selectedDisciplineId || undefined,
                 documentTypeId: selectedDocumentTypeId || undefined,
                 revisionDescriptionId: selectedRevisionDescriptionId || undefined,
+                areaId: selectedAreaId || undefined,
                 dateFrom: dateRange[0] ? (() => {
                   const d = dateRange[0]!;
                   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -463,6 +469,9 @@ const DocumentsPage: React.FC = observer(() => {
                 })() : undefined,
                 sortBy: orderBy,
                 sortDir: order,
+                visibleCols: visibleCols,
+                columnOrder: columnOrder,
+                language: i18n.language,
               });
             } catch (error: any) {
               console.error('Ошибка при экспорте в Excel:', error);

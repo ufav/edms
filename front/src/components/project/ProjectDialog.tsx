@@ -137,6 +137,13 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
     }
   };
 
+  const setSelectedAreaIdsWithTracking = (newData: any) => {
+    setSelectedAreaIds(newData);
+    if (mode === 'edit' && isInitialized) {
+      setHasChanges(true);
+    }
+  };
+
   const [importWarnings, setImportWarnings] = useState<string[]>([]);
   const [isMobile] = useState(false);
   const [codeValidation, setCodeValidation] = useState<{
@@ -170,6 +177,7 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
   const [pendingParticipants, setPendingParticipants] = useState<ProjectParticipant[]>([]);
   const [pendingSupportFiles, setPendingSupportFiles] = useState<Array<{ file: File; id: string }>>([]);
   const [deletedSupportFileIds, setDeletedSupportFileIds] = useState<number[]>([]);
+  const [selectedAreaIds, setSelectedAreaIds] = useState<number[]>([]);
   const [minioErrorNotification, setMinioErrorNotification] = useState<{ open: boolean; message: string }>({
     open: false,
     message: ''
@@ -230,6 +238,7 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
         clearWarnings();
         setPendingParticipantsWithTracking([]);
         setPendingProjectMembersWithTracking([]);
+        setSelectedAreaIds([]);
         setProjectMemberDialogOpen(false);
         setIsEditingProjectMember(false);
         setSelectedProjectMember(null);
@@ -345,6 +354,14 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
 
       setPendingParticipantsWithTracking(projectData.participants);
       setPendingProjectMembersWithTracking(projectData.members);
+      
+      // Загружаем areas проекта
+      if (projectData.areas) {
+        const areaIds = projectData.areas.map((area: any) => area.id);
+        setSelectedAreaIds(areaIds);
+      } else {
+        setSelectedAreaIds([]);
+      }
 
     } catch (err: any) {
       setError(`Ошибка загрузки данных проекта: ${err.response?.data?.detail || err.message || 'Неизвестная ошибка'}`);
@@ -486,6 +503,7 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
           is_primary: participant.is_primary,
           notes: participant.notes
         })),
+        area_ids: selectedAreaIds,
       };
 
 
@@ -1105,11 +1123,21 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
           {/* Tab 0: Основное */}
           {tabIndex === 0 && (
             <MainTab 
-              formData={formData}
-              setFormData={setFormData}
+              formData={{
+                ...formData,
+                budget: formData.budget?.toString() || ''
+              }}
+              setFormData={(data: any) => {
+                setFormData({
+                  ...data,
+                  budget: data.budget ? parseFloat(data.budget) || null : null
+                });
+              }}
               codeValidation={mode === 'create' ? codeValidation : { isChecking: false, exists: false, message: '' }}
               setCodeValidation={mode === 'create' ? setCodeValidation : () => {}}
               mode={mode}
+              selectedAreaIds={selectedAreaIds}
+              onAreaIdsChange={setSelectedAreaIdsWithTracking}
             />
           )}
 
@@ -1190,13 +1218,13 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
                   file,
                   id: `${Date.now()}-${Math.random()}`
                 }));
-                setPendingSupportFilesWithTracking(prev => [...prev, ...newFiles]);
+                setPendingSupportFilesWithTracking((prev: Array<{ file: File; id: string }>) => [...prev, ...newFiles]);
               }}
               onRemovePendingFile={(fileId) => {
-                setPendingSupportFilesWithTracking(prev => prev.filter(f => f.id !== fileId));
+                setPendingSupportFilesWithTracking((prev: Array<{ file: File; id: string }>) => prev.filter((f: { file: File; id: string }) => f.id !== fileId));
               }}
               onDeleteFile={(fileId) => {
-                setDeletedSupportFileIdsWithTracking(prev => [...prev, fileId]);
+                setDeletedSupportFileIdsWithTracking((prev: number[]) => [...prev, fileId]);
               }}
             />
           )}
@@ -1204,7 +1232,10 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
           {/* Tab 7: Итоги */}
           {tabIndex === 7 && (
             <SummaryTab
-              formData={formData}
+              formData={{
+                ...formData,
+                budget: formData.budget?.toString() || ''
+              }}
               selectedDisciplines={selectedDisciplines}
               disciplineDocumentTypes={disciplineDocumentTypes}
               selectedRevisionDescriptions={selectedRevisionDescriptions}
@@ -1317,7 +1348,7 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
               <InputLabel>{t('createProject.fields.contact_person')}</InputLabel>
                 <Select
                 value={participantFormData.contact_id || ''}
-                onChange={(e) => setParticipantFormData(prev => ({ ...prev, contact_id: e.target.value as number }))}
+                onChange={(e) => setParticipantFormData((prev: typeof participantFormData) => ({ ...prev, contact_id: e.target.value as number }))}
                 label={t('createProject.fields.contact_person')}
                 disabled={!participantFormData.company_id || contacts.length === 0}
               >
@@ -1348,7 +1379,7 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
               control={
                 <Checkbox
                   checked={participantFormData.is_primary}
-                  onChange={(e) => setParticipantFormData(prev => ({ ...prev, is_primary: e.target.checked }))}
+                  onChange={(e) => setParticipantFormData((prev: typeof participantFormData) => ({ ...prev, is_primary: e.target.checked }))}
                 />
               }
               label={t('createProject.fields.primary_participant')}
@@ -1361,7 +1392,7 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
               variant="standard"
               rows={3}
               value={participantFormData.notes}
-              onChange={(e) => setParticipantFormData(prev => ({ ...prev, notes: e.target.value }))}
+              onChange={(e) => setParticipantFormData((prev: typeof participantFormData) => ({ ...prev, notes: e.target.value }))}
             />
                                 </Box>
         </DialogContent>
@@ -1426,7 +1457,7 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
               value={users.find(user => user.id === projectMemberFormData.user_id) || null}
               isOptionEqualToValue={(option, value) => option.id === value.id}
               onChange={(_, newValue) => {
-                setProjectMemberFormData(prev => ({ 
+                setProjectMemberFormData((prev: typeof projectMemberFormData) => ({ 
                   ...prev, 
                   user_id: newValue ? newValue.id : null 
                 }));
@@ -1459,9 +1490,23 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
               selectOnFocus
               handleHomeEndKeys
               ListboxProps={{
-                style: {
+                sx: {
                   maxHeight: '300px',
-                  overflow: 'auto'
+                  overflow: 'auto',
+                  '&::-webkit-scrollbar': {
+                    width: '8px',
+                  },
+                  '&::-webkit-scrollbar-track': {
+                    background: '#f1f1f1',
+                    borderRadius: '4px',
+                  },
+                  '&::-webkit-scrollbar-thumb': {
+                    background: '#c1c1c1',
+                    borderRadius: '4px',
+                    '&:hover': {
+                      background: '#a8a8a8',
+                    },
+                  },
                 }
               }}
               slotProps={{
@@ -1478,44 +1523,6 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
                     },
                   ],
                 },
-                listbox: {
-                  sx: {
-                    '&::-webkit-scrollbar': {
-                      width: '8px',
-                    },
-                    '&::-webkit-scrollbar-track': {
-                      background: '#f1f1f1',
-                      borderRadius: '4px',
-                    },
-                    '&::-webkit-scrollbar-thumb': {
-                      background: '#c1c1c1',
-                      borderRadius: '4px',
-                      '&:hover': {
-                        background: '#a8a8a8',
-                      },
-                    },
-                  }
-                }
-              }}
-              componentsProps={{
-                listbox: {
-                  sx: {
-                    '&::-webkit-scrollbar': {
-                      width: '8px',
-                    },
-                    '&::-webkit-scrollbar-track': {
-                      background: '#f1f1f1',
-                      borderRadius: '4px',
-                    },
-                    '&::-webkit-scrollbar-thumb': {
-                      background: '#c1c1c1',
-                      borderRadius: '4px',
-                      '&:hover': {
-                        background: '#a8a8a8',
-                      },
-                    },
-                  }
-                }
               }}
             />
 
@@ -1523,7 +1530,7 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
               <InputLabel>{t('createProject.fields.role')}</InputLabel>
               <Select
                 value={projectMemberFormData.project_role_id || ''}
-                onChange={(e) => setProjectMemberFormData(prev => ({ 
+                onChange={(e) => setProjectMemberFormData((prev: typeof projectMemberFormData) => ({ 
                   ...prev, 
                   project_role_id: e.target.value as number
                 }))}

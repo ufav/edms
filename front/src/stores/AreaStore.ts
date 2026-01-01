@@ -1,16 +1,16 @@
 import { makeAutoObservable, runInAction } from 'mobx';
 import { projectsApi } from '../api/client';
 
-export interface Discipline {
+export interface Area {
   id: number;
-  name: string;
-  name_en?: string;
   code: string;
+  name: string;
   description?: string;
+  is_active: boolean;
 }
 
-class DisciplineStore {
-  disciplines: Discipline[] = [];
+class AreaStore {
+  areas: Area[] = [];
   isLoading = false;
   error: string | null = null;
   loadedProjectId: number | null = null;
@@ -19,9 +19,9 @@ class DisciplineStore {
     makeAutoObservable(this);
   }
 
-  // Загрузка дисциплин проекта
-  async loadDisciplines(projectId: number) {
-    // Если дисциплины уже загружены для этого проекта - не загружаем повторно
+  // Загрузка участков тех процесса проекта
+  async loadAreas(projectId: number) {
+    // Если areas уже загружены для этого проекта - не загружаем повторно
     if (this.loadedProjectId === projectId) {
       return;
     }
@@ -37,16 +37,16 @@ class DisciplineStore {
     });
 
     try {
-      const list = await projectsApi.getDisciplines(projectId);
+      const list = await projectsApi.getAreas(projectId);
       runInAction(() => {
-        this.disciplines = list;
+        this.areas = list;
         this.loadedProjectId = projectId;
       });
     } catch (error) {
-      console.error('Error loading disciplines:', error);
+      console.error('Error loading areas:', error);
       runInAction(() => {
-        this.error = 'Ошибка загрузки дисциплин';
-        this.disciplines = [];
+        this.error = 'Ошибка загрузки участков тех процесса';
+        this.areas = [];
       });
     } finally {
       runInAction(() => {
@@ -55,22 +55,22 @@ class DisciplineStore {
     }
   }
 
-  // Очистка дисциплин
-  clearDisciplines() {
+  // Очистка areas
+  clearAreas() {
     runInAction(() => {
-      this.disciplines = [];
+      this.areas = [];
       this.loadedProjectId = null;
       this.error = null;
     });
   }
 
-  // Принудительная перезагрузка дисциплин для проекта
-  async reloadDisciplines(projectId: number) {
+  // Принудительная перезагрузка areas для проекта
+  async reloadAreas(projectId: number) {
     runInAction(() => {
       this.loadedProjectId = null; // Сбрасываем кэш, чтобы загрузить заново
     });
-    await this.loadDisciplines(projectId);
+    await this.loadAreas(projectId);
   }
 }
 
-export const disciplineStore = new DisciplineStore();
+export const areaStore = new AreaStore();

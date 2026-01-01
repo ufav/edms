@@ -462,25 +462,10 @@ const ChatDialog: React.FC<ChatDialogProps> = ({
         bgcolor: 'background.paper',
         borderRadius: '8px 0 0 0'
       }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <Box>
-            <Typography variant="h6" sx={{ fontWeight: 600, color: 'text.primary' }}>
-              {title}
-            </Typography>
-            {subtitle && (
-              <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                {subtitle}
-              </Typography>
-            )}
-            {showStatusChip && statusChip && (
-              <Box sx={{ mt: 0.5 }}>
-                {statusChip}
-              </Box>
-            )}
-          </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            {actionButton}
-            <IconButton 
+        {/* Кнопки сверху */}
+        <Box sx={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: 1, mb: 2 }}>
+          {actionButton}
+          <IconButton 
             onClick={onClose} 
             size="small"
             sx={{ 
@@ -490,7 +475,22 @@ const ChatDialog: React.FC<ChatDialogProps> = ({
           >
             <CloseIcon />
           </IconButton>
-          </Box>
+        </Box>
+        {/* Название тикета и статус ниже */}
+        <Box>
+          <Typography variant="h6" sx={{ fontWeight: 600, color: 'text.primary' }}>
+            {title}
+          </Typography>
+          {subtitle && (
+            <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
+              {subtitle}
+            </Typography>
+          )}
+          {showStatusChip && statusChip && (
+            <Box sx={{ mt: 0.5 }}>
+              {statusChip}
+            </Box>
+          )}
         </Box>
       </Box>
 

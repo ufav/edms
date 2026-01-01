@@ -10,10 +10,10 @@ import enum
 
 
 class TicketStatus(str, enum.Enum):
-    NEW = "new"
-    IN_PROGRESS = "in_progress"
-    RESOLVED = "resolved"
-    CLOSED = "closed"
+    NEW = "NEW"
+    IN_PROGRESS = "IN_PROGRESS"
+    RESOLVED = "RESOLVED"
+    CLOSED = "CLOSED"
 
 
 class SupportTicket(Base):
@@ -23,7 +23,7 @@ class SupportTicket(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     subject = Column(String(255), nullable=False)
     initial_message = Column(Text, nullable=False)
-    status = Column(SQLEnum(TicketStatus), default=TicketStatus.NEW, nullable=False)
+    status = Column(SQLEnum(TicketStatus, name='ticketstatus', native_enum=True, create_type=False, values_callable=lambda obj: [e.value for e in obj]), default=TicketStatus.NEW, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     last_message_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

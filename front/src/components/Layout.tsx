@@ -37,7 +37,7 @@ import {
 import ProjectSelector from './ProjectSelector';
 import ProfileDialog from './ProfileDialog';
 import NotificationsDialog from './NotificationsDialog';
-import { SupportFab, SupportTicketsListDialog, SupportChatDialog } from './support';
+import { SupportFab, SupportTicketsListDialog, SupportChatDialog, SupportTicketDialog } from './support';
 import { notificationsApi } from '../api/client';
 import { useTranslation } from 'react-i18next';
 import { observer } from 'mobx-react-lite';
@@ -68,6 +68,7 @@ const Layout: React.FC<LayoutProps> = observer(({
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const [supportTicketsOpen, setSupportTicketsOpen] = useState(false);
+  const [createTicketOpen, setCreateTicketOpen] = useState(false);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
   const [selectedTicketId, setSelectedTicketId] = useState<number | null>(null);
@@ -479,8 +480,21 @@ const Layout: React.FC<LayoutProps> = observer(({
         open={supportTicketsOpen}
         onClose={() => setSupportTicketsOpen(false)}
         onCreateNew={() => {
-          // Открываем диалог создания через FAB
-          // Можно также добавить отдельное состояние для создания
+          setSupportTicketsOpen(false);
+          setCreateTicketOpen(true);
+        }}
+      />
+      
+      {/* Support Ticket Create Dialog */}
+      <SupportTicketDialog
+        open={createTicketOpen}
+        onClose={() => setCreateTicketOpen(false)}
+        onSuccess={() => {
+          setCreateTicketOpen(false);
+          // Обновляем список тикетов, если он открыт
+          if (supportTicketsOpen) {
+            // Можно добавить обновление списка здесь, если нужно
+          }
         }}
       />
       

@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Grid,
@@ -16,6 +16,8 @@ import { languageStore } from '../../../stores/LanguageStore';
 import { disciplineStore } from '../../../stores/DisciplineStore';
 import { referencesStore } from '../../../stores/ReferencesStore';
 import { projectStore } from '../../../stores/ProjectStore';
+import { referencesApi, projectsApi } from '../../../api/client';
+import { areaStore } from '../../../stores/AreaStore';
 
 interface DocumentData {
   title: string;
@@ -27,6 +29,7 @@ interface DocumentData {
   language_id: string;
   discipline_id: string;
   document_type_id: string;
+  area_id: string;
 }
 
 interface DocumentFormProps {
@@ -52,7 +55,15 @@ const DocumentForm: React.FC<DocumentFormProps> = ({
   loadingProjectData,
   loadDocumentTypes,
 }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+
+  // Загружаем areas при изменении проекта
+  useEffect(() => {
+    const projectId = document?.project_id || projectStore.selectedProject?.id;
+    if (projectId) {
+      areaStore.loadAreas(projectId);
+    }
+  }, [document?.project_id, projectStore.selectedProject?.id]);
 
   // Если документ не загружен и не создается, показываем скелетон
   if (!isCreating && !document) {
@@ -219,6 +230,53 @@ const DocumentForm: React.FC<DocumentFormProps> = ({
               size="small"
               variant="standard"
             />
+            {(isCreating || isEditing) ? (
+              <FormControl fullWidth size="small" variant="standard">
+                <InputLabel htmlFor="document-area-select">{t('document.area')}</InputLabel>
+                <Select
+                  id="document-area-select"
+                  value={documentData.area_id || ''}
+                  onChange={(e) => setDocumentData({area_id: e.target.value})}
+                  label={t('document.area')}
+                  disabled={areaStore.isLoading}
+                >
+                  <MenuItem value="">
+                    <em>{t('document.not_specified')}</em>
+                  </MenuItem>
+                  {areaStore.areas.map((area) => {
+                    const areaLabel = i18n.language === 'en' ? area.name : (area.description || area.name);
+                    return (
+                      <MenuItem key={area.id} value={area.id}>
+                        {area.code} - {areaLabel}
+                      </MenuItem>
+                    );
+                  })}
+                </Select>
+              </FormControl>
+            ) : (
+              <TextField
+                id="document-area"
+                label={t('document.area')}
+                value={(() => {
+                  // Используем documentData.area_id если есть, иначе document?.area_id
+                  const areaId = documentData.area_id || document?.area_id;
+                  if (areaId) {
+                    const areaIdNum = typeof areaId === 'string' ? parseInt(areaId, 10) : areaId;
+                    const area = areaStore.areas.find(a => a.id === areaIdNum);
+                    if (area) {
+                      const areaLabel = i18n.language === 'en' ? area.name : (area.description || area.name);
+                      return `${area.code} - ${areaLabel}`;
+                    }
+                    return t('document.not_specified');
+                  }
+                  return t('document.not_specified');
+                })()}
+                fullWidth
+                InputProps={{ readOnly: true }}
+                size="small"
+                variant="standard"
+              />
+            )}
           </Box>
         </Grid>
         

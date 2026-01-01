@@ -84,6 +84,7 @@ class DocumentUpdate(BaseModel):
     discipline_id: Optional[int] = None
     document_type_id: Optional[int] = None
     language_id: Optional[int] = None
+    area_id: Optional[int] = None  # Участок тех. процесса
     document_code: Optional[str] = None
     language_id: Optional[int] = None
     author: Optional[str] = None
@@ -245,6 +246,7 @@ async def get_documents(
     discipline_id: Optional[int] = None,
     document_type_id: Optional[int] = None,
     revision_description_id: Optional[int] = None,
+    area_id: Optional[int] = None,
     date_from: Optional[date] = Query(default=None),
     date_to: Optional[date] = Query(default=None),
     sort_by: Optional[str] = Query(default="updated_at"),
@@ -340,13 +342,15 @@ async def get_documents(
             (Document.remarks.ilike(like))
         )
 
-    # Фильтры по дисциплине / типу / описанию ревизии
+    # Фильтры по дисциплине / типу / описанию ревизии / area
     if discipline_id:
         query = query.filter(Document.discipline_id == discipline_id)
     if document_type_id:
         query = query.filter(Document.document_type_id == document_type_id)
     if revision_description_id:
         query = query.filter(DocumentRevision.revision_description_id == revision_description_id)
+    if area_id:
+        query = query.filter(Document.area_id == area_id)
 
     # Фильтр по датам создания документа
     if date_from:
@@ -426,6 +430,7 @@ async def get_documents(
             "language_id": doc.language_id,
             "discipline_id": doc.discipline_id,
             "document_type_id": doc.document_type_id,
+            "area_id": doc.area_id,
             "discipline_name": discipline.name if discipline else None,
             "discipline_code": discipline.code if discipline else None,
             "document_type_name": document_type.name if document_type else None,
@@ -616,6 +621,14 @@ async def create_document_with_revision(
     except Exception:
         language_id = 1
     try:
+        area_id_value = form.get('area_id')
+        if area_id_value and str(area_id_value).strip():
+            area_id = int(area_id_value)
+        else:
+            area_id = None
+    except (ValueError, TypeError):
+        area_id = None
+    try:
         revision_description_id = int(form.get('revision_description_id')) if form.get('revision_description_id') else None
     except Exception:
         revision_description_id = None
@@ -667,6 +680,7 @@ async def create_document_with_revision(
         discipline_id=discipline_id,
         document_type_id=document_type_id,
         language_id=language_id,
+        area_id=area_id,
         created_by=current_user.id
     )
     
@@ -892,6 +906,7 @@ async def get_document(
         "document_type_id": document.document_type_id,
         "document_type_code": doc_type.code if doc_type else None,
         "document_type_name": doc_type.name if doc_type else None,
+        "area_id": document.area_id,
         "language_id": document.language_id,
         # fields below may not exist in the current model; keep only existing ones
         "creation_date": document.creation_date,
@@ -2456,6 +2471,7 @@ async def update_document(
         "number": document.number,
         "discipline_id": document.discipline_id,
         "document_type_id": document.document_type_id,
+        "area_id": document.area_id,
     }
     
     # Проверяем права доступа
@@ -2479,6 +2495,12 @@ async def update_document(
     if 'drs' in update_data:
         del update_data['drs']
     
+    # Явно обрабатываем area_id, чтобы можно было установить null
+    # Проверяем, было ли поле area_id передано в запросе (даже если оно None)
+    all_data = document_data.dict(exclude_unset=False)
+    if 'area_id' in all_data:
+        update_data['area_id'] = document_data.area_id
+    
     # Обновляем документ
     for field, value in update_data.items():
         if hasattr(document, field):
@@ -2496,6 +2518,7 @@ async def update_document(
         "number": document.number,
         "discipline_id": document.discipline_id,
         "document_type_id": document.document_type_id,
+        "area_id": document.area_id,
     }
     log_action(
         db=db,

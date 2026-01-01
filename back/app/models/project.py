@@ -2,11 +2,19 @@
 Project model for EDMS
 """
 
-from sqlalchemy import Column, Integer, String, Text, Date, DateTime, ForeignKey, Numeric, Boolean, Enum, UniqueConstraint, BigInteger
+from sqlalchemy import Column, Integer, String, Text, Date, DateTime, ForeignKey, Numeric, Boolean, Enum, UniqueConstraint, BigInteger, Table
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.core.database import Base
 import enum
+
+# Промежуточная таблица для связи многие-ко-многим между Project и Area
+project_areas = Table(
+    'project_areas',
+    Base.metadata,
+    Column('project_id', Integer, ForeignKey('projects.id', ondelete='CASCADE'), primary_key=True),
+    Column('area_id', Integer, ForeignKey('areas.id', ondelete='CASCADE'), primary_key=True)
+)
 
 class ProjectStatusEnum(enum.Enum):
     PLANNING = "planning"
@@ -42,6 +50,8 @@ class Project(Base):
     # workflows = relationship("Workflow", back_populates="project")  # Временно отключено из-за циклического импорта
     # Support pack files
     support_files = relationship("ProjectSupportFile", back_populates="project", cascade="all, delete-orphan")
+    # Areas (участки тех. процесса) - связь многие-ко-многим через промежуточную таблицу
+    areas = relationship("Area", secondary=project_areas)
     
     def __repr__(self):
         return f"<Project(id={self.id}, name='{self.name}', code='{self.project_code}')>"

@@ -9,6 +9,7 @@ export interface DocumentFilters {
   selectedDisciplineId: number | null;
   selectedDocumentTypeId: number | null;
   selectedRevisionDescriptionId: number | null;
+  selectedAreaId: number | null;
   dateRange: [Date | null, Date | null];
 }
 
@@ -19,6 +20,7 @@ export interface UseDocumentFiltersReturn {
   selectedDisciplineId: number | null;
   selectedDocumentTypeId: number | null;
   selectedRevisionDescriptionId: number | null;
+  selectedAreaId: number | null;
   dateRange: [Date | null, Date | null];
   
   // Сеттеры
@@ -27,6 +29,7 @@ export interface UseDocumentFiltersReturn {
   setSelectedDisciplineId: (id: number | null) => void;
   setSelectedDocumentTypeId: (id: number | null) => void;
   setSelectedRevisionDescriptionId: (id: number | null) => void;
+  setSelectedAreaId: (id: number | null) => void;
   setDateRange: (range: [Date | null, Date | null]) => void;
   
   // Отфильтрованные документы
@@ -42,6 +45,7 @@ export const useDocumentFilters = (): UseDocumentFiltersReturn => {
   const [selectedDisciplineId, setSelectedDisciplineId] = useState<number | null>(null);
   const [selectedDocumentTypeId, setSelectedDocumentTypeId] = useState<number | null>(null);
   const [selectedRevisionDescriptionId, setSelectedRevisionDescriptionId] = useState<number | null>(null);
+  const [selectedAreaId, setSelectedAreaId] = useState<number | null>(null);
   const [dateRange, setDateRange] = useState<[Date | null, Date | null]>([null, null]);
 
   // Фильтрация документов
@@ -54,6 +58,7 @@ export const useDocumentFilters = (): UseDocumentFiltersReturn => {
       const disciplineMatch = selectedDisciplineId ? doc.discipline_id === selectedDisciplineId : true;
       const documentTypeMatch = selectedDocumentTypeId ? doc.document_type_id === selectedDocumentTypeId : true;
       const revisionDescriptionMatch = selectedRevisionDescriptionId ? doc.revision_description_id === selectedRevisionDescriptionId : true;
+      const areaMatch = selectedAreaId ? doc.area_id === selectedAreaId : true;
       
       // Фильтрация по датам
       const dateMatch = (() => {
@@ -78,9 +83,9 @@ export const useDocumentFilters = (): UseDocumentFiltersReturn => {
         doc.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (doc.description && doc.description.toLowerCase().includes(searchTerm.toLowerCase()));
       
-      return statusMatch && selectedProjectMatch && disciplineMatch && documentTypeMatch && revisionDescriptionMatch && dateMatch && searchMatch;
+      return statusMatch && selectedProjectMatch && disciplineMatch && documentTypeMatch && revisionDescriptionMatch && areaMatch && dateMatch && searchMatch;
     });
-  }, [documentStore.documents, filterStatus, searchTerm, selectedDisciplineId, selectedDocumentTypeId, selectedRevisionDescriptionId, dateRange, projectStore.selectedProject]);
+  }, [documentStore.documents, filterStatus, searchTerm, selectedDisciplineId, selectedDocumentTypeId, selectedRevisionDescriptionId, selectedAreaId, dateRange, projectStore.selectedProject]);
 
   // Загружаем документы с фильтром по статусу при изменении filterStatus
   useEffect(() => {
@@ -95,6 +100,7 @@ export const useDocumentFilters = (): UseDocumentFiltersReturn => {
     setSelectedDisciplineId(null);
     setSelectedDocumentTypeId(null);
     setSelectedRevisionDescriptionId(null);
+    setSelectedAreaId(null);
     setDateRange([null, null]);
   };
 
@@ -104,12 +110,14 @@ export const useDocumentFilters = (): UseDocumentFiltersReturn => {
     selectedDisciplineId,
     selectedDocumentTypeId,
     selectedRevisionDescriptionId,
+    selectedAreaId,
     dateRange,
     setFilterStatus,
     setSearchTerm,
     setSelectedDisciplineId,
     setSelectedDocumentTypeId,
     setSelectedRevisionDescriptionId,
+    setSelectedAreaId,
     setDateRange,
     filteredDocuments,
     resetFilters,

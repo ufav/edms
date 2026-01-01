@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { projectStore } from '../../../stores/ProjectStore';
 import { documentStore } from '../../../stores/DocumentStore';
 import { disciplineStore } from '../../../stores/DisciplineStore';
+import { areaStore } from '../../../stores/AreaStore';
 import { languageStore } from '../../../stores/LanguageStore';
 import { userStore } from '../../../stores/UserStore';
 import { referencesStore } from '../../../stores/ReferencesStore';
@@ -10,23 +11,26 @@ export interface UseDocumentDataLoadingReturn {
   // Методы для принудительной перезагрузки данных
   reloadDocuments: () => void;
   reloadDisciplines: () => void;
+  reloadAreas: () => void;
   reloadLanguages: () => void;
   reloadUser: () => void;
   reloadReferences: () => void;
 }
 
 export const useDocumentDataLoading = (): UseDocumentDataLoadingReturn => {
-  // Загружаем дисциплины при изменении проекта (документы загружаются через серверную пагинацию)
+  // Загружаем дисциплины и areas при изменении проекта (документы загружаются через серверную пагинацию)
   useEffect(() => {
     if (projectStore.hasSelectedProject && projectStore.selectedProject) {
       const projectId = projectStore.selectedProject.id;
       
-      // Загружаем дисциплины проекта для фильтров
+      // Загружаем дисциплины и areas проекта для фильтров
       disciplineStore.loadDisciplines(projectId);
+      areaStore.loadAreas(projectId);
     } else {
       // Используем setTimeout для отложенного вызова, чтобы избежать обновления во время рендеринга
       setTimeout(() => {
         disciplineStore.clearDisciplines();
+        areaStore.clearAreas();
       }, 0);
     }
   }, [projectStore.selectedProject]);
@@ -60,6 +64,12 @@ export const useDocumentDataLoading = (): UseDocumentDataLoadingReturn => {
     }
   };
 
+  const reloadAreas = () => {
+    if (projectStore.hasSelectedProject && projectStore.selectedProject) {
+      areaStore.loadAreas(projectStore.selectedProject.id);
+    }
+  };
+
   const reloadLanguages = () => {
     languageStore.loadLanguages();
   };
@@ -75,6 +85,7 @@ export const useDocumentDataLoading = (): UseDocumentDataLoadingReturn => {
   return {
     reloadDocuments,
     reloadDisciplines,
+    reloadAreas,
     reloadLanguages,
     reloadUser,
     reloadReferences,

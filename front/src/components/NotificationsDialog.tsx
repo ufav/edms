@@ -8,7 +8,6 @@ import {
   ListItemIcon,
   Typography,
   Box,
-  IconButton,
   Badge,
   Chip,
   Divider,
@@ -16,7 +15,6 @@ import {
   Alert,
 } from '@mui/material';
 import {
-  Close as CloseIcon,
   Notifications as NotificationsIcon,
   CheckCircle as CheckCircleIcon,
   Support as SupportIcon,
@@ -281,9 +279,6 @@ const NotificationsDialog: React.FC<NotificationsDialogProps> = ({
               />
             )}
           </Box>
-          <IconButton onClick={onClose} size="small">
-            <CloseIcon />
-          </IconButton>
         </Box>
         <Box sx={{ overflow: 'auto', flex: 1 }}>
         {/* Кнопки управления - всегда видимы */}

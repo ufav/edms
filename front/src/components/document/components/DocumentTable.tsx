@@ -39,6 +39,8 @@ import { useTranslation } from 'react-i18next';
 import { observer } from 'mobx-react-lite';
 import { documentStore } from '../../../stores/DocumentStore';
 import { languageStore } from '../../../stores/LanguageStore';
+import { areaStore } from '../../../stores/AreaStore';
+import { projectStore } from '../../../stores/ProjectStore';
 import { referencesStore } from '../../../stores/ReferencesStore';
 import { canDeleteDocument } from '../../../hooks/usePermissions';
 import { userStore } from '../../../stores/UserStore';
@@ -72,6 +74,7 @@ export interface DocumentTableProps {
     created_by: boolean;
     discipline: boolean;
     document_type: boolean;
+    area: boolean;
     actions: boolean;
   };
   
@@ -127,6 +130,13 @@ export const DocumentTable: React.FC<DocumentTableProps> = observer(({
     referencesStore.loadWorkflowStatuses();
   }, []);
 
+  // Загружаем areas при изменении проекта
+  useEffect(() => {
+    if (projectStore.selectedProject?.id) {
+      areaStore.loadAreas(projectStore.selectedProject.id);
+    }
+  }, [projectStore.selectedProject?.id]);
+
   // Функция для определения цвета workflow статуса
   const getWorkflowStatusColor = (statusId?: number): "default" | "primary" | "secondary" | "error" | "info" | "success" | "warning" => {
     if (!statusId) return "default";
@@ -152,7 +162,7 @@ export const DocumentTable: React.FC<DocumentTableProps> = observer(({
     }
   };
 
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   // Функция для определения доступности галочки документа
   const isDocumentSelectable = (documentId: number): boolean => {
@@ -175,7 +185,7 @@ export const DocumentTable: React.FC<DocumentTableProps> = observer(({
       // Если порядок не задан, используем дефолтный порядок
       return [
         'number', 'title', 'file', 'size', 'revision', 'status', 'review_status',
-        'language', 'discipline', 'document_type', 'drs', 
+        'language', 'discipline', 'document_type', 'area', 'drs', 
         'date', 'updated_at', 'created_by'
       ];
     }
@@ -183,7 +193,7 @@ export const DocumentTable: React.FC<DocumentTableProps> = observer(({
     // Получаем все видимые колонки (только известные колонки)
     const knownColumns = [
       'number', 'title', 'file', 'size', 'revision', 'status', 'review_status',
-      'language', 'discipline', 'document_type', 'drs', 
+      'language', 'discipline', 'document_type', 'area', 'drs', 
       'date', 'updated_at', 'created_by'
     ];
     
@@ -219,6 +229,7 @@ export const DocumentTable: React.FC<DocumentTableProps> = observer(({
       case 'drs': return { width: '83px', minWidth: '83px' };
       case 'discipline': return { width: '103px', minWidth: '103px' };
       case 'document_type': return { width: '123px', minWidth: '123px' };
+      case 'area': return { width: '123px', minWidth: '123px' };
       case 'date': return { width: '140px', minWidth: '140px' };
       case 'updated_at': return { width: '140px', minWidth: '140px' };
       case 'created_by': return { width: '123px', minWidth: '123px' };
@@ -260,6 +271,7 @@ export const DocumentTable: React.FC<DocumentTableProps> = observer(({
         case 'created_by': return t('documents.columns.created_by');
         case 'discipline': return t('documents.columns.discipline');
         case 'document_type': return t('documents.columns.document_type');
+        case 'area': return language === 'ru' ? 'Участок' : 'Area';
         default: return key;
       }
     };
@@ -493,6 +505,16 @@ export const DocumentTable: React.FC<DocumentTableProps> = observer(({
             <Tooltip title={document.document_type_code || '-'} arrow>
               <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.875rem' }}>
                 {document.document_type_code || '-'}
+              </Typography>
+            </Tooltip>
+          );
+        case 'area':
+          const area = document.area_id ? areaStore.areas.find(a => a.id === document.area_id) : null;
+          const areaLabel = area ? (i18n.language === 'en' ? area.name : (area.description || area.name)) : '';
+          return (
+            <Tooltip title={area ? `${area.code} - ${areaLabel}` : '-'} arrow>
+              <Typography variant="body2" sx={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: '0.875rem' }}>
+                {area ? area.code : '-'}
               </Typography>
             </Tooltip>
           );

@@ -92,6 +92,8 @@ export const useDocumentActions = ({ t, onCloseDialog, onRefreshActiveRevisions,
       formData.append('discipline_id', documentData.discipline_id || '');
       formData.append('document_type_id', documentData.document_type_id || '');
       formData.append('language_id', documentData.language_id || '1');
+      // Добавляем area_id (пустая строка будет обработана бэкендом как null)
+      formData.append('area_id', documentData.area_id?.toString() || '');
       
       // Добавляем данные ревизии
       if (documentData.revisionDescription?.id) {
@@ -179,8 +181,27 @@ export const useDocumentActions = ({ t, onCloseDialog, onRefreshActiveRevisions,
   const handleSaveDocument = async (documentData: any) => {
     try {
       if (selectedDocumentId) {
+        // Подготавливаем данные для обновления
+        const updateData: any = {
+          title: documentData.title,
+          title_native: documentData.title_native,
+          remarks: documentData.remarks,
+          number: documentData.number,
+          language_id: documentData.language_id ? parseInt(documentData.language_id, 10) : undefined,
+          discipline_id: documentData.discipline_id ? parseInt(documentData.discipline_id, 10) : undefined,
+          document_type_id: documentData.document_type_id ? parseInt(documentData.document_type_id, 10) : undefined,
+        };
+        
+        // Преобразуем area_id: строка -> число или null (всегда включаем, даже если null)
+        if (documentData.area_id === '' || documentData.area_id === null || documentData.area_id === undefined || documentData.area_id === '0') {
+          updateData.area_id = null;
+        } else {
+          const parsedAreaId = parseInt(documentData.area_id, 10);
+          updateData.area_id = isNaN(parsedAreaId) ? null : parsedAreaId;
+        }
+        
         // Вызываем API для обновления документа
-        await documentsApi.update(selectedDocumentId, documentData);
+        await documentsApi.update(selectedDocumentId, updateData);
         
         // Обновляем список документов
         if (onRefreshDocuments) {

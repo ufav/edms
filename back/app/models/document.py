@@ -17,6 +17,7 @@ class Document(Base):
     number = Column(String(100), nullable=True)  # Номер документа
     is_deleted = Column(Integer, default=0)  # Флаг удаления: 0 - не удален, 1 - удален
     project_id = Column(Integer, ForeignKey("projects.id", ondelete="CASCADE"))
+    area_id = Column(Integer, ForeignKey("areas.id", ondelete="SET NULL"), nullable=True, index=True)  # Участок тех. процесса (опционально)
     discipline_id = Column(Integer, ForeignKey("disciplines.id"), nullable=True)
     document_type_id = Column(Integer, ForeignKey("document_types.id"), nullable=True)
     language_id = Column(Integer, ForeignKey("languages.id"), nullable=True)
@@ -36,6 +37,7 @@ class Document(Base):
     
     # Relationships (temporarily commented out for seeding)
     project = relationship("Project")
+    area = relationship("Area", back_populates="documents")  # Участок тех. процесса
     # discipline = relationship("Discipline", back_populates="documents")
     # document_type = relationship("DocumentType", back_populates="documents")
     # language = relationship("Language", back_populates="documents")

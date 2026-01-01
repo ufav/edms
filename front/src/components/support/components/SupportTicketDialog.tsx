@@ -15,6 +15,7 @@ import {
 import { Close as CloseIcon, CloudUpload as CloudUploadIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import { supportApi } from '../../../api/client';
+import NotificationSnackbar from '../../../components/NotificationSnackbar';
 
 interface SupportTicketDialogProps {
   open: boolean;
@@ -35,6 +36,10 @@ const SupportTicketDialog: React.FC<SupportTicketDialogProps> = ({ open, onClose
   const [files, setFiles] = useState<FilePreview[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successNotification, setSuccessNotification] = useState<{
+    open: boolean;
+    message: string;
+  }>({ open: false, message: '' });
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFiles = event.target.files;
@@ -165,6 +170,7 @@ const SupportTicketDialog: React.FC<SupportTicketDialogProps> = ({ open, onClose
           value={subject}
           onChange={(e) => setSubject(e.target.value)}
           margin="normal"
+          variant="standard"
           required
           disabled={loading}
         />
@@ -175,6 +181,7 @@ const SupportTicketDialog: React.FC<SupportTicketDialogProps> = ({ open, onClose
           value={message}
           onChange={(e) => setMessage(e.target.value)}
           margin="normal"
+          variant="standard"
           multiline
           rows={6}
           required
@@ -274,6 +281,13 @@ const SupportTicketDialog: React.FC<SupportTicketDialogProps> = ({ open, onClose
           {loading ? (t('common.sending') || t('support.sending') || 'Отправка...') : (t('support.send') || 'Отправить')}
         </Button>
       </DialogActions>
+
+      <NotificationSnackbar
+        open={successNotification.open}
+        message={successNotification.message}
+        severity="success"
+        onClose={() => setSuccessNotification({ open: false, message: '' })}
+      />
     </Dialog>
   );
 };

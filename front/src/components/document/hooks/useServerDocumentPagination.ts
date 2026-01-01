@@ -8,6 +8,7 @@ export interface UseServerDocumentPaginationProps {
   disciplineId?: number;
   documentTypeId?: number;
   revisionDescriptionId?: number;
+  areaId?: number;
   dateFrom?: string;
   dateTo?: string;
   sortBy?: string;
@@ -46,6 +47,7 @@ export const useServerDocumentPagination = ({
   disciplineId,
   documentTypeId,
   revisionDescriptionId,
+  areaId,
   dateFrom,
   dateTo,
   sortBy = 'updated_at',
@@ -63,7 +65,7 @@ export const useServerDocumentPagination = ({
   // Сброс страницы при изменении фильтров
   useEffect(() => {
     setPage(1);
-  }, [projectId, status, search, disciplineId, documentTypeId, revisionDescriptionId, dateFrom, dateTo, sortBy, sortDir]);
+  }, [projectId, status, search, disciplineId, documentTypeId, revisionDescriptionId, areaId, dateFrom, dateTo, sortBy, sortDir]);
 
   // Загрузка данных
   const loadDocuments = useCallback(async () => {
@@ -80,6 +82,7 @@ export const useServerDocumentPagination = ({
         discipline_id: disciplineId,
         document_type_id: documentTypeId,
         revision_description_id: revisionDescriptionId,
+        area_id: areaId,
         date_from: dateFrom,
         date_to: dateTo,
         sort_by: sortBy,
@@ -107,6 +110,7 @@ export const useServerDocumentPagination = ({
     disciplineId,
     documentTypeId,
     revisionDescriptionId,
+    areaId,
     dateFrom,
     dateTo,
     sortBy,

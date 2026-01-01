@@ -3,6 +3,7 @@ from .user import User
 from .user_settings import UserSettings
 from .project import Project, ProjectMember
 from .project_participant import ProjectParticipant
+from .area import Area
 from .contact import Contact
 from .company_role import CompanyRole
 from .project_role import ProjectRole
@@ -29,6 +30,7 @@ __all__ = [
     "UserSettings",
     "Project", "ProjectMember", 
     "ProjectParticipant",
+    "Area",
     "Contact",
     "CompanyRole",
     "ProjectRole",

@@ -9,13 +9,13 @@ import {
   Grid,
   Alert,
   CircularProgress,
-  IconButton,
-  Button,
-  Typography
+  Autocomplete,
+  Chip
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { useTranslation } from 'react-i18next';
-import { projectsApi } from '../../api/client';
+import { projectsApi, referencesApi } from '../../api/client';
+import { projectDialogStore } from '../../stores/ProjectDialogStore';
 
 interface MainTabProps {
   formData: {
@@ -46,6 +46,8 @@ interface MainTabProps {
   }) => void;
   // Новые пропы для режима просмотра
   mode?: 'create' | 'edit';
+  selectedAreaIds?: number[];
+  onAreaIdsChange?: (areaIds: number[]) => void;
 }
 
 const MainTab: React.FC<MainTabProps> = ({ 
@@ -53,9 +55,11 @@ const MainTab: React.FC<MainTabProps> = ({
   setFormData, 
   codeValidation, 
   setCodeValidation,
-  mode = 'create'
+  mode = 'create',
+  selectedAreaIds = [],
+  onAreaIdsChange
 }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [isMobile] = useState(false);
 
   const handleInputChange = (field: string, value: any) => {
@@ -194,6 +198,15 @@ const MainTab: React.FC<MainTabProps> = ({
     }
   };
 
+  // Получаем выбранные areas для отображения
+  const selectedAreas = projectDialogStore.areas.filter(area => selectedAreaIds.includes(area.id));
+
+  const handleAreasChange = (_: any, newValue: Array<{ id: number; code: string; name: string }>) => {
+    if (onAreaIdsChange) {
+      onAreaIdsChange(newValue.map(area => area.id));
+    }
+  };
+
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: isMobile ? 2 : 3, mt: 1 }}>
       <Grid container spacing={isMobile ? 1 : 2}>
@@ -305,6 +318,50 @@ const MainTab: React.FC<MainTabProps> = ({
             }}
           />
         </Grid>
+      </Grid>
+
+      {/* Секция для участков тех процесса (Areas) */}
+      <Grid item xs={12}>
+        <Autocomplete
+          multiple
+          options={projectDialogStore.areas}
+          value={selectedAreas}
+          onChange={handleAreasChange}
+          getOptionLabel={(option) => {
+            const areaLabel = i18n.language === 'en' ? option.name : (option.description || option.name);
+            return `${option.code} - ${areaLabel}`;
+          }}
+          loading={projectDialogStore.isLoading}
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              label={t('createProject.areas.title') || 'Участки тех процесса'}
+              variant="standard"
+              InputProps={{
+                ...params.InputProps,
+                endAdornment: (
+                  <>
+                    {projectDialogStore.isLoading ? <CircularProgress color="inherit" size={20} /> : null}
+                    {params.InputProps.endAdornment}
+                  </>
+                ),
+              }}
+            />
+          )}
+          renderTags={(value, getTagProps) =>
+            value.map((option, index) => {
+              const areaLabel = i18n.language === 'en' ? option.name : (option.description || option.name);
+              return (
+                <Chip
+                  {...getTagProps({ index })}
+                  key={option.id}
+                  label={`${option.code} - ${areaLabel}`}
+                  size="small"
+                />
+              );
+            })
+          }
+        />
       </Grid>
     </Box>
   );

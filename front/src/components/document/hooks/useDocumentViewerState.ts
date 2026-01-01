@@ -12,6 +12,7 @@ interface DocumentData {
   language_id: string;
   discipline_id: string;
   document_type_id: string;
+  area_id: string;
 }
 
 interface UseDocumentViewerStateProps {
@@ -38,6 +39,7 @@ export const useDocumentViewerState = ({
     language_id: '',
     discipline_id: '',
     document_type_id: '',
+    area_id: '',
   });
 
   // Состояние для режима редактирования
@@ -63,6 +65,7 @@ export const useDocumentViewerState = ({
         language_id: document.language_id?.toString() || '',
         discipline_id: document.discipline_id?.toString() || '',
         document_type_id: document.document_type_id?.toString() || '',
+        area_id: document.area_id?.toString() || '',
       });
     } else if (isCreating) {
       // Сбрасываем данные для создания нового документа
@@ -76,6 +79,7 @@ export const useDocumentViewerState = ({
         language_id: '',
         discipline_id: '',
         document_type_id: '',
+        area_id: '',
       });
     } else {
       // Если документ закрыт (document === null и !isCreating), сбрасываем данные
@@ -122,6 +126,7 @@ export const useDocumentViewerState = ({
         language_id: '',
         discipline_id: '',
         document_type_id: '',
+        area_id: '',
       });
     }
   };

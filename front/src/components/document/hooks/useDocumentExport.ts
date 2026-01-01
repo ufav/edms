@@ -7,6 +7,7 @@ import type { ColumnVisibility, ColumnOrder } from './useDocumentSettings';
 import { documentStore } from '../../../stores/DocumentStore';
 import { referencesStore } from '../../../stores/ReferencesStore';
 import { languageStore } from '../../../stores/LanguageStore';
+import { areaStore } from '../../../stores/AreaStore';
 import { userStore } from '../../../stores/UserStore';
 
 export interface DocumentExportParams {
@@ -16,6 +17,7 @@ export interface DocumentExportParams {
   disciplineId?: number;
   documentTypeId?: number;
   revisionDescriptionId?: number;
+  areaId?: number;
   dateFrom?: string;
   dateTo?: string;
   sortBy?: string;
@@ -48,6 +50,7 @@ export const useDocumentExport = (): UseDocumentExportReturn => {
         discipline_id: params.disciplineId || undefined,
         document_type_id: params.documentTypeId || undefined,
         revision_description_id: params.revisionDescriptionId || undefined,
+        area_id: params.areaId || undefined,
         date_from: params.dateFrom,
         date_to: params.dateTo,
         sort_by: params.sortBy,
@@ -96,6 +99,11 @@ export const useDocumentExport = (): UseDocumentExportReturn => {
         },
         discipline: (doc) => doc.discipline_code || '',
         document_type: (doc) => doc.document_type_code || '',
+        area: (doc) => {
+          if (!doc.area_id) return '';
+          const area = areaStore.areas.find(a => a.id === doc.area_id);
+          return area ? area.code : '';
+        },
         drs: (doc) => doc.drs || '',
         date: (doc) => {
           if (!doc.created_at) return null;
@@ -131,13 +139,14 @@ export const useDocumentExport = (): UseDocumentExportReturn => {
         language: t('documents.columns.language'),
         discipline: t('documents.export.columns.discipline'),
         document_type: t('documents.export.columns.document_type'),
+        area: t('documents.columns.area'),
         drs: t('documents.export.columns.drs'),
         date: t('documents.export.columns.created_at'),
         updated_at: t('documents.export.columns.updated_at'),
         created_by: t('documents.columns.created_by'),
       };
 
-      // Определяем видимые колонки из настроек
+      // Определяем видимые колонки из настроек (используем переданные или дефолтные)
       const visibleCols = params.visibleCols || {
         number: true,
         title: true,
@@ -153,6 +162,7 @@ export const useDocumentExport = (): UseDocumentExportReturn => {
         created_by: true,
         discipline: true,
         document_type: true,
+        area: true,
         actions: false,
       };
 

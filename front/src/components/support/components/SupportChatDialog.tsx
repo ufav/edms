@@ -263,7 +263,7 @@ const SupportChatDialog: React.FC<SupportChatDialogProps> = ({ open, ticketId, o
 
   const handleSendMessage = useCallback(async (text: string, files?: File[]): Promise<void> => {
     // Проверяем, что тикет не закрыт
-    if (ticket?.status === 'closed') {
+    if (ticket?.status?.toUpperCase() === 'CLOSED') {
       throw new Error(t('support.ticket_closed_message') || 'Тикет закрыт. Для продолжения обсуждения верните тикет в работу.');
     }
     
@@ -309,14 +309,16 @@ const SupportChatDialog: React.FC<SupportChatDialogProps> = ({ open, ticketId, o
   }, [ticketId, loadTicket, t]);
 
   const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'new':
+    // Нормализуем статус к верхнему регистру для сравнения
+    const normalizedStatus = status.toUpperCase();
+    switch (normalizedStatus) {
+      case 'NEW':
         return 'default';
-      case 'in_progress':
+      case 'IN_PROGRESS':
         return 'primary';
-      case 'resolved':
+      case 'RESOLVED':
         return 'success';
-      case 'closed':
+      case 'CLOSED':
         return 'default';
       default:
         return 'default';
@@ -383,7 +385,7 @@ const SupportChatDialog: React.FC<SupportChatDialogProps> = ({ open, ticketId, o
     );
   }, [ticketId, handleImageClick, t]);
 
-  const isClosed = ticket?.status === 'closed';
+  const isClosed = ticket?.status?.toUpperCase() === 'CLOSED';
   
   return (
     <>
@@ -409,7 +411,7 @@ const SupportChatDialog: React.FC<SupportChatDialogProps> = ({ open, ticketId, o
         statusChip={
           ticket?.status ? (
             <Chip
-              label={t(`support.status.${ticket.status}`) || ticket.status}
+              label={t(`support.status.${ticket.status.toLowerCase()}`) || ticket.status}
               color={getStatusColor(ticket.status) as any}
               size="small"
               sx={{ mt: 0.5 }}

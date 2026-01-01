@@ -17,6 +17,7 @@ import { DocumentViewer } from './document';
 import TransmittalDialog from './transmittal/components/TransmittalDialog';
 import { useDocumentActions } from './document/hooks/useDocumentActions';
 import { disciplineStore } from '../stores/DisciplineStore';
+import { areaStore } from '../stores/AreaStore';
 
 const Dashboard: React.FC = observer(() => {
   const { t, i18n } = useTranslation();
@@ -50,6 +51,7 @@ const Dashboard: React.FC = observer(() => {
   useEffect(() => {
     if (projectStore.selectedProject?.id) {
       disciplineStore.loadDisciplines(projectStore.selectedProject.id);
+      areaStore.loadAreas(projectStore.selectedProject.id);
     }
   }, [projectStore.selectedProject]);
 

@@ -10,6 +10,7 @@ from app.models.references import (
     RevisionStatus, RevisionDescription, RevisionStep, Originator, ReviewCode,
     Language, Department, Company, UserRole, WorkflowStatus
 )
+from app.models.area import Area
 from app.schemas.references import (
     RevisionStatusCreate, RevisionStatusResponse,
     RevisionDescriptionCreate, RevisionDescriptionResponse,
@@ -194,3 +195,20 @@ def create_workflow_status(status: WorkflowStatusCreate, db: Session = Depends(g
     db.commit()
     db.refresh(db_status)
     return db_status
+
+
+# Area endpoints (справочник участков тех. процесса)
+@router.get("/areas", response_model=List[dict])
+def get_areas(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
+    """Get all areas (справочник участков тех. процесса)"""
+    areas = db.query(Area).filter(Area.is_active == True).offset(skip).limit(limit).all()
+    return [
+        {
+            "id": area.id,
+            "code": area.code,
+            "name": area.name,
+            "description": area.description,
+            "is_active": area.is_active
+        }
+        for area in areas
+    ]

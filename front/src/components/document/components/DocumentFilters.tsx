@@ -25,6 +25,7 @@ import {
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import { disciplineStore } from '../../../stores/DisciplineStore';
+import { areaStore } from '../../../stores/AreaStore';
 import { projectStore } from '../../../stores/ProjectStore';
 import { useEffect, useState, useRef } from 'react';
 import { projectsApi, type DocumentType } from '../../../api/client';
@@ -37,6 +38,7 @@ export interface DocumentFiltersProps {
   selectedDisciplineId: number | null;
   selectedDocumentTypeId: number | null;
   selectedRevisionDescriptionId: number | null;
+  selectedAreaId: number | null;
   dateRange: [Date | null, Date | null];
   
   // Обработчики
@@ -45,6 +47,7 @@ export interface DocumentFiltersProps {
   onDisciplineChange: (id: number | null) => void;
   onDocumentTypeChange: (id: number | null) => void;
   onRevisionDescriptionChange: (id: number | null) => void;
+  onAreaChange: (id: number | null) => void;
   onDateRangeChange: (range: [Date | null, Date | null]) => void;
   onSettingsClick: () => void;
   onResetFilters: () => void;
@@ -57,12 +60,14 @@ export const DocumentFilters: React.FC<DocumentFiltersProps> = observer(({
   selectedDisciplineId,
   selectedDocumentTypeId,
   selectedRevisionDescriptionId,
+  selectedAreaId,
   dateRange,
   onSearchChange,
   onStatusChange,
   onDisciplineChange,
   onDocumentTypeChange,
   onRevisionDescriptionChange,
+  onAreaChange,
   onDateRangeChange,
   onSettingsClick,
   onResetFilters,
@@ -203,9 +208,46 @@ export const DocumentFilters: React.FC<DocumentFiltersProps> = observer(({
           sx={{ minWidth: isMobile ? '100%' : 300 }}
         />
         
+        <FormControl sx={{ minWidth: isMobile ? '100%' : 170 }}>
+          <InputLabel>{t('documents.filters.area')}</InputLabel>
+          <Select
+            value={selectedAreaId || 'all'}
+            onChange={(e) => onAreaChange(e.target.value === 'all' ? null : Number(e.target.value))}
+            label={t('documents.filters.area')}
+            disabled={areaStore.isLoading}
+            renderValue={(value) => {
+              if (value === 'all') return t('filter.all');
+              const area = areaStore.areas.find(a => a.id === value);
+              return area ? area.code : t('filter.all');
+            }}
+          >
+            <MenuItem value="all">{t('filter.all')}</MenuItem>
+            {areaStore.areas
+              .slice()
+              .sort((a, b) => a.code.localeCompare(b.code))
+              .map((area) => (
+              <MenuItem key={area.id} value={area.id}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', width: '100%' }}>
+                  <Box sx={{ minWidth: '60px' }}>
+                    {area.code}
+                  </Box>
+                  <Box sx={{ flex: 1, textAlign: 'left', ml: 1 }}>
+                    {i18n.language === 'en' ? area.name : (area.description || area.name)}
+                  </Box>
+                </Box>
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+
         <LocalizationProvider 
           adapterLocale={i18n.language === 'en' ? enUS : ru} 
           dateAdapter={AdapterDateFns}
+          localeText={{
+            fieldDayPlaceholder: () => '__',
+            fieldMonthPlaceholder: () => '__',
+            fieldYearPlaceholder: () => '____',
+          }}
         >
           <Box sx={{ display: 'flex', gap: 1, minWidth: isMobile ? '100%' : 340 }}>
             <DatePicker

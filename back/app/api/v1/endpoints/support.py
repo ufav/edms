@@ -4,7 +4,7 @@ Support tickets endpoints - CRUD operations
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks, Request
 from sqlalchemy.orm import Session
-from sqlalchemy import desc
+from sqlalchemy import desc, text
 from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime, timezone
@@ -210,22 +210,38 @@ async def get_support_tickets(
     """
     Получение списка тикетов текущего пользователя
     """
-    tickets = db.query(SupportTicket).filter(
-        SupportTicket.user_id == current_user.id
-    ).order_by(desc(SupportTicket.last_message_at)).all()
+    # Используем raw SQL для чтения статуса как строки, чтобы избежать проблем с enum
+    from sqlalchemy import text
+    tickets_data = db.execute(
+        text("""
+            SELECT id, user_id, subject, initial_message, status::text as status, 
+                   created_at, updated_at, last_message_at
+            FROM support_tickets
+            WHERE user_id = :user_id
+            ORDER BY last_message_at DESC
+        """),
+        {"user_id": current_user.id}
+    ).fetchall()
     
     result = []
-    for ticket in tickets:
-        user = db.query(User).filter(User.id == ticket.user_id).first()
+    for row in tickets_data:
+        # Преобразуем строку статуса в enum
+        try:
+            status_enum = TicketStatus(row.status)
+        except ValueError:
+            # Если статус не соответствует enum, используем NEW по умолчанию
+            status_enum = TicketStatus.NEW
+        
+        user = db.query(User).filter(User.id == row.user_id).first()
         result.append(SupportTicketResponse(
-            id=ticket.id,
-            user_id=ticket.user_id,
-            subject=ticket.subject,
-            initial_message=ticket.initial_message,
-            status=ticket.status.value,
-            created_at=ticket.created_at,
-            updated_at=ticket.updated_at,
-            last_message_at=ticket.last_message_at,
+            id=row.id,
+            user_id=row.user_id,
+            subject=row.subject,
+            initial_message=row.initial_message,
+            status=status_enum.value,
+            created_at=row.created_at,
+            updated_at=row.updated_at,
+            last_message_at=row.last_message_at,
             user={
                 'id': user.id,
                 'username': user.username,
@@ -245,13 +261,25 @@ async def get_support_ticket(
     """
     Получение тикета с сообщениями
     """
-    ticket = db.query(SupportTicket).filter(
-        SupportTicket.id == ticket_id,
-        SupportTicket.user_id == current_user.id
-    ).first()
+    # Используем raw SQL для чтения статуса как строки, чтобы избежать проблем с enum
+    ticket_data = db.execute(
+        text("""
+            SELECT id, user_id, subject, initial_message, status::text as status, 
+                   created_at, updated_at, last_message_at
+            FROM support_tickets
+            WHERE id = :ticket_id AND user_id = :user_id
+        """),
+        {"ticket_id": ticket_id, "user_id": current_user.id}
+    ).fetchone()
     
-    if not ticket:
+    if not ticket_data:
         raise HTTPException(status_code=404, detail="Тикет не найден")
+    
+    # Преобразуем строку статуса в enum
+    try:
+        status_enum = TicketStatus(ticket_data.status)
+    except ValueError:
+        status_enum = TicketStatus.NEW
     
     # Получаем сообщения
     messages = db.query(SupportMessage).filter(
@@ -264,7 +292,7 @@ async def get_support_ticket(
     ).all()
     
     # Формируем ответ
-    user = db.query(User).filter(User.id == ticket.user_id).first()
+    user = db.query(User).filter(User.id == ticket_data.user_id).first()
     messages_response = []
     for msg in messages:
         msg_files = [f for f in ticket_files if f.message_id == msg.id]
@@ -285,14 +313,14 @@ async def get_support_ticket(
         ))
     
     return SupportTicketDetailResponse(
-        id=ticket.id,
-        user_id=ticket.user_id,
-        subject=ticket.subject,
-        initial_message=ticket.initial_message,
-        status=ticket.status.value,
-        created_at=ticket.created_at,
-        updated_at=ticket.updated_at,
-        last_message_at=ticket.last_message_at,
+        id=ticket_data.id,
+        user_id=ticket_data.user_id,
+        subject=ticket_data.subject,
+        initial_message=ticket_data.initial_message,
+        status=status_enum.value,
+        created_at=ticket_data.created_at,
+        updated_at=ticket_data.updated_at,
+        last_message_at=ticket_data.last_message_at,
         user={
             'id': user.id,
             'username': user.username,
@@ -339,7 +367,7 @@ async def create_support_message(
         raise HTTPException(status_code=404, detail="Тикет не найден")
     
     # Проверяем, что тикет не закрыт (пользователь не может писать в закрытый тикет)
-    if ticket.status == TicketStatus.CLOSED or ticket.status.value == "closed":
+    if ticket.status == TicketStatus.CLOSED:
         raise HTTPException(
             status_code=403, 
             detail="Тикет закрыт. Для продолжения обсуждения обратитесь к поддержке."
@@ -506,7 +534,7 @@ async def reopen_ticket(
         raise HTTPException(status_code=404, detail="Тикет не найден")
     
     # Проверяем, что тикет закрыт
-    if ticket.status != TicketStatus.CLOSED and ticket.status.value != "closed":
+    if ticket.status != TicketStatus.CLOSED:
         raise HTTPException(
             status_code=400,
             detail=f"Тикет не закрыт (текущий статус: {ticket.status.value})"

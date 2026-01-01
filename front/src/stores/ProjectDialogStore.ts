@@ -7,6 +7,7 @@ class ProjectDialogStore {
   revisionDescriptions: any[] = [];
   revisionSteps: any[] = [];
   workflowPresets: any[] = [];
+  areas: any[] = [];
   
   // Кэш для данных конкретного проекта
   projectDataCache: { [projectId: number]: {
@@ -17,6 +18,7 @@ class ProjectDialogStore {
     documentTypes: { [disciplineId: number]: any[] };
     participants: any[];
     members: any[];
+    areas: any[];
   } } = {};
   
   isLoading = false;
@@ -28,6 +30,7 @@ class ProjectDialogStore {
   isRevisionDescriptionsLoaded = false;
   isRevisionStepsLoaded = false;
   isWorkflowPresetsLoaded = false;
+  isAreasLoaded = false;
 
   constructor() {
     makeAutoObservable(this);
@@ -40,7 +43,8 @@ class ProjectDialogStore {
         this.isDocumentTypesLoaded && 
         this.isRevisionDescriptionsLoaded && 
         this.isRevisionStepsLoaded && 
-        this.isWorkflowPresetsLoaded) {
+        this.isWorkflowPresetsLoaded &&
+        this.isAreasLoaded) {
       return; // Все данные уже загружены
     }
 
@@ -51,12 +55,13 @@ class ProjectDialogStore {
 
     try {
       // Загружаем все данные параллельно
-      const [disciplinesData, documentTypesData, revisionDescriptionsData, revisionStepsData, workflowPresetsData] = await Promise.all([
+      const [disciplinesData, documentTypesData, revisionDescriptionsData, revisionStepsData, workflowPresetsData, areasData] = await Promise.all([
         disciplinesApi.getAll(),
         disciplinesApi.getDocumentTypes(),
         referencesApi.getRevisionDescriptions(),
         referencesApi.getRevisionSteps(),
-        workflowPresetsApi.getAll()
+        workflowPresetsApi.getAll(),
+        referencesApi.getAreas()
       ]);
 
       runInAction(() => {
@@ -65,12 +70,14 @@ class ProjectDialogStore {
         this.revisionDescriptions = revisionDescriptionsData;
         this.revisionSteps = revisionStepsData;
         this.workflowPresets = workflowPresetsData;
+        this.areas = areasData;
         
         this.isDisciplinesLoaded = true;
         this.isDocumentTypesLoaded = true;
         this.isRevisionDescriptionsLoaded = true;
         this.isRevisionStepsLoaded = true;
         this.isWorkflowPresetsLoaded = true;
+        this.isAreasLoaded = true;
       });
     } catch (error: any) {
       runInAction(() => {
@@ -107,7 +114,8 @@ class ProjectDialogStore {
         projectWorkflow,
         projectDocumentTypes,
         projectParticipants,
-        projectMembers
+        projectMembers,
+        projectAreas
       ] = await Promise.all([
         projectsApi.getDisciplines(projectId),
         projectsApi.getRevisionDescriptions(projectId).catch(() => []),
@@ -115,7 +123,8 @@ class ProjectDialogStore {
         projectsApi.getWorkflowPreset(projectId).catch(() => null),
         projectsApi.getAllDocumentTypes(projectId).catch(() => ({})),
         projectParticipantsApi.getAll(projectId).catch(() => []),
-        projectsApi.members.getAll(projectId).catch(() => [])
+        projectsApi.members.getAll(projectId).catch(() => []),
+        projectsApi.getAreas(projectId).catch(() => [])
       ]);
 
       const projectData = {
@@ -125,7 +134,8 @@ class ProjectDialogStore {
         workflowPreset: projectWorkflow,
         documentTypes: projectDocumentTypes,
         participants: projectParticipants,
-        members: projectMembers
+        members: projectMembers,
+        areas: projectAreas
       };
 
       runInAction(() => {
@@ -175,11 +185,13 @@ class ProjectDialogStore {
     this.revisionDescriptions = [];
     this.revisionSteps = [];
     this.workflowPresets = [];
+    this.areas = [];
     this.isDisciplinesLoaded = false;
     this.isDocumentTypesLoaded = false;
     this.isRevisionDescriptionsLoaded = false;
     this.isRevisionStepsLoaded = false;
     this.isWorkflowPresetsLoaded = false;
+    this.isAreasLoaded = false;
     this.error = null;
   }
 }

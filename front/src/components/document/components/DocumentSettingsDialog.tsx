@@ -56,6 +56,7 @@ export interface ColumnVisibility {
   created_by: boolean;
   discipline: boolean;
   document_type: boolean;
+  area: boolean;
   actions: boolean;
 }
 
@@ -110,6 +111,7 @@ const SortableColumnItem: React.FC<SortableColumnItemProps> = ({
       case 'created_by': return t('documents.columns.created_by');
       case 'discipline': return t('documents.columns.discipline');
       case 'document_type': return t('documents.columns.document_type');
+      case 'area': return t('documents.columns.area');
       case 'actions': return t('common.actions');
       default: return columnKey;
     }

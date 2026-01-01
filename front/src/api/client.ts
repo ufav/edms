@@ -236,6 +236,7 @@ export interface Document {
   file_path: string;
   discipline_id?: number;
   document_type_id?: number;
+  area_id?: number;
   assigned_to?: number;
   created_at: string;
   updated_at: string;
@@ -648,6 +649,12 @@ export const projectsApi = {
     return response.data;
   },
 
+  // Получить участки тех процесса проекта
+  getAreas: async (projectId: number): Promise<any[]> => {
+    const response = await apiClient.get(`/projects/${projectId}/areas`);
+    return response.data;
+  },
+
   // Получить типы документов для дисциплины в проекте
   getDocumentTypes: async (projectId: number, disciplineId: number): Promise<DocumentType[]> => {
     const response = await apiClient.get(`/projects/${projectId}/document-types/${disciplineId}`);
@@ -748,6 +755,7 @@ export const documentsApi = {
     discipline_id?: number;
     document_type_id?: number;
     revision_description_id?: number;
+    area_id?: number;
     date_from?: string;
     date_to?: string;
     sort_by?: string;
@@ -1628,6 +1636,10 @@ export const referencesApi = {
   
   createRevisionStep: (data: Partial<RevisionStep>): Promise<RevisionStep> => 
     apiClient.post('/references/revision-steps', data).then(res => res.data),
+  
+  // Areas (справочник объектов/площадок)
+  getAreas: (): Promise<any[]> => 
+    apiClient.get('/references/areas').then(res => res.data),
   
   // Originators
   getOriginators: (): Promise<Originator[]> => 

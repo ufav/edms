@@ -1,5 +1,8 @@
 import { useState } from 'react';
 import { projectStore } from '../../../stores/ProjectStore';
+import { disciplineStore } from '../../../stores/DisciplineStore';
+import { areaStore } from '../../../stores/AreaStore';
+import { projectDialogStore } from '../../../stores/ProjectDialogStore';
 import { projectsApi } from '../../../api/client';
 
 interface UseProjectActionsProps {
@@ -32,9 +35,17 @@ export const useProjectActions = ({ t }: UseProjectActionsProps): UseProjectActi
     // Здесь оставляем пустой, логика будет в диалогах
   };
 
-  const handleCreateSuccess = (newProject: any) => {
-    projectStore.loadProjects(true); // Принудительно обновляем список проектов
+  const handleCreateSuccess = async (newProject: any) => {
+    await projectStore.loadProjects(true); // Принудительно обновляем список проектов
     projectStore.selectProject(newProject); // Выбираем только что созданный проект
+    
+    // Обновляем дисциплины и areas для нового проекта
+    if (newProject.id) {
+      await Promise.all([
+        disciplineStore.reloadDisciplines(newProject.id),
+        areaStore.reloadAreas(newProject.id)
+      ]);
+    }
     
     // Показываем уведомление об успешном создании
     setSuccessNotification({
@@ -73,7 +84,8 @@ export const useProjectActions = ({ t }: UseProjectActionsProps): UseProjectActi
     
     // Если редактируется выбранный проект, обновляем его из списка
     if (projectStore.selectedProject) {
-      const updatedProject = projectStore.getProjectById(projectStore.selectedProject.id);
+      const projectId = projectStore.selectedProject.id;
+      const updatedProject = projectStore.getProjectById(projectId);
       
       if (updatedProject) {
         // Принудительно обновляем MobX store
@@ -81,6 +93,15 @@ export const useProjectActions = ({ t }: UseProjectActionsProps): UseProjectActi
         
         // Принудительно уведомляем MobX об изменении
         projectStore.selectedProject = { ...projectStore.selectedProject };
+        
+        // Обновляем дисциплины и areas для обновленного проекта (принудительно)
+        await Promise.all([
+          disciplineStore.reloadDisciplines(projectId),
+          areaStore.reloadAreas(projectId)
+        ]);
+        
+        // Очищаем кэш ProjectDialogStore для этого проекта, чтобы при следующем открытии загрузились свежие данные
+        projectDialogStore.clearProjectCache(projectId);
       }
     }
     

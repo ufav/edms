@@ -14,6 +14,7 @@ interface DocumentData {
   language_id: string;
   discipline_id: string;
   document_type_id: string;
+  area_id: string;
 }
 
 interface UseDocumentValidationProps {
