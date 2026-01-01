@@ -74,7 +74,9 @@ class TelegramService:
             if reply_markup:
                 payload["reply_markup"] = reply_markup
             
-            async with httpx.AsyncClient(timeout=10.0, verify=False) as client:
+            # В production используем verify=True, в development - verify=False
+            verify_ssl = not settings.DEBUG
+            async with httpx.AsyncClient(timeout=10.0, verify=verify_ssl) as client:
                 response = await client.post(url, json=payload)
                 response.raise_for_status()
                 return True
@@ -114,7 +116,9 @@ class TelegramService:
                 payload["caption"] = caption
                 payload["parse_mode"] = "HTML"
             
-            async with httpx.AsyncClient(timeout=30.0, verify=False) as client:
+            # В production используем verify=True, в development - verify=False
+            verify_ssl = not settings.DEBUG
+            async with httpx.AsyncClient(timeout=30.0, verify=verify_ssl) as client:
                 response = await client.post(url, json=payload)
                 response.raise_for_status()
                 return True
@@ -162,7 +166,9 @@ class TelegramService:
                 data["caption"] = caption
                 data["parse_mode"] = "HTML"
             
-            async with httpx.AsyncClient(timeout=30.0, verify=False) as client:
+            # В production используем verify=True, в development - verify=False
+            verify_ssl = not settings.DEBUG
+            async with httpx.AsyncClient(timeout=30.0, verify=verify_ssl) as client:
                 response = await client.post(url, data=data, files=files)
                 response.raise_for_status()
                 return True

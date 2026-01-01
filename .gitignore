@@ -45,9 +45,16 @@ yarn.lock
 pnpm-lock.yaml 
 package-lock.json 
  
-# Project specific 
-back/uploads/ 
-back/.alembic_cache/ 
+# Project specific
+back/uploads/
+back/.alembic_cache/
+
+# SSL certificates and keys (never commit!)
+nginx/ssl/
+*.crt
+*.key
+*.pem
+*.cert
  
 # Caches 
 .cache/ 

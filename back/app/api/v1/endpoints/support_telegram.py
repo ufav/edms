@@ -44,7 +44,9 @@ async def get_telegram_chat_id(
     try:
         # Получаем последние обновления от Telegram
         url = f"{telegram_service.base_url}/getUpdates"
-        async with httpx.AsyncClient(timeout=10.0, verify=False) as client:
+        # В production используем verify=True, в development - verify=False
+        verify_ssl = not settings.DEBUG
+        async with httpx.AsyncClient(timeout=10.0, verify=verify_ssl) as client:
             response = await client.get(url)
             response.raise_for_status()
             result = response.json()
@@ -134,7 +136,9 @@ async def setup_telegram_webhook(
         if settings.TELEGRAM_WEBHOOK_SECRET:
             payload["secret_token"] = settings.TELEGRAM_WEBHOOK_SECRET
         
-        async with httpx.AsyncClient(timeout=10.0, verify=False) as client:
+        # В production используем verify=True, в development - verify=False
+        verify_ssl = not settings.DEBUG
+        async with httpx.AsyncClient(timeout=10.0, verify=verify_ssl) as client:
             response = await client.post(url, json=payload)
             response.raise_for_status()
             result = response.json()
@@ -177,7 +181,9 @@ async def start_telegram_polling(
         # Сначала удаляем webhook, если он установлен
         delete_webhook_url = f"{telegram_service.base_url}/deleteWebhook"
         try:
-            async with httpx.AsyncClient(timeout=10.0, verify=False) as client:
+            # В production используем verify=True, в development - verify=False
+            verify_ssl = not settings.DEBUG
+            async with httpx.AsyncClient(timeout=10.0, verify=verify_ssl) as client:
                 await client.post(delete_webhook_url, json={"drop_pending_updates": True})
         except Exception as e:
             # Игнорируем ошибки при удалении webhook
@@ -217,7 +223,9 @@ async def telegram_polling_worker():
             url = f"{base_url}/getUpdates"
             params = {"timeout": 30, "offset": offset}
             
-            async with httpx.AsyncClient(timeout=35.0, verify=False) as client:
+            # В production используем verify=True, в development - verify=False
+            verify_ssl = not settings.DEBUG
+            async with httpx.AsyncClient(timeout=35.0, verify=verify_ssl) as client:
                 response = await client.get(url, params=params)
                 response.raise_for_status()
                 result = response.json()
@@ -391,7 +399,9 @@ async def process_telegram_update(update: dict, db: Session = None):
             try:
                 callback_query_id = callback_query["id"]
                 answer_url = f"{telegram_service.base_url}/answerCallbackQuery"
-                async with httpx.AsyncClient(timeout=10.0, verify=False) as client:
+                # В production используем verify=True, в development - verify=False
+                verify_ssl = not settings.DEBUG
+                async with httpx.AsyncClient(timeout=10.0, verify=verify_ssl) as client:
                     await client.post(answer_url, json={
                         "callback_query_id": callback_query_id
                     })

@@ -12,7 +12,8 @@ services:
       - edms-net
     volumes:
       - ./nginx/conf.d/default.conf:/etc/nginx/conf.d/default.conf:ro  # <--- использовать локальный файл
-      - ./nginx/ssl:/etc/nginx/ssl:ro                                  # <--- использовать локальные SSL-файлы
+      - /etc/letsencrypt:/etc/letsencrypt:ro                           # Монтируем Let's Encrypt сертификаты
+      #- ./nginx/ssl:/etc/nginx/ssl:ro                                  # <--- использовать локальные SSL-файлы
 
   back:
     build: ./back
