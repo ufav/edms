@@ -43,6 +43,7 @@ interface NotificationsDialogProps {
   anchorEl: HTMLElement | null;
   onClose: () => void;
   onNotificationClick?: (notification: Notification) => void;
+  onUnreadCountChange?: (count: number) => void;
 }
 
 const NotificationsDialog: React.FC<NotificationsDialogProps> = ({
@@ -99,6 +100,10 @@ const NotificationsDialog: React.FC<NotificationsDialogProps> = ({
     try {
       const count = await notificationsApi.getUnreadCount();
       setUnreadCount(count);
+      // Уведомляем родительский компонент об изменении счетчика
+      if (onUnreadCountChange) {
+        onUnreadCountChange(count);
+      }
     } catch (error) {
       console.error('Error loading unread count:', error);
     }
@@ -123,6 +128,10 @@ const NotificationsDialog: React.FC<NotificationsDialogProps> = ({
       await notificationsApi.markAllAsRead();
       setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
       setUnreadCount(0);
+      // Уведомляем родительский компонент об изменении счетчика
+      if (onUnreadCountChange) {
+        onUnreadCountChange(0);
+      }
     } catch (error) {
       console.error('Error marking all as read:', error);
     }

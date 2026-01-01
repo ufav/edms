@@ -87,6 +87,8 @@ const Layout: React.FC<LayoutProps> = observer(({
   const handleNotificationsMenu = (event: React.MouseEvent<HTMLElement>) => {
     setNotificationsAnchorEl(event.currentTarget);
     setNotificationsOpen(true);
+    // Обновляем счетчик при открытии диалога
+    notificationsApi.getUnreadCount().then(setUnreadNotificationsCount).catch(console.error);
   };
 
   // Функция для обновления позиции индикатора
@@ -143,6 +145,13 @@ const Layout: React.FC<LayoutProps> = observer(({
     const interval = setInterval(loadUnreadCount, 30000);
     return () => clearInterval(interval);
   }, []);
+
+  // Обновляем счетчик при открытии диалога уведомлений
+  useEffect(() => {
+    if (notificationsOpen) {
+      notificationsApi.getUnreadCount().then(setUnreadNotificationsCount).catch(console.error);
+    }
+  }, [notificationsOpen]);
 
   const handleClose = () => {
     setAnchorEl(null);
@@ -374,23 +383,6 @@ const Layout: React.FC<LayoutProps> = observer(({
                 </ListItemIcon>
                 <ListItemText>{t('support.my_tickets') || 'Мои обращения'}</ListItemText>
               </MenuItem>
-              {userStore.currentUser?.is_admin && (
-                <MenuItem onClick={async () => {
-                  handleClose();
-                  try {
-                    const { supportApi } = await import('../api/client');
-                    const result = await supportApi.startTelegramPolling();
-                    alert(result.message || t('support.telegram.polling_started') || 'Polling запущен');
-                  } catch (error: any) {
-                    alert((t('support.telegram.polling_error') || 'Ошибка') + ': ' + (error.response?.data?.detail || error.message || t('common.unknown_error') || 'Неизвестная ошибка'));
-                  }
-                }}>
-                  <ListItemIcon>
-                    <SupportIcon fontSize="small" />
-                  </ListItemIcon>
-                  <ListItemText>{t('support.telegram.start_polling') || 'Запустить Telegram Polling'}</ListItemText>
-                </MenuItem>
-              )}
               <Divider />
               <MenuItem onClick={() => {
                 handleClose();
@@ -472,6 +464,9 @@ const Layout: React.FC<LayoutProps> = observer(({
             setSelectedTicketId(notification.related_entity_id);
             setChatOpen(true);
           }
+        }}
+        onUnreadCountChange={(count) => {
+          setUnreadNotificationsCount(count);
         }}
       />
       
