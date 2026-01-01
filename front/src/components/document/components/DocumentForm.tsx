@@ -424,7 +424,7 @@ const DocumentForm: React.FC<DocumentFormProps> = ({
               />
               <TextField
                 id="document-workflow-revision"
-                label={t('document.workflow_revision') || 'Ревизия по workflow'}
+                label={t('document.final_revision') || 'Финальная ревизия'}
                 value={workflowRevisionText || ''}
                 sx={{ flex: 0.5 }} // Половина ширины
                 InputProps={{ readOnly: true }}

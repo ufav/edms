@@ -71,8 +71,11 @@ export const ProjectTable: React.FC<ProjectTableProps> = ({
 
   const getStatusLabel = (status: string) => {
     // Преобразуем статус в нижний регистр для ключа локализации
+    if (!status || typeof status !== 'string') {
+      return '';
+    }
     const statusKey = status.toLowerCase();
-    return t(`projects.status.${statusKey}`) || status;
+    return t(`projects.status.${statusKey}`) || status || '';
   };
 
   if (isLoading) {
@@ -299,28 +302,30 @@ export const ProjectTable: React.FC<ProjectTableProps> = ({
                   width: '10%',
                   minWidth: '100px'
                 }}>
-                  <Chip
-                    label={getStatusLabel(project.status)}
-                    color={getStatusColor(project.status) as any}
-                    variant="outlined"
-                    size="small"
-                    sx={{ 
-                      fontSize: '0.75rem', 
-                      height: '24px',
-                      backgroundColor: (theme) => {
-                        const statusColor = getStatusColor(project.status);
-                        const colorMap: { [key: string]: string } = {
-                          'error': alpha(theme.palette.error.main, 0.12),
-                          'warning': alpha(theme.palette.warning.main, 0.12),
-                          'info': alpha(theme.palette.info.main, 0.12),
-                          'success': alpha(theme.palette.success.main, 0.12),
-                          'primary': alpha(theme.palette.primary.main, 0.12),
-                          'default': theme.palette.grey[100]
-                        };
-                        return colorMap[statusColor] || theme.palette.grey[100];
-                      }
-                    }}
-                  />
+                  {project.status && (
+                    <Chip
+                      label={getStatusLabel(project.status)}
+                      color={getStatusColor(project.status) as any}
+                      variant="outlined"
+                      size="small"
+                      sx={{ 
+                        fontSize: '0.75rem', 
+                        height: '24px',
+                        backgroundColor: (theme) => {
+                          const statusColor = getStatusColor(project.status);
+                          const colorMap: { [key: string]: string } = {
+                            'error': alpha(theme.palette.error.main, 0.12),
+                            'warning': alpha(theme.palette.warning.main, 0.12),
+                            'info': alpha(theme.palette.info.main, 0.12),
+                            'success': alpha(theme.palette.success.main, 0.12),
+                            'primary': alpha(theme.palette.primary.main, 0.12),
+                            'default': theme.palette.grey[100]
+                          };
+                          return colorMap[statusColor] || theme.palette.grey[100];
+                        }
+                      }}
+                    />
+                  )}
                 </TableCell>
                 <TableCell sx={{ 
                   fontSize: '0.875rem',

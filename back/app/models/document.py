@@ -54,7 +54,7 @@ class Document(Base):
     comments = relationship("DocumentComment", back_populates="document", cascade="all, delete-orphan")
     
     def __repr__(self):
-        return f"<Document(id={self.id}, title='{self.title}', version='{self.version}')>"
+        return f"<Document(id={self.id}, title='{self.title}', number='{self.number}')>"
 
 class DocumentRevision(Base):
     __tablename__ = "document_revisions"

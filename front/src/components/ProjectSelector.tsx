@@ -51,12 +51,18 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = observer(({ onProjectSel
 
   const getStatusLabel = (status: string) => {
     // Преобразуем статус в нижний регистр для ключа локализации
+    if (!status || typeof status !== 'string') {
+      return '';
+    }
     const statusKey = status.toLowerCase();
-    return t(`projects.status.${statusKey}`) || status;
+    return t(`projects.status.${statusKey}`) || status || '';
   };
 
   const getStatusColor = (status: string) => {
     // Нормализуем статус к верхнему регистру для сравнения
+    if (!status || typeof status !== 'string') {
+      return { bg: '#e9ecef', text: '#495057' }; // Серый по умолчанию
+    }
     const normalizedStatus = status.toUpperCase();
     switch (normalizedStatus) {
       case 'PLANNING':
@@ -241,20 +247,21 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = observer(({ onProjectSel
                         </Typography>
                         <Box sx={{ mt: 'auto', display: 'flex', flexDirection: 'column', gap: 1 }}>
                           <Box sx={{ display: 'flex', justifyContent: 'flex-start' }}>
-                            <Chip
-                              label={getStatusLabel(project.status)}
-                              size="small"
-                              sx={{
-                                backgroundColor: getStatusColor(project.status).bg,
-                                color: getStatusColor(project.status).text,
-                                border: 'none',
-                                fontWeight: 500,
-                                '& .MuiChip-label': {
-                                  paddingLeft: '8px',
-                                  paddingRight: '8px',
-                                }
-                              }}
-                            />
+                            {project.status && (
+                              <Chip
+                                label={getStatusLabel(project.status) || String(project.status || '')}
+                                size="small"
+                                sx={{
+                                  backgroundColor: getStatusColor(project.status).bg,
+                                  color: getStatusColor(project.status).text,
+                                  border: 'none',
+                                  '& .MuiChip-label': {
+                                    paddingLeft: '8px',
+                                    paddingRight: '8px',
+                                  }
+                                }}
+                              />
+                            )}
                           </Box>
                           {/* Прогресс завершения */}
                           <Box>

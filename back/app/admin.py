@@ -30,6 +30,10 @@ from app.models import (
     UserRole,
     Notification,
     AuditLog,
+    Area,
+    SupportTicket,
+    SupportMessage,
+    SupportTicketFile,
 )
 from app.models.discipline import Discipline, DocumentType
 from app.models.references import WorkflowStatus, TransmittalStatus
@@ -40,6 +44,7 @@ from app.models.project import (
     WorkflowPreset,
     WorkflowPresetSequence,
     WorkflowPresetRule,
+    ProjectSupportFile,
 )
 from app.models.document import DocumentApproval, File
 
@@ -56,6 +61,7 @@ class ProjectAdmin(ModelView, model=Project):
     name_plural = "Projects"
     column_list = ["id", "name", "project_code", "status", "created_at"]
     column_searchable_list = ["name", "project_code"]
+    form_excluded_columns = ["created_at", "updated_at", "members", "participants", "project_discipline_document_types", "support_files", "areas"]
 
 
 class DocumentAdmin(ModelView, model=Document):
@@ -66,6 +72,7 @@ class DocumentAdmin(ModelView, model=Document):
         "is_deleted", "created_at", "updated_at"
     ]
     column_searchable_list = ["number", "title"]
+    form_excluded_columns = ["created_at", "updated_at", "project", "area", "comments"]
 
 
 class DocumentRevisionAdmin(ModelView, model=DocumentRevision):
@@ -186,6 +193,7 @@ class DocumentCommentAdmin(ModelView, model=DocumentComment):
     name_plural = "Document Comments"
     column_list = ["id", "document_id", "user_id", "parent_comment_id", "is_resolved", "created_at"]
     column_searchable_list = ["content"]
+    form_excluded_columns = ["created_at", "updated_at", "document", "user", "parent_comment", "replies"]
 
 
 class DocumentWorkflowHistoryAdmin(ModelView, model=DocumentWorkflowHistory):
@@ -220,6 +228,7 @@ class TransmittalImportSettingsAdmin(ModelView, model=TransmittalImportSettings)
     name_plural = "Transmittal Import Settings"
     column_list = ["id", "user_id", "project_id", "company_id", "settings_key", "created_at", "updated_at"]
     column_searchable_list = ["settings_key"]
+    form_excluded_columns = ["created_at", "updated_at"]
 
 
 class NotificationAdmin(ModelView, model=Notification):
@@ -301,6 +310,7 @@ class WorkflowPresetAdmin(ModelView, model=WorkflowPreset):
     name_plural = "Workflow Presets"
     column_list = ["id", "name", "description", "is_global", "created_by", "created_at", "updated_at"]
     column_searchable_list = ["name", "description"]
+    form_excluded_columns = ["created_at", "updated_at"]
 
 
 class WorkflowPresetSequenceAdmin(ModelView, model=WorkflowPresetSequence):
@@ -313,6 +323,44 @@ class WorkflowPresetRuleAdmin(ModelView, model=WorkflowPresetRule):
     name = "Workflow Preset Rule"
     name_plural = "Workflow Preset Rules"
     column_list = ["id", "preset_id", "document_type_id", "current_revision_description_id", "current_revision_step_id", "review_code_id", "operator", "priority"]
+
+
+class AreaAdmin(ModelView, model=Area):
+    name = "Area"
+    name_plural = "Areas"
+    column_list = ["id", "code", "name", "description", "is_active", "created_at", "updated_at"]
+    column_searchable_list = ["code", "name", "description"]
+    form_excluded_columns = ["created_at", "updated_at", "documents"]
+
+
+class SupportTicketAdmin(ModelView, model=SupportTicket):
+    name = "Support Ticket"
+    name_plural = "Support Tickets"
+    column_list = ["id", "user_id", "subject", "status", "created_at", "updated_at", "last_message_at"]
+    column_searchable_list = ["subject", "initial_message"]
+
+
+class SupportMessageAdmin(ModelView, model=SupportMessage):
+    name = "Support Message"
+    name_plural = "Support Messages"
+    column_list = ["id", "ticket_id", "sender_type", "sender_id", "message_text", "created_at"]
+    column_searchable_list = ["message_text"]
+    form_excluded_columns = ["created_at", "ticket", "sender", "files"]
+
+
+class SupportTicketFileAdmin(ModelView, model=SupportTicketFile):
+    name = "Support Ticket File"
+    name_plural = "Support Ticket Files"
+    column_list = ["id", "ticket_id", "message_id", "file_name", "file_path", "file_size", "mime_type", "created_at"]
+    column_searchable_list = ["file_name", "file_path", "mime_type"]
+
+
+class ProjectSupportFileAdmin(ModelView, model=ProjectSupportFile):
+    name = "Project Support File"
+    name_plural = "Project Support Files"
+    column_list = ["id", "project_id", "file_name", "file_path", "file_size", "file_type", "uploaded_by", "is_deleted", "created_at"]
+    column_searchable_list = ["file_name", "file_path", "file_type"]
+    form_excluded_columns = ["created_at", "project"]
 
 
 def init_admin(app):
@@ -380,6 +428,17 @@ def init_admin(app):
     admin.add_view(UserSettingsAdmin)
     admin.add_view(NotificationAdmin)
     admin.add_view(AuditLogAdmin)
+    
+    # Участки тех. процесса
+    admin.add_view(AreaAdmin)
+    
+    # Обращения в поддержку
+    admin.add_view(SupportTicketAdmin)
+    admin.add_view(SupportMessageAdmin)
+    admin.add_view(SupportTicketFileAdmin)
+    
+    # Файлы support pack проектов
+    admin.add_view(ProjectSupportFileAdmin)
     
     try:
         # Simple log to confirm mounting
