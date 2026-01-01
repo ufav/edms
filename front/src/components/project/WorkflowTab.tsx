@@ -24,6 +24,16 @@ const WorkflowTab: React.FC<WorkflowTabProps> = ({
 }) => {
   const { t } = useTranslation();
   
+  // Отладка
+  React.useEffect(() => {
+    console.log('[WorkflowTab] Рендер компонента:', {
+      workflowPresetsCount: workflowPresets.length,
+      workflowPresetIds: workflowPresets.map(p => p.id),
+      selectedWorkflowPreset,
+      presetExists: selectedWorkflowPreset ? workflowPresets.some(p => p.id === selectedWorkflowPreset) : false,
+      foundPreset: selectedWorkflowPreset ? workflowPresets.find(p => p.id === selectedWorkflowPreset) : null
+    });
+  }, [workflowPresets, selectedWorkflowPreset]);
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
@@ -37,8 +47,11 @@ const WorkflowTab: React.FC<WorkflowTabProps> = ({
       <FormControl fullWidth variant="standard">
         <InputLabel>{t('createProject.sections.workflow_preset')}</InputLabel>
         <Select
-          value={selectedWorkflowPreset || ''}
-          onChange={(e) => onWorkflowPresetChange(Number(e.target.value))}
+          value={selectedWorkflowPreset !== null && selectedWorkflowPreset !== undefined ? selectedWorkflowPreset : ''}
+          onChange={(e) => {
+            const value = e.target.value;
+            onWorkflowPresetChange(value === '' ? null : Number(value));
+          }}
           label={t('createProject.sections.workflow_preset')}
           MenuProps={{
             disablePortal: true

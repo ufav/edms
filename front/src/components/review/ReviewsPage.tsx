@@ -570,6 +570,11 @@ const ReviewsPage: React.FC = observer(() => {
           message: t('reviews.approved_successfully'),
           severity: 'success'
         });
+        
+        // Обновляем проект после утверждения документа
+        if (approvalDialog.document.project_id) {
+          await projectStore.updateProject(approvalDialog.document.project_id);
+        }
       } else {
         await reviewsApi.rejectDocument(approvalDialog.document.document_id, comments);
         setNotification({

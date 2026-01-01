@@ -61,10 +61,10 @@ export const ProjectFilters: React.FC<ProjectFiltersProps> = ({
           label={t('common.status')}
         >
           <MenuItem value="all">{t('filter.all')}</MenuItem>
-          <MenuItem value="active">{t('status.active')}</MenuItem>
-          <MenuItem value="planning">{t('status.planning')}</MenuItem>
-          <MenuItem value="completed">{t('status.completed')}</MenuItem>
-          <MenuItem value="cancelled">{t('status.cancelled')}</MenuItem>
+          <MenuItem value="ACTIVE">{t('status.active')}</MenuItem>
+          <MenuItem value="PLANNING">{t('status.planning')}</MenuItem>
+          <MenuItem value="COMPLETED">{t('status.completed')}</MenuItem>
+          <MenuItem value="CANCELLED">{t('status.cancelled')}</MenuItem>
         </Select>
       </FormControl>
     </Box>

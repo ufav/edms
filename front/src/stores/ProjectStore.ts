@@ -16,6 +16,7 @@ export interface Project {
   created_at: string;
   updated_at: string;
   participants?: ProjectParticipant[];
+  completion_progress?: number;
 }
 
 // Используем интерфейс из API
@@ -75,7 +76,8 @@ class ProjectStore {
           owner_name: apiProject.owner_name ?? null,
           created_at: apiProject.created_at || '',
           updated_at: apiProject.updated_at || '',
-          participants: apiProject.participants || []
+          participants: apiProject.participants || [],
+          completion_progress: apiProject.completion_progress ?? 0
         }))
         // Сортируем по updated_at в убывающем порядке (новые сверху)
         .sort((a, b) => {
@@ -180,6 +182,44 @@ class ProjectStore {
     if (!this.lastLoadedAt) return true;
     const now = Date.now();
     return (now - this.lastLoadedAt) > this.cacheTTL;
+  }
+
+  // Обновление конкретного проекта
+  async updateProject(projectId: number) {
+    try {
+      const updatedProject = await projectsApi.getById(projectId);
+      
+      runInAction(() => {
+                      const index = this.projects.findIndex(p => p.id === projectId);
+                      if (index !== -1) {
+                        this.projects[index] = {
+                          id: updatedProject.id,
+                          name: updatedProject.name,
+                          description: updatedProject.description,
+                          project_code: updatedProject.project_code || '',
+                          status: updatedProject.status,
+                          start_date: updatedProject.start_date || '',
+                          end_date: updatedProject.end_date || '',
+                          owner_id: updatedProject.owner_id ?? null,
+                          owner_name: updatedProject.owner_name ?? null,
+                          created_at: updatedProject.created_at || '',
+                          updated_at: updatedProject.updated_at || '',
+                          participants: updatedProject.participants || [],
+                          completion_progress: updatedProject.completion_progress ?? 0
+                        };
+                      }
+        
+        // Обновляем selectedProject, если он был выбран
+        if (this.selectedProject && this.selectedProject.id === projectId) {
+          const updated = this.projects.find(p => p.id === projectId);
+          if (updated) {
+            this.selectedProject = updated;
+          }
+        }
+      });
+    } catch (error) {
+      console.error('Error updating project:', error);
+    }
   }
 }
 

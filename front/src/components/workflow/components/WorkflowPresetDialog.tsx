@@ -251,7 +251,29 @@ const WorkflowPresetDialog: React.FC<WorkflowPresetDialogProps> = observer(({ op
       </DialogTitle>
       <DialogContent sx={{ height: 700, p: 0, display: 'flex', flexDirection: 'column' }}>
         <Box sx={{ position: 'sticky', top: 0, zIndex: 1, backgroundColor: 'background.paper', borderBottom: 1, borderColor: 'divider', px: 3, pt: 3 }}>
-          <Tabs value={tabIndex} onChange={(_, v) => setTabIndex(v)} variant="scrollable" scrollButtons="auto">
+          <Tabs 
+            value={tabIndex} 
+            onChange={(_, v) => setTabIndex(v)} 
+            variant="scrollable" 
+            scrollButtons="auto"
+            sx={{ 
+              '& .MuiTab-root': {
+                textTransform: 'uppercase',
+                '&:focus': {
+                  outline: 'none !important',
+                  boxShadow: 'none !important',
+                },
+                '&.Mui-selected': {
+                  outline: 'none !important',
+                  boxShadow: 'none !important',
+                },
+                '&:focus-visible': {
+                  outline: 'none !important',
+                  boxShadow: 'none !important',
+                }
+              }
+            }}
+          >
             <Tab label={t('workflows.tabs.main')} />
             <Tab label={t('workflows.tabs.sequences')} />
             <Tab label={t('workflows.tabs.rules')} disabled={workflowSequences.length === 0} />

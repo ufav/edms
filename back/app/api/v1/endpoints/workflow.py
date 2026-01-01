@@ -400,6 +400,11 @@ async def approve_document(
     
     db.commit()
     
+    # Проверяем и обновляем статус проекта при первом утвержденном документе
+    if document and document.project_id:
+        from app.api.v1.endpoints.reviews import _check_and_update_project_status_on_approval
+        _check_and_update_project_status_on_approval(document.project_id, db)
+    
     # Записываем в историю
     history = DocumentHistory(
         document_id=workflow.document_id,

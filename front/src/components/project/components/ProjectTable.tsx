@@ -50,6 +50,31 @@ export const ProjectTable: React.FC<ProjectTableProps> = ({
 }) => {
   const { t } = useTranslation();
 
+  const getStatusColor = (status: string) => {
+    // Нормализуем статус к верхнему регистру для сравнения
+    const normalizedStatus = status.toUpperCase();
+    switch (normalizedStatus) {
+      case 'PLANNING':
+        return 'warning';
+      case 'ACTIVE':
+        return 'success';
+      case 'ON_HOLD':
+        return 'info';
+      case 'COMPLETED':
+        return 'info';
+      case 'CANCELLED':
+        return 'error';
+      default:
+        return 'default';
+    }
+  };
+
+  const getStatusLabel = (status: string) => {
+    // Преобразуем статус в нижний регистр для ключа локализации
+    const statusKey = status.toLowerCase();
+    return t(`projects.status.${statusKey}`) || status;
+  };
+
   if (isLoading) {
     return <ProjectTableSkeleton />;
   }
@@ -275,17 +300,24 @@ export const ProjectTable: React.FC<ProjectTableProps> = ({
                   minWidth: '100px'
                 }}>
                   <Chip
-                    label={project.status}
-                    color={project.status === 'active' ? 'success' : 'default'}
+                    label={getStatusLabel(project.status)}
+                    color={getStatusColor(project.status) as any}
                     variant="outlined"
                     size="small"
                     sx={{ 
                       fontSize: '0.75rem', 
                       height: '24px',
                       backgroundColor: (theme) => {
-                        return project.status === 'active'
-                          ? alpha(theme.palette.success.main, 0.12)
-                          : theme.palette.grey[100];
+                        const statusColor = getStatusColor(project.status);
+                        const colorMap: { [key: string]: string } = {
+                          'error': alpha(theme.palette.error.main, 0.12),
+                          'warning': alpha(theme.palette.warning.main, 0.12),
+                          'info': alpha(theme.palette.info.main, 0.12),
+                          'success': alpha(theme.palette.success.main, 0.12),
+                          'primary': alpha(theme.palette.primary.main, 0.12),
+                          'default': theme.palette.grey[100]
+                        };
+                        return colorMap[statusColor] || theme.palette.grey[100];
                       }
                     }}
                   />

@@ -18,12 +18,69 @@ from app.core.database import get_db
 from app.models.user import User
 from app.models.document import Document, DocumentRevision
 from app.models.document import File as FileModel
-from app.models.project import Project, WorkflowPresetSequence
+from app.models.project import Project, WorkflowPresetSequence, ProjectStatusEnum, ProjectStatusEnum
 from app.models.references import WorkflowStatus, RevisionStep, RevisionDescription
 from app.api.v1.endpoints.auth import get_current_user
 from app.services.audit_service import log_action
 
 router = APIRouter()
+
+def _check_and_update_project_status_on_approval(project_id: int, db: Session):
+    """
+    Проверяет, есть ли утвержденные документы в проекте.
+    Если это первый утвержденный документ, обновляет статус проекта на ACTIVE.
+    """
+    if not project_id:
+        return
+    
+    # Получаем проект
+    project = db.query(Project).filter(Project.id == project_id, Project.is_deleted == 0).first()
+    if not project:
+        return
+    
+    # Если статус проекта уже ACTIVE или выше, ничего не делаем
+    if project.status == ProjectStatusEnum.ACTIVE or project.status == ProjectStatusEnum.COMPLETED:
+        return
+    
+    # Получаем ID утвержденных статусов
+    approved_like_statuses = db.query(WorkflowStatus).filter(
+        WorkflowStatus.name.in_(["Approved", "Approved with Comments", "Not Reviewed"])
+    ).all()
+    approved_like_ids = {s.id for s in approved_like_statuses}
+    
+    if not approved_like_ids:
+        return
+    
+    # Проверяем, есть ли в проекте документы с утвержденными ревизиями
+    # Ищем документы проекта, у которых последняя ревизия в утвержденном статусе
+    from sqlalchemy import and_
+    
+    # Получаем все документы проекта
+    project_documents = db.query(Document).filter(
+        Document.project_id == project_id,
+        Document.is_deleted == 0
+    ).all()
+    
+    if not project_documents:
+        return
+    
+    # Для каждого документа проверяем последнюю ревизию
+    has_approved_document = False
+    for doc in project_documents:
+        latest_revision = db.query(DocumentRevision).filter(
+            DocumentRevision.document_id == doc.id,
+            DocumentRevision.is_deleted == 0
+        ).order_by(DocumentRevision.created_at.desc()).first()
+        
+        if latest_revision and latest_revision.workflow_status_id in approved_like_ids:
+            has_approved_document = True
+            break
+    
+    # Если есть утвержденный документ и статус проекта PLANNING, обновляем на ACTIVE
+    if has_approved_document and project.status == ProjectStatusEnum.PLANNING:
+        project.status = ProjectStatusEnum.ACTIVE
+        db.commit()
+        print(f"Project {project_id} status updated to ACTIVE - first approved document found")
 
 @router.get("/")
 async def get_reviews(
@@ -290,6 +347,9 @@ async def approve_document(
     )
     db.add(workflow_history)
     db.commit()
+    
+    # Проверяем и обновляем статус проекта при первом утвержденном документе
+    _check_and_update_project_status_on_approval(document.project_id, db)
     
     # Логирование действия
     old_values = {

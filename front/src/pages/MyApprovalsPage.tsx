@@ -34,6 +34,7 @@ import {
 import { observer } from 'mobx-react-lite';
 import { workflowApi, documentsApi, type Document as ApiDocument } from '../api/client';
 import { useTranslation } from 'react-i18next';
+import { projectStore } from '../stores/ProjectStore';
 
 interface ApprovalItem {
   approval_id: number;
@@ -103,6 +104,11 @@ const MyApprovalsPage = observer(() => {
       if (actionType === 'approve') {
         await workflowApi.approveDocument(selectedApproval.approval_id, comments);
         alert('Документ согласован');
+        
+        // Обновляем проект после утверждения документа
+        if (document && document.project_id) {
+          await projectStore.updateProject(document.project_id);
+        }
       } else if (actionType === 'reject') {
         if (!comments.trim()) {
           alert('Необходимо указать причину отклонения');

@@ -175,6 +175,7 @@ const DocumentViewer: React.FC<DocumentViewerProps> = observer(({
             projectDocumentTypes={projectData.projectDocumentTypes}
             loadingProjectData={projectData.loadingProjectData}
             loadDocumentTypes={projectData.loadDocumentTypes}
+            workflowPresetSequence={projectData.workflowPresetSequence}
           />
 
           {/* Нижняя часть - таблица ревизий */}

@@ -1,8 +1,9 @@
 export const PROJECT_STATUSES = {
-  ACTIVE: 'active',
-  PLANNING: 'planning',
-  COMPLETED: 'completed',
-  CANCELLED: 'cancelled',
+  ACTIVE: 'ACTIVE',
+  PLANNING: 'PLANNING',
+  COMPLETED: 'COMPLETED',
+  CANCELLED: 'CANCELLED',
+  ON_HOLD: 'ON_HOLD',
 } as const;
 
 export const PROJECT_STATUS_LABELS = {

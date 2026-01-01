@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Box,
   TextField,
@@ -14,7 +14,7 @@ import {
 } from '@mui/material';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { useTranslation } from 'react-i18next';
-import { projectsApi, referencesApi } from '../../api/client';
+import { projectsApi } from '../../api/client';
 import { projectDialogStore } from '../../stores/ProjectDialogStore';
 
 interface MainTabProps {
@@ -63,14 +63,10 @@ const MainTab: React.FC<MainTabProps> = ({
   const [isMobile] = useState(false);
 
   const handleInputChange = (field: string, value: any) => {
-    if (mode === 'view' && isFieldEditing?.(field)) {
-      updateFieldEditData?.(field, value);
-    } else {
-      setFormData((prev: any) => ({
-        ...prev,
-        [field]: value
-      }));
-    }
+    setFormData((prev: any) => ({
+      ...prev,
+      [field]: value
+    }));
     
     // Очищаем валидацию кода только если поле полностью очищено
     if (field === 'project_code' && (!value || value.trim() === '')) {
@@ -81,78 +77,6 @@ const MainTab: React.FC<MainTabProps> = ({
         is_deleted: false
       });
     }
-  };
-
-  // Функция для рендеринга поля с возможностью редактирования
-  const renderEditableField = (
-    fieldName: string,
-    label: string,
-    children: React.ReactNode,
-    value: any
-  ) => {
-    const isEditing = isFieldEditing?.(fieldName) || false;
-    const currentValue = isEditing ? (fieldEditData?.[fieldName] ?? value) : value;
-
-    if (mode === 'view') {
-      return (
-        <Box sx={{ position: 'relative' }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Box sx={{ flex: 1 }}>
-              {isEditing ? (
-                <Box>
-                  {children}
-                </Box>
-              ) : (
-                <Box sx={{ 
-                  p: 2, 
-                  border: '1px solid #e0e0e0', 
-                  borderRadius: 1,
-                  backgroundColor: '#f5f5f5',
-                  minHeight: '56px',
-                  display: 'flex',
-                  alignItems: 'center'
-                }}>
-                  <Typography variant="body1">
-                    {currentValue || t('common.no_data')}
-                  </Typography>
-                </Box>
-              )}
-            </Box>
-            <Box sx={{ display: 'flex', gap: 0.5 }}>
-              {isEditing ? (
-                <>
-                  <IconButton 
-                    size="small" 
-                    color="primary"
-                    onClick={() => saveFieldEdit?.(fieldName)}
-                    disabled={!currentValue}
-                  >
-                    <SaveIcon />
-                  </IconButton>
-                  <IconButton 
-                    size="small" 
-                    color="secondary"
-                    onClick={() => cancelFieldEdit?.(fieldName)}
-                  >
-                    <CancelIcon />
-                  </IconButton>
-                </>
-              ) : (
-                <IconButton 
-                  size="small" 
-                  color="primary"
-                  onClick={() => startFieldEdit?.(fieldName)}
-                >
-                  <EditIcon />
-                </IconButton>
-              )}
-            </Box>
-          </Box>
-        </Box>
-      );
-    }
-
-    return children;
   };
 
   const checkProjectCode = async (code: string) => {
@@ -271,11 +195,11 @@ const MainTab: React.FC<MainTabProps> = ({
                 disablePortal: true
               }}
             >
-              <MenuItem value="planning">{t('status.planning')}</MenuItem>
-              <MenuItem value="active">{t('status.active')}</MenuItem>
-              <MenuItem value="on_hold">{t('status.on_hold')}</MenuItem>
-              <MenuItem value="completed">{t('status.completed')}</MenuItem>
-              <MenuItem value="cancelled">{t('status.cancelled')}</MenuItem>
+              <MenuItem value="PLANNING">{t('status.planning')}</MenuItem>
+              <MenuItem value="ACTIVE">{t('status.active')}</MenuItem>
+              <MenuItem value="ON_HOLD">{t('status.on_hold')}</MenuItem>
+              <MenuItem value="COMPLETED">{t('status.completed')}</MenuItem>
+              <MenuItem value="CANCELLED">{t('status.cancelled')}</MenuItem>
             </Select>
           </FormControl>
         </Grid>

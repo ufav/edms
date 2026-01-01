@@ -754,6 +754,7 @@ export const DocumentTable: React.FC<DocumentTableProps> = observer(({
           borderRadius: 0, // Убираем скругленные углы
           '&::-webkit-scrollbar': {
             width: '8px',
+            height: '8px',
           },
           '&::-webkit-scrollbar-track': {
             background: '#f1f1f1',

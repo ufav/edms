@@ -1,20 +1,23 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   Box,
   Button,
   Chip,
   Dialog,
-  DialogActions,
   DialogContent,
   DialogTitle,
-  List,
-  ListItem,
-  ListItemButton,
   Typography,
   CircularProgress,
   Alert,
   useTheme,
   useMediaQuery,
+  Grid,
+  Card,
+  CardContent,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from '@mui/material';
 import { observer } from 'mobx-react-lite';
 import { projectStore } from '../stores/ProjectStore';
@@ -28,6 +31,7 @@ interface ProjectSelectorProps {
 const ProjectSelector: React.FC<ProjectSelectorProps> = observer(({ onProjectSelect }) => {
   const { t, i18n } = useTranslation();
   const [open, setOpen] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<string>('all');
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
@@ -45,6 +49,41 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = observer(({ onProjectSel
     setOpen(false);
   };
 
+  const getStatusLabel = (status: string) => {
+    // Преобразуем статус в нижний регистр для ключа локализации
+    const statusKey = status.toLowerCase();
+    return t(`projects.status.${statusKey}`) || status;
+  };
+
+  const getStatusColor = (status: string) => {
+    // Нормализуем статус к верхнему регистру для сравнения
+    const normalizedStatus = status.toUpperCase();
+    switch (normalizedStatus) {
+      case 'PLANNING':
+        return { bg: '#fff3cd', text: '#856404' }; // Пастельный желтый
+      case 'ACTIVE':
+        return { bg: '#d1e7dd', text: '#0f5132' }; // Пастельный зеленый
+      case 'ON_HOLD':
+        return { bg: '#cfe2ff', text: '#084298' }; // Пастельный синий
+      case 'COMPLETED':
+        return { bg: '#d1ecf1', text: '#055160' }; // Пастельный голубой
+      case 'CANCELLED':
+        return { bg: '#f8d7da', text: '#842029' }; // Пастельный красный
+      default:
+        return { bg: '#e9ecef', text: '#495057' }; // Серый по умолчанию
+    }
+  };
+
+  // Фильтрация проектов по статусу
+  const filteredProjects = useMemo(() => {
+    if (statusFilter === 'all') {
+      return projectStore.projects;
+    }
+    return projectStore.projects.filter(project => 
+      project.status.toUpperCase() === statusFilter.toUpperCase()
+    );
+  }, [projectStore.projects, statusFilter]);
+
   return (
     <>
       {/* Кнопка выбора проекта */}
@@ -56,7 +95,7 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = observer(({ onProjectSel
         data-project-selector
         sx={{
           minWidth: isMobile ? 150 : 200,
-          justifyContent: 'flex-start',
+          justifyContent: 'center',
           textTransform: 'none',
           backgroundColor: '#ffffff',
           borderColor: '#1976d2',
@@ -74,13 +113,8 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = observer(({ onProjectSel
         {projectStore.selectedProject ? (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
             <Typography variant="body2" sx={{ fontWeight: 'bold' }}>
-              {projectStore.selectedProject.name}
+              {projectStore.selectedProject.project_code}
             </Typography>
-            <Chip
-              label={projectStore.getProjectStatusLabel(projectStore.selectedProject.status)}
-              color={projectStore.getProjectStatusColor(projectStore.selectedProject.status) as any}
-              size="small"
-            />
           </Box>
         ) : (
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
@@ -95,96 +129,184 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = observer(({ onProjectSel
       <Dialog
         open={open}
         onClose={handleCloseDialog}
-        maxWidth={isMobile ? "sm" : "md"}
+        maxWidth="lg"
         fullWidth
         fullScreen={isMobile}
         PaperProps={{
           sx: { borderRadius: isMobile ? 0 : 2 }
         }}
       >
-        <DialogTitle>
+        <DialogTitle sx={{ position: 'sticky', top: 0, zIndex: 2, backgroundColor: 'background.paper' }}>
           {t('projects.selection.title')}
         </DialogTitle>
-        <DialogContent>
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            {t('projects.selection.description')}
-          </Typography>
+        <DialogContent sx={{ p: 0, display: 'flex', flexDirection: 'column', height: 'calc(100vh - 120px)', overflow: 'hidden' }}>
           {projectStore.isLoading ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
               <CircularProgress />
             </Box>
           ) : projectStore.error ? (
-            <Alert severity="error" sx={{ mb: 2 }}>
+            <Alert severity="error" sx={{ mb: 2, mx: 3, mt: 2 }}>
               {projectStore.error}
             </Alert>
           ) : (
-            <Box>
-              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-                {i18n.language === 'ru' ? 'Проектов найдено:' : 'Projects found:'} {projectStore.projects.length}
-              </Typography>
-            <List sx={{ pt: 0 }}>
-              {projectStore.projects.map((project) => (
-                <ListItem key={project.id} disablePadding>
-                  <ListItemButton
-                    onClick={() => handleProjectClick(project)}
-                    sx={{
-                      borderRadius: 1,
-                      mb: 1,
-                      border: '1px solid #e0e0e0',
-                      '&:hover': {
-                        backgroundColor: 'rgba(25, 118, 210, 0.04)',
-                        borderColor: '#1976d2'
-                      }
-                    }}
+            <Box sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+              {/* Фильтр по статусу - зафиксирован */}
+              <Box sx={{ position: 'sticky', top: 0, zIndex: 1, backgroundColor: 'background.paper', px: 3, pt: 2, mb: 1.5 }}>
+                <FormControl sx={{ width: '20%', minWidth: 200 }}>
+                  <InputLabel>{t('common.status')}</InputLabel>
+                  <Select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    label={t('common.status')}
+                    sx={{ minWidth: 200 }}
                   >
-                    <Box sx={{ flex: 1, py: 1 }}>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
-                        <Typography variant="subtitle1" sx={{ fontWeight: 'bold' }}>
+                    <MenuItem value="all">{t('filter.all')}</MenuItem>
+                    <MenuItem value="PLANNING">{t('projects.status.planning')}</MenuItem>
+                    <MenuItem value="ACTIVE">{t('projects.status.active')}</MenuItem>
+                    <MenuItem value="ON_HOLD">{t('projects.status.on_hold')}</MenuItem>
+                    <MenuItem value="COMPLETED">{t('projects.status.completed')}</MenuItem>
+                    <MenuItem value="CANCELLED">{t('projects.status.cancelled')}</MenuItem>
+                  </Select>
+                </FormControl>
+              </Box>
+
+              {/* Сетка с карточками проектов - скроллируемая */}
+              <Box sx={{ 
+                flex: 1, 
+                overflow: 'auto', 
+                px: 3, 
+                pt: 0, 
+                pb: 1.5,
+                '&::-webkit-scrollbar': {
+                  width: '8px',
+                },
+                '&::-webkit-scrollbar-track': {
+                  background: '#f1f1f1',
+                  borderRadius: '4px',
+                },
+                '&::-webkit-scrollbar-thumb': {
+                  background: '#c1c1c1',
+                  borderRadius: '4px',
+                  '&:hover': {
+                    background: '#a8a8a8',
+                  },
+                },
+              }}>
+                <Grid container spacing={1.5}>
+                {filteredProjects.map((project) => (
+                  <Grid item xs={10} sm={5} md={3} key={project.id}>
+                    <Card
+                      onClick={() => handleProjectClick(project)}
+                      sx={{
+                        aspectRatio: '1',
+                        width: '100%',
+                        cursor: 'pointer',
+                        border: '1px solid #e0e0e0',
+                        boxShadow: 'none',
+                        '&:hover': {
+                          backgroundColor: 'rgba(25, 118, 210, 0.04)',
+                          borderColor: '#1976d2',
+                          boxShadow: 'none'
+                        },
+                        display: 'flex',
+                        flexDirection: 'column'
+                      }}
+                    >
+                      <CardContent sx={{ flex: 1, display: 'flex', flexDirection: 'column', p: 2 }}>
+                        <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 1 }}>
                           {project.name}
                         </Typography>
-                        <Chip
-                          label={projectStore.getProjectStatusLabel(project.status)}
-                          color={projectStore.getProjectStatusColor(project.status) as any}
-                          size="small"
-                        />
-                      </Box>
-                      <Typography variant="body2" color="text.secondary" sx={{ mb: 0.5 }}>
-                        {project.description}
-                      </Typography>
-                      <Typography 
-                        variant="caption" 
-                        color="text.secondary"
-                        sx={{ 
-                          display: 'block',
-                          fontSize: '0.75rem',
-                          fontWeight: 500,
-                          mt: 0.5
-                        }}
-                      >
-                        {i18n.language === 'ru' ? 'Период' : 'Period'}: {new Date(project.start_date).toLocaleDateString('ru-RU', { 
-                          day: '2-digit', 
-                          month: '2-digit', 
-                          year: 'numeric' 
-                        })} - {new Date(project.end_date).toLocaleDateString('ru-RU', { 
-                          day: '2-digit', 
-                          month: '2-digit', 
-                          year: 'numeric' 
-                        })}
-                      </Typography>
-                    </Box>
-                  </ListItemButton>
-                </ListItem>
-              ))}
-            </List>
+                        <Typography variant="body2" color="text.secondary" sx={{ mb: 1, fontWeight: 500 }}>
+                          {project.project_code}
+                        </Typography>
+                        <Typography 
+                          variant="caption" 
+                          color="text.secondary"
+                          sx={{ 
+                            fontSize: '0.75rem',
+                            fontWeight: 500,
+                            mb: 1,
+                            flex: 1
+                          }}
+                        >
+                          {i18n.language === 'ru' ? 'Период' : 'Period'}: {new Date(project.start_date).toLocaleDateString('ru-RU', { 
+                            day: '2-digit', 
+                            month: '2-digit', 
+                            year: 'numeric' 
+                          })} - {new Date(project.end_date).toLocaleDateString('ru-RU', { 
+                            day: '2-digit', 
+                            month: '2-digit', 
+                            year: 'numeric' 
+                          })}
+                        </Typography>
+                        <Box sx={{ mt: 'auto', display: 'flex', flexDirection: 'column', gap: 1 }}>
+                          <Box sx={{ display: 'flex', justifyContent: 'flex-start' }}>
+                            <Chip
+                              label={getStatusLabel(project.status)}
+                              size="small"
+                              sx={{
+                                backgroundColor: getStatusColor(project.status).bg,
+                                color: getStatusColor(project.status).text,
+                                border: 'none',
+                                fontWeight: 500,
+                                '& .MuiChip-label': {
+                                  paddingLeft: '8px',
+                                  paddingRight: '8px',
+                                }
+                              }}
+                            />
+                          </Box>
+                          {/* Прогресс завершения */}
+                          <Box>
+                            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 0.5 }}>
+                              <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem' }}>
+                              </Typography>
+                              <Typography variant="caption" color="text.secondary" sx={{ fontSize: '0.7rem', fontWeight: 'bold' }}>
+                                {Math.round(project.completion_progress || 0)}%
+                              </Typography>
+                            </Box>
+                            <Box
+                              sx={{
+                                position: 'relative',
+                                width: '100%',
+                                height: 6,
+                                borderRadius: 999,
+                                backgroundColor: 'grey.200',
+                                overflow: 'hidden',
+                              }}
+                            >
+                              <Box
+                                sx={{
+                                  position: 'absolute',
+                                  left: 0,
+                                  top: 0,
+                                  bottom: 0,
+                                  width: `${project.completion_progress || 0}%`,
+                                  maxWidth: '100%',
+                                  background: 'linear-gradient(90deg, #4caf50, #81c784)',
+                                  transition: 'width 0.3s ease',
+                                }}
+                              />
+                            </Box>
+                          </Box>
+                        </Box>
+                      </CardContent>
+                    </Card>
+                  </Grid>
+                ))}
+                </Grid>
+                
+                {filteredProjects.length === 0 && (
+                  <Box textAlign="center" p={3}>
+                    <Typography variant="body2" color="text.secondary">
+                      {t('projects.no_projects')}
+                    </Typography>
+                  </Box>
+                )}
+              </Box>
             </Box>
           )}
         </DialogContent>
-
-        <DialogActions sx={{ p: 3, pt: 1 }}>
-          <Button onClick={handleCloseDialog} variant="outlined">
-            {t('common.cancel')}
-          </Button>
-        </DialogActions>
       </Dialog>
     </>
   );

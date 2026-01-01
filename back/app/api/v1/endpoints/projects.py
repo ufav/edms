@@ -13,16 +13,52 @@ from pydantic import BaseModel, field_validator
 from app.core.database import get_db
 from app.core.config import settings
 from app.models.user import User
-from app.models.project import Project, ProjectMember, ProjectDisciplineDocumentType, ProjectSupportFile
+from app.models.project import Project, ProjectMember, ProjectDisciplineDocumentType, ProjectSupportFile, ProjectStatusEnum
 from app.models.project_participant import ProjectParticipant
 from app.models.discipline import Discipline, DocumentType
 from app.models.area import Area
+from app.models.document import Document, DocumentRevision
+from app.models.references import WorkflowStatus
+from sqlalchemy import func, and_
 from app.services.auth import get_current_active_user
 from app.services.minio_service import minio_service
 from fastapi.responses import FileResponse
 from app.services.audit_service import log_action
 
 router = APIRouter()
+
+def _calculate_project_completion_progress(project_id: int, db: Session) -> float:
+    """Расчет прогресса завершения проекта в процентах"""
+    # Получаем все документы проекта
+    project_documents = db.query(Document).filter(
+        Document.project_id == project_id,
+        Document.is_deleted == 0
+    ).all()
+    
+    total_documents = len(project_documents)
+    if total_documents == 0:
+        return 0.0
+    
+    # Получаем ID утвержденных статусов (как в дашборде)
+    approved_status_names = ["Approved", "Approved with Comments", "Not Reviewed"]
+    approved_statuses = db.query(WorkflowStatus).filter(
+        WorkflowStatus.name.in_(approved_status_names)
+    ).all()
+    approved_status_ids = {s.id for s in approved_statuses}
+    
+    approved_documents = 0
+    
+    # Для каждого документа проверяем последнюю ревизию
+    for doc in project_documents:
+        latest_revision = db.query(DocumentRevision).filter(
+            DocumentRevision.document_id == doc.id,
+            DocumentRevision.is_deleted == 0
+        ).order_by(DocumentRevision.created_at.desc()).first()
+        
+        if latest_revision and latest_revision.workflow_status_id in approved_status_ids:
+            approved_documents += 1
+    
+    return round((approved_documents / total_documents * 100), 1)
 
 class ProjectParticipantData(BaseModel):
     company_id: int
@@ -396,6 +432,9 @@ async def get_projects(
                 "created_at": participant.created_at.isoformat() if participant.created_at else None
             })
         
+        # Расчет прогресса завершения проекта
+        completion_progress = _calculate_project_completion_progress(project.id, db)
+        
         result.append({
             "id": project.id,
             "name": project.name,
@@ -411,7 +450,8 @@ async def get_projects(
             "members": members_data,
             "participants": participants_data,
             "created_at": project.created_at.isoformat() if project.created_at else None,
-            "updated_at": project.updated_at.isoformat() if project.updated_at else None
+            "updated_at": project.updated_at.isoformat() if project.updated_at else None,
+            "completion_progress": completion_progress
         })
     
     return result
@@ -633,6 +673,9 @@ async def get_project(
     if not project:
         raise HTTPException(status_code=404, detail="Проект не найден")
     
+    # Расчет прогресса завершения проекта
+    completion_progress = _calculate_project_completion_progress(project.id, db)
+    
     return {
         "id": project.id,
         "name": project.name,
@@ -645,7 +688,8 @@ async def get_project(
         "owner_id": project.created_by,
         "owner_name": (db.query(User).filter(User.id == project.created_by).first().full_name if project.created_by else None),
         "created_at": project.created_at.isoformat() if project.created_at else None,
-        "updated_at": project.updated_at.isoformat() if project.updated_at else None
+        "updated_at": project.updated_at.isoformat() if project.updated_at else None,
+        "completion_progress": completion_progress
     }
 
 @router.put("/{project_id}", response_model=dict)
@@ -684,6 +728,48 @@ async def update_project(
     for field in ["name", "description", "project_code", "status", "start_date", "end_date", "budget"]:
         value = getattr(project_data, field)
         if value is not None:
+            # Проверяем изменение статуса проекта
+            if field == "status":
+                # Проверяем, есть ли утвержденные документы в проекте
+                from app.models.document import Document, DocumentRevision
+                from app.models.references import WorkflowStatus
+                
+                approved_like_statuses = db.query(WorkflowStatus).filter(
+                    WorkflowStatus.name.in_(["Approved", "Approved with Comments", "Not Reviewed"])
+                ).all()
+                approved_like_ids = {s.id for s in approved_like_statuses}
+                
+                has_approved_document = False
+                if approved_like_ids:
+                    # Проверяем, есть ли в проекте документы с утвержденными ревизиями
+                    project_documents = db.query(Document).filter(
+                        Document.project_id == project_id,
+                        Document.is_deleted == 0
+                    ).all()
+                    
+                    for doc in project_documents:
+                        latest_revision = db.query(DocumentRevision).filter(
+                            DocumentRevision.document_id == doc.id,
+                            DocumentRevision.is_deleted == 0
+                        ).order_by(DocumentRevision.created_at.desc()).first()
+                        
+                        if latest_revision and latest_revision.workflow_status_id in approved_like_ids:
+                            has_approved_document = True
+                            break
+                
+                # Если пытаются установить статус не PLANNING, но нет утвержденных документов
+                # Разрешаем только PLANNING
+                if not has_approved_document:
+                    # Преобразуем значение в строку для сравнения
+                    status_str = value.value if hasattr(value, 'value') else str(value)
+                    # Проверяем, что статус не PLANNING (в любом регистре)
+                    # В БД статусы хранятся в верхнем регистре (PLANNING, ACTIVE и т.д.)
+                    if status_str.upper() != "PLANNING":
+                        raise HTTPException(
+                            status_code=400, 
+                            detail="Статус проекта может быть изменен только после появления первого утвержденного документа"
+                        )
+            
             setattr(project, field, value)
 
     db.add(project)

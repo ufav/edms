@@ -42,6 +42,7 @@ interface DocumentFormProps {
   projectDocumentTypes: any[];
   loadingProjectData: boolean;
   loadDocumentTypes: (projectId: number, disciplineId: number) => void;
+  workflowPresetSequence?: any[];
 }
 
 const DocumentForm: React.FC<DocumentFormProps> = ({
@@ -54,8 +55,24 @@ const DocumentForm: React.FC<DocumentFormProps> = ({
   projectDocumentTypes,
   loadingProjectData,
   loadDocumentTypes,
+  workflowPresetSequence = [],
 }) => {
   const { t, i18n } = useTranslation();
+  
+  // Получаем последнюю ревизию по workflow маршруту проекта
+  const getLastWorkflowRevision = () => {
+    if (!workflowPresetSequence || workflowPresetSequence.length === 0) return null;
+    // Берем последний элемент из последовательности workflow preset
+    return workflowPresetSequence[workflowPresetSequence.length - 1];
+  };
+  
+  const lastWorkflowRevision = getLastWorkflowRevision();
+  const revisionDescription = lastWorkflowRevision?.revision_description || null;
+  
+  // Формируем текст: буква (код) - описание ревизии
+  const workflowRevisionText = revisionDescription
+    ? `${revisionDescription.code || ''} - ${revisionDescription.description || ''}`
+    : '';
 
   // Загружаем areas при изменении проекта
   useEffect(() => {
@@ -405,7 +422,16 @@ const DocumentForm: React.FC<DocumentFormProps> = ({
                 size="small"
                 variant="standard"
               />
-              <Box sx={{ flex: 0.5 }} /> {/* Пустое место для выравнивания */}
+              <TextField
+                id="document-workflow-revision"
+                label={t('document.workflow_revision') || 'Ревизия по workflow'}
+                value={workflowRevisionText || ''}
+                sx={{ flex: 0.5 }} // Половина ширины
+                InputProps={{ readOnly: true }}
+                size="small"
+                variant="standard"
+                placeholder={t('document.not_specified') || 'Не указано'}
+              />
             </Box>
             <TextField
               id="document-remarks"

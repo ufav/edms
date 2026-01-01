@@ -211,11 +211,36 @@ async def get_workflow_presets(
     current_user: User = Depends(get_current_active_user)
 ):
     """Получение списка workflow пресетов"""
-    # Показываем глобальные пресеты и пресеты пользователя
-    presets = db.query(WorkflowPreset).filter(
-        (WorkflowPreset.is_global == True) | 
-        (WorkflowPreset.created_by == current_user.id)
-    ).offset(skip).limit(limit).all()
+    # Админ видит все пресеты, остальные - глобальные, свои и используемые в их проектах
+    if current_user.user_role and current_user.user_role.code == 'admin':
+        presets = db.query(WorkflowPreset).offset(skip).limit(limit).all()
+    else:
+        # Получаем ID пресетов, используемых в проектах пользователя
+        from app.models.project import Project, ProjectMember
+        user_project_preset_ids = db.query(Project.workflow_preset_id).filter(
+            Project.workflow_preset_id.isnot(None),
+            Project.is_deleted == 0,
+            (
+                (Project.created_by == current_user.id) |
+                (Project.id.in_(
+                    db.query(ProjectMember.project_id).filter(
+                        ProjectMember.user_id == current_user.id
+                    )
+                ))
+            )
+        ).distinct().all()
+        user_project_preset_ids = [preset_id[0] for preset_id in user_project_preset_ids if preset_id[0] is not None]
+        
+        # Показываем глобальные пресеты, пресеты пользователя и пресеты, используемые в его проектах
+        from sqlalchemy import or_
+        conditions = [
+            WorkflowPreset.is_global == True,
+            WorkflowPreset.created_by == current_user.id
+        ]
+        if user_project_preset_ids:
+            conditions.append(WorkflowPreset.id.in_(user_project_preset_ids))
+        
+        presets = db.query(WorkflowPreset).filter(or_(*conditions)).offset(skip).limit(limit).all()
     
     result = []
     for preset in presets:
@@ -248,8 +273,9 @@ async def get_workflow_preset(
     if not preset:
         raise HTTPException(status_code=404, detail="Workflow пресет не найден")
     
-    # Проверяем права доступа
-    if not preset.is_global and preset.created_by != current_user.id:
+    # Проверяем права доступа: admin видит все пресеты
+    is_admin = current_user.user_role and current_user.user_role.code == 'admin'
+    if not is_admin and not preset.is_global and preset.created_by != current_user.id:
         raise HTTPException(status_code=403, detail="Нет доступа к этому пресету")
     
     # Загружаем данные пресета
