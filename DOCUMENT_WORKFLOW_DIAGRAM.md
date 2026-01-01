@@ -48,14 +48,14 @@ graph TD
     
     Final --> End([Документ утвержден])
     
-    style Start fill:#e1f5ff
-    style End fill:#c8e6c9
-    style Draft fill:#fff9c4
-    style Approved fill:#c8e6c9
-    style ApprovedComments fill:#c8e6c9
-    style NotReviewed fill:#c8e6c9
-    style Rejected fill:#ffcdd2
-    style InReview fill:#bbdefb
+    style Start fill:#e1f5ff,color:#000
+    style End fill:#c8e6c9,color:#000
+    style Draft fill:#fff9c4,color:#000
+    style Approved fill:#c8e6c9,color:#000
+    style ApprovedComments fill:#c8e6c9,color:#000
+    style NotReviewed fill:#c8e6c9,color:#000
+    style Rejected fill:#ffcdd2,color:#000
+    style InReview fill:#bbdefb,color:#000
     style Final fill:#4caf50,color:#fff
 ```
 
@@ -105,11 +105,11 @@ graph LR
     Rules --> Document
     Document --> Statuses
     
-    style WP fill:#e3f2fd
-    style Sequence fill:#f3e5f5
-    style Rules fill:#fff3e0
-    style Document fill:#e8f5e9
-    style Statuses fill:#fce4ec
+    style WP fill:#e3f2fd,color:#000
+    style Sequence fill:#f3e5f5,color:#000
+    style Rules fill:#fff3e0,color:#000
+    style Document fill:#e8f5e9,color:#000
+    style Statuses fill:#fce4ec,color:#000
 ```
 
 ## Процесс создания и обработки ревизий
@@ -261,14 +261,14 @@ graph TD
     Approve --> Final[Финальная ревизия<br/>Approved]
     Final --> End([Документ утвержден])
     
-    style Start fill:#e1f5ff
+    style Start fill:#e1f5ff,color:#000
     style End fill:#4caf50,color:#fff
-    style Rev01 fill:#fff9c4
-    style Rev02 fill:#fff9c4
-    style Rev03 fill:#fff9c4
+    style Rev01 fill:#fff9c4,color:#000
+    style Rev02 fill:#fff9c4,color:#000
+    style Rev03 fill:#fff9c4,color:#000
     style Final fill:#4caf50,color:#fff
-    style Rev01Rework fill:#ffcdd2
-    style Rev02Rework fill:#ffcdd2
+    style Rev01Rework fill:#ffcdd2,color:#000
+    style Rev02Rework fill:#ffcdd2,color:#000
 ```
 
 ## Описание компонентов
