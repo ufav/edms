@@ -26,7 +26,6 @@ import {
 } from '@mui/material';
 import {
   Search as SearchIcon,
-  Refresh as RefreshIcon,
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import { auditLogsApi } from '../api/client';
@@ -185,11 +184,6 @@ const AuditLogsPage: React.FC = () => {
         <Typography variant="h4" component="h1">
           {t('audit.title')}
         </Typography>
-        <Tooltip title={t('common.refresh')}>
-          <IconButton onClick={loadLogs} disabled={loading}>
-            <RefreshIcon />
-          </IconButton>
-        </Tooltip>
       </Box>
 
       {/* Фильтры и поиск */}

@@ -90,7 +90,6 @@ export const useSupportWebSocket = ({
 
     const token = getToken();
     if (!token) {
-      console.warn('No token available for WebSocket connection');
       return;
     }
 
@@ -101,7 +100,6 @@ export const useSupportWebSocket = ({
     // Убираем протокол и формируем правильный URL
     const host = baseUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
     const wsUrl = `${wsProtocol}://${host}/api/v1/support/ws/tickets/${ticketId}?token=${encodeURIComponent(token)}`;
-    console.log('Connecting to WebSocket:', { ticketId, wsUrl: wsUrl.replace(token, '***') });
 
     try {
       // Закрываем предыдущее соединение, если оно есть
@@ -114,7 +112,6 @@ export const useSupportWebSocket = ({
       wsRef.current = ws;
 
       ws.onopen = () => {
-        console.log('WebSocket connected');
         isConnectingRef.current = false;
         setIsConnected(true);
         reconnectAttemptsRef.current = 0;
@@ -136,29 +133,21 @@ export const useSupportWebSocket = ({
           }
           
           const data: WebSocketMessage = JSON.parse(event.data);
-          console.log('WebSocket message received:', data);
           
-          if (data.type === 'connected') {
-            console.log('WebSocket connection confirmed');
-          } else if (data.type === 'new_message' && data.message) {
-            console.log('New message via WebSocket:', data.message);
+          if (data.type === 'new_message' && data.message) {
             onMessageRef.current?.(data.message);
-          } else {
-            console.warn('Unknown WebSocket message type:', data.type);
           }
         } catch (err) {
-          console.error('Error parsing WebSocket message:', err, event.data);
+          // Ошибка парсинга сообщения
         }
       };
 
       ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
         isConnectingRef.current = false;
         onErrorRef.current?.(error);
       };
 
       ws.onclose = (event) => {
-        console.log('WebSocket disconnected', event.code, event.reason);
         isConnectingRef.current = false;
         setIsConnected(false);
         
@@ -179,7 +168,6 @@ export const useSupportWebSocket = ({
         }
       };
     } catch (error) {
-      console.error('Error creating WebSocket:', error);
       isConnectingRef.current = false;
       onErrorRef.current?.(error as any);
     }

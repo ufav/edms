@@ -118,7 +118,15 @@ const SupportTicketsListDialog: React.FC<SupportTicketsListDialogProps> = ({
 
   return (
     <>
-      <Dialog open={open && !chatOpen} onClose={onClose} maxWidth="md" fullWidth>
+      <Dialog 
+        open={open && !chatOpen} 
+        onClose={onClose} 
+        maxWidth="md" 
+        fullWidth
+        disablePortal={false}
+        disableEnforceFocus={false}
+        disableRestoreFocus={false}
+      >
         <DialogTitle>
           <Box display="flex" justifyContent="space-between" alignItems="center">
             <Typography variant="h6">{t('support.my_tickets') || 'Мои обращения'}</Typography>

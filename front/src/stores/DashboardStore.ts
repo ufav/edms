@@ -5,13 +5,14 @@ import { transmittalStore } from './TransmittalStore';
 import { reviewStore } from './ReviewStore';
 import { userStore } from './UserStore';
 import { referencesStore } from './ReferencesStore';
-import { documentsApi } from '../api/client';
+import { documentsApi, projectsApi } from '../api/client';
 
 export interface DashboardStats {
-  totalProjects: number;
   totalDocuments: number;
-  totalTransmittals: number;
-  pendingReviews: number;
+  reviewsTotal: number;
+  reviewsInternal: number;
+  reviewsTransmittal: number;
+  reviewsOverdue: number;
 }
 
 export interface DisciplineStat {
@@ -21,6 +22,14 @@ export interface DisciplineStat {
   documentsCount: number;
   closedDocumentsCount: number;
   closedRatio: number; // 0..1
+}
+
+export interface RevisionStepStat {
+  stepId: number | null;
+  stepCode?: string;
+  stepDescription?: string;
+  stepDescriptionNative?: string;
+  documentsCount: number;
 }
 
 export interface RecentActivity {
@@ -36,6 +45,7 @@ class DashboardStore {
   isLoading = false;
   error: string | null = null;
   documentsCount = 0; // Количество документов для текущего проекта
+  revisionStepsStats: RevisionStepStat[] = []; // Статистика по шагам ревизий
 
   constructor() {
     makeAutoObservable(this);
@@ -59,26 +69,43 @@ class DashboardStore {
   getStats(): DashboardStats {
     const selectedProjectId = projectStore.selectedProject?.id;
     
-    // Если проект не выбран, показываем только количество проектов
+    // Если проект не выбран, показываем нули
     if (!selectedProjectId) {
       return {
-        totalProjects: projectStore.projects.length,
         totalDocuments: 0,
-        totalTransmittals: 0,
-        pendingReviews: 0
+        reviewsTotal: 0,
+        reviewsInternal: 0,
+        reviewsTransmittal: 0,
+        reviewsOverdue: 0
       };
     }
     
-    // Если проект выбран, показываем статистику для этого проекта
-    const filteredTransmittals = transmittalStore.transmittals.filter(trans => trans.project_id === selectedProjectId);
-    // Все ревью считаются ожидающими, так как они загружаются через getPendingApprovals
-    const filteredReviews = reviewStore.reviews.filter(review => review.project_id === selectedProjectId);
+    // Вычисляем статистику ревью из reviewStore
+    const reviews = reviewStore.reviews.filter(r => r.project_id === selectedProjectId);
+    const total = reviews.length;
+    let internal = 0;
+    let transmittal = 0;
+    let overdue = 0;
     
+    reviews.forEach(review => {
+      const requiresTransmittal = review.requires_transmittal ?? false;
+      if (requiresTransmittal) {
+        transmittal++;
+      } else {
+        internal++;
+      }
+      if (review.is_overdue) {
+        overdue++;
+      }
+    });
+    
+    // Если проект выбран, показываем статистику для этого проекта
     return {
-      totalProjects: projectStore.projects.length,
       totalDocuments: this.documentsCount,
-      totalTransmittals: filteredTransmittals.length,
-      pendingReviews: filteredReviews.length
+      reviewsTotal: total,
+      reviewsInternal: internal,
+      reviewsTransmittal: transmittal,
+      reviewsOverdue: overdue
     };
   }
 
@@ -138,6 +165,11 @@ class DashboardStore {
         const codeB = b.disciplineCode || "";
         return codeA.localeCompare(codeB, undefined, { sensitivity: "base" });
       });
+  }
+
+  // Статистика по шагам ревизий для выбранного проекта
+  getRevisionStepsStats(): RevisionStepStat[] {
+    return this.revisionStepsStats;
   }
 
   // Получение последних активностей
@@ -277,15 +309,33 @@ class DashboardStore {
         referencesStore.loadWorkflowStatuses(),
       ]);
       
-      // Загружаем количество документов отдельно
+      // Загружаем количество документов и статистику по шагам ревизий
       if (projectId) {
-        const documentsCount = await this.getDocumentsCount(projectId);
-        runInAction(() => {
-          this.documentsCount = documentsCount;
-        });
+        try {
+          const [documentsCount, revisionStepsStats] = await Promise.all([
+            this.getDocumentsCount(projectId),
+            projectsApi.getRevisionStepsStats(projectId).catch(() => [])
+          ]);
+          runInAction(() => {
+            this.documentsCount = documentsCount;
+            this.revisionStepsStats = revisionStepsStats.map(stat => ({
+              stepId: stat.step_id,
+              stepCode: stat.step_code,
+              stepDescription: stat.step_description,
+              stepDescriptionNative: stat.step_description_native,
+              documentsCount: stat.documents_count
+            }));
+          });
+        } catch (error) {
+          runInAction(() => {
+            this.documentsCount = 0;
+            this.revisionStepsStats = [];
+          });
+        }
       } else {
         runInAction(() => {
           this.documentsCount = 0;
+          this.revisionStepsStats = [];
         });
       }
       

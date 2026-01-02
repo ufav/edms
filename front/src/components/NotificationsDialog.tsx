@@ -59,45 +59,7 @@ const NotificationsDialog: React.FC<NotificationsDialogProps> = ({
   const [unreadCount, setUnreadCount] = useState(0);
   const [showAll, setShowAll] = useState(false); // По умолчанию показываем только непрочитанные
 
-  useEffect(() => {
-    if (open) {
-      // Сбрасываем showAll при открытии
-      setShowAll(false);
-      loadUnreadCount();
-    }
-  }, [open]);
-
-  useEffect(() => {
-    if (open) {
-      // Загружаем уведомления при открытии или изменении showAll
-      loadNotifications();
-    }
-  }, [showAll, open]);
-
-  const loadNotifications = async () => {
-    setLoading(true);
-    try {
-      // По умолчанию показываем только непрочитанные (до 20)
-      // Если showAll=true, показываем все (до 50)
-      const unreadOnly = !showAll; // true = только непрочитанные, false = все
-      const limit = showAll ? 50 : 20;
-      
-      console.log('[NotificationsDialog] Loading:', { unreadOnly, limit, showAll });
-      
-      const data = await notificationsApi.getNotifications(unreadOnly, limit);
-      
-      console.log('[NotificationsDialog] Received:', data.length, 'notifications');
-      console.log('[NotificationsDialog] Read status:', data.map(n => ({ id: n.id, is_read: n.is_read, title: n.title })));
-      
-      setNotifications(data);
-    } catch (error) {
-      console.error('Error loading notifications:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadUnreadCount = async () => {
+  const loadUnreadCount = React.useCallback(async () => {
     try {
       const count = await notificationsApi.getUnreadCount();
       setUnreadCount(count);
@@ -106,9 +68,41 @@ const NotificationsDialog: React.FC<NotificationsDialogProps> = ({
         onUnreadCountChange(count);
       }
     } catch (error) {
-      console.error('Error loading unread count:', error);
+      // Ошибка загрузки счетчика непрочитанных
     }
-  };
+  }, [onUnreadCountChange]);
+
+  const loadNotifications = React.useCallback(async () => {
+    setLoading(true);
+    try {
+      // По умолчанию показываем только непрочитанные (до 20)
+      // Если showAll=true, показываем все (до 50)
+      const unreadOnly = !showAll; // true = только непрочитанные, false = все
+      const limit = showAll ? 50 : 20;
+      
+      const data = await notificationsApi.getNotifications(unreadOnly, limit);
+      setNotifications(data);
+    } catch (error) {
+      // Ошибка загрузки уведомлений
+    } finally {
+      setLoading(false);
+    }
+  }, [showAll]);
+
+  useEffect(() => {
+    if (open) {
+      // Сбрасываем showAll при открытии
+      setShowAll(false);
+      loadUnreadCount();
+    }
+  }, [open, loadUnreadCount]);
+
+  useEffect(() => {
+    if (open) {
+      // Загружаем уведомления при открытии или изменении showAll
+      loadNotifications();
+    }
+  }, [showAll, open, loadNotifications]);
 
   const handleMarkAsRead = async (notificationId: number) => {
     try {
@@ -120,9 +114,11 @@ const NotificationsDialog: React.FC<NotificationsDialogProps> = ({
       );
       const newCount = Math.max(0, unreadCount - 1);
       setUnreadCount(newCount);
-      onUnreadCountChange?.(newCount);
+      if (onUnreadCountChange) {
+        onUnreadCountChange(newCount);
+      }
     } catch (error) {
-      console.error('Error marking notification as read:', error);
+      // Ошибка отметки уведомления как прочитанного
     }
   };
 
@@ -132,9 +128,11 @@ const NotificationsDialog: React.FC<NotificationsDialogProps> = ({
       setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
       setUnreadCount(0);
       // Уведомляем родительский компонент об изменении счетчика
-      onUnreadCountChange?.(0);
+      if (onUnreadCountChange) {
+        onUnreadCountChange(0);
+      }
     } catch (error) {
-      console.error('Error marking all as read:', error);
+      // Ошибка отметки всех уведомлений как прочитанных
     }
   };
 
@@ -163,19 +161,6 @@ const NotificationsDialog: React.FC<NotificationsDialogProps> = ({
     const now = new Date();
     
     const diff = now.getTime() - date.getTime();
-    
-    // Временная отладка для диагностики проблемы
-    if (Math.abs(diff) > 1000 * 60 * 60) { // Если разница больше часа
-      console.log('⚠️ Большая разница во времени:', {
-        dateString,
-        parsedDate: date.toISOString(),
-        now: now.toISOString(),
-        diffMs: diff,
-        diffHours: (diff / (1000 * 60 * 60)).toFixed(2),
-        dateTimezone: date.getTimezoneOffset(),
-        nowTimezone: now.getTimezoneOffset()
-      });
-    }
     const totalMinutes = Math.floor(diff / 60000);
     const totalHours = Math.floor(diff / 3600000);
     const days = Math.floor(diff / 86400000);
@@ -268,53 +253,92 @@ const NotificationsDialog: React.FC<NotificationsDialogProps> = ({
           maxWidth: '90vw',
           maxHeight: '80vh',
           mt: 1,
-          p: 2,
+          p: 0,
           display: 'flex',
           flexDirection: 'column',
+          overflow: 'hidden',
         },
       }}
     >
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <NotificationsIcon />
-            <Typography variant="h6">
-              {t('notifications.title') || 'Уведомления'}
-            </Typography>
-            {unreadCount > 0 && (
-              <Chip
-                label={unreadCount}
-                color="error"
-                size="small"
-                sx={{ ml: 1 }}
-              />
-            )}
-          </Box>
+      {/* Заголовок - фиксированный */}
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center', 
+        p: 2,
+        pb: 1,
+        flexShrink: 0,
+      }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <NotificationsIcon />
+          <Typography variant="h6">
+            {t('notifications.title') || 'Уведомления'}
+          </Typography>
+          {unreadCount > 0 && (
+            <Chip
+              label={unreadCount}
+              color="error"
+              size="small"
+              sx={{ ml: 1 }}
+            />
+          )}
         </Box>
-        <Box sx={{ overflow: 'auto', flex: 1 }}>
-        {/* Кнопки управления - всегда видимы */}
-        {!loading && (
-          <Box sx={{ mb: 2, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            {unreadCount > 0 && (
-              <Button
-                size="small"
-                onClick={handleMarkAllAsRead}
-                startIcon={<CheckCircleIcon />}
-              >
-                {t('notifications.mark_all_read') || 'Отметить все как прочитанные'}
-              </Button>
-            )}
+      </Box>
+
+      {/* Кнопки управления - фиксированные */}
+      {!loading && (
+        <Box sx={{ 
+          px: 2,
+          pb: 1,
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center',
+          flexShrink: 0,
+        }}>
+          {unreadCount > 0 && (
             <Button
               size="small"
-              onClick={() => setShowAll(!showAll)}
-              sx={{ ml: 'auto' }}
+              onClick={handleMarkAllAsRead}
+              startIcon={<CheckCircleIcon />}
             >
-              {showAll 
-                ? (t('notifications.show_unread_only') || 'Только непрочитанные')
-                : (t('notifications.show_all') || 'Показать все')}
+              {t('notifications.mark_all_read') || 'Отметить все как прочитанные'}
             </Button>
-          </Box>
-        )}
-        
+          )}
+          <Button
+            size="small"
+            onClick={() => setShowAll(!showAll)}
+            sx={{ ml: 'auto' }}
+          >
+            {showAll 
+              ? (t('notifications.show_unread_only') || 'Только непрочитанные')
+              : (t('notifications.show_all') || 'Показать все')}
+          </Button>
+        </Box>
+      )}
+
+      {/* Список уведомлений - прокручиваемый */}
+      <Box sx={{ 
+        overflow: 'auto', 
+        flex: 1,
+        minHeight: 0,
+        px: 2,
+        pb: 2,
+        '&::-webkit-scrollbar': {
+          width: '8px',
+          height: '8px',
+        },
+        '&::-webkit-scrollbar-track': {
+          background: '#f1f1f1',
+          borderRadius: '4px',
+        },
+        '&::-webkit-scrollbar-thumb': {
+          background: '#c1c1c1',
+          borderRadius: '4px',
+          '&:hover': {
+            background: '#a8a8a8',
+          },
+        },
+      }}>
         {loading ? (
           <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
             <CircularProgress />
@@ -326,56 +350,54 @@ const NotificationsDialog: React.FC<NotificationsDialogProps> = ({
               : (t('notifications.no_unread') || 'Нет непрочитанных уведомлений')}
           </Alert>
         ) : (
-          <>
-            <List>
-              {notifications.map((notification, index) => (
-                <React.Fragment key={notification.id}>
-                  <ListItem
-                    button
-                    onClick={() => handleNotificationClick(notification)}
-                    sx={{
-                      backgroundColor: notification.is_read
-                        ? 'transparent'
-                        : 'action.hover',
-                      '&:hover': {
-                        backgroundColor: 'action.selected',
-                      },
-                    }}
-                  >
-                    <ListItemIcon>
-                      <Badge
-                        color="error"
-                        variant="dot"
-                        invisible={notification.is_read}
-                      >
-                        {getNotificationIcon(notification.type)}
-                      </Badge>
-                    </ListItemIcon>
-                    <ListItemText
-                      primary={
-                        <Typography variant="subtitle2" component="span">
-                          {notification.title}
+          <List sx={{ py: 0 }}>
+            {notifications.map((notification, index) => (
+              <React.Fragment key={notification.id}>
+                <ListItem
+                  button
+                  onClick={() => handleNotificationClick(notification)}
+                  sx={{
+                    backgroundColor: notification.is_read
+                      ? 'transparent'
+                      : 'action.hover',
+                    '&:hover': {
+                      backgroundColor: 'action.selected',
+                    },
+                  }}
+                >
+                  <ListItemIcon>
+                    <Badge
+                      color="error"
+                      variant="dot"
+                      invisible={notification.is_read}
+                    >
+                      {getNotificationIcon(notification.type)}
+                    </Badge>
+                  </ListItemIcon>
+                  <ListItemText
+                    primary={
+                      <Typography variant="subtitle2" component="span">
+                        {notification.title}
+                      </Typography>
+                    }
+                    secondary={
+                      <Box>
+                        <Typography variant="body2" color="text.secondary">
+                          {notification.message}
                         </Typography>
-                      }
-                      secondary={
-                        <Box>
-                          <Typography variant="body2" color="text.secondary">
-                            {notification.message}
-                          </Typography>
-                          <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
-                            {formatDate(notification.created_at)}
-                          </Typography>
-                        </Box>
-                      }
-                    />
-                  </ListItem>
-                  {index < notifications.length - 1 && <Divider />}
-                </React.Fragment>
-              ))}
-            </List>
-          </>
+                        <Typography variant="caption" color="text.secondary" sx={{ mt: 0.5, display: 'block' }}>
+                          {formatDate(notification.created_at)}
+                        </Typography>
+                      </Box>
+                    }
+                  />
+                </ListItem>
+                {index < notifications.length - 1 && <Divider />}
+              </React.Fragment>
+            ))}
+          </List>
         )}
-        </Box>
+      </Box>
     </Popover>
   );
 };

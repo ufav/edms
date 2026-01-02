@@ -25,7 +25,14 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
 }) => {
   const { t } = useTranslation();
   return (
-    <Dialog open={open} onClose={loading ? undefined : onClose} maxWidth="xs" fullWidth>
+    <Dialog 
+      open={open} 
+      onClose={loading ? undefined : onClose} 
+      maxWidth="xs" 
+      fullWidth
+      disableEnforceFocus
+      disableRestoreFocus
+    >
       <DialogTitle>{title || t('common.confirm')}</DialogTitle>
       <DialogContent>
         <Typography variant="body2">{content || t('common.confirm_action')}</Typography>

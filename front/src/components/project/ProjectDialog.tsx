@@ -66,8 +66,50 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
   const { formData, setFormData: originalSetFormData } = useProjectForm();
   
   // Обертка для setFormData с отслеживанием изменений
-  const setFormData = (newData: any) => {
-    originalSetFormData(newData);
+  // Поддерживает как функции обновления, так и объекты
+  const setFormData = (updater: any) => {
+    if (typeof updater === 'function') {
+      originalSetFormData((prev: any) => {
+        const newData = updater(prev);
+        // Убеждаемся, что все строковые поля не undefined
+        const normalizedData = {
+          ...prev, // Сохраняем все существующие поля
+          ...newData,
+          name: newData.name !== undefined ? (newData.name || '') : (prev.name || ''),
+          project_code: newData.project_code !== undefined ? (newData.project_code || '') : (prev.project_code || ''),
+          description: newData.description !== undefined ? (newData.description || '') : (prev.description || ''),
+          status: newData.status !== undefined ? (newData.status || 'PLANNING') : (prev.status || 'PLANNING'),
+          budget: newData.budget !== undefined ? newData.budget : prev.budget,
+          client_name: newData.client_name !== undefined ? (newData.client_name || '') : (prev.client_name || ''),
+          client_contact: newData.client_contact !== undefined ? (newData.client_contact || '') : (prev.client_contact || ''),
+          client_email: newData.client_email !== undefined ? (newData.client_email || '') : (prev.client_email || ''),
+          client_phone: newData.client_phone !== undefined ? (newData.client_phone || '') : (prev.client_phone || ''),
+          location: newData.location !== undefined ? (newData.location || '') : (prev.location || ''),
+          notes: newData.notes !== undefined ? (newData.notes || '') : (prev.notes || ''),
+        };
+        return normalizedData;
+      });
+    } else {
+      // Если это объект, нормализуем его, сохраняя существующие значения
+      originalSetFormData((prev: any) => {
+        const normalizedData = {
+          ...prev,
+          ...updater,
+          name: updater.name !== undefined ? (updater.name || '') : (prev.name || ''),
+          project_code: updater.project_code !== undefined ? (updater.project_code || '') : (prev.project_code || ''),
+          description: updater.description !== undefined ? (updater.description || '') : (prev.description || ''),
+          status: updater.status !== undefined ? (updater.status || 'PLANNING') : (prev.status || 'PLANNING'),
+          budget: updater.budget !== undefined ? updater.budget : prev.budget,
+          client_name: updater.client_name !== undefined ? (updater.client_name || '') : (prev.client_name || ''),
+          client_contact: updater.client_contact !== undefined ? (updater.client_contact || '') : (prev.client_contact || ''),
+          client_email: updater.client_email !== undefined ? (updater.client_email || '') : (prev.client_email || ''),
+          client_phone: updater.client_phone !== undefined ? (updater.client_phone || '') : (prev.client_phone || ''),
+          location: updater.location !== undefined ? (updater.location || '') : (prev.location || ''),
+          notes: updater.notes !== undefined ? (updater.notes || '') : (prev.notes || ''),
+        };
+        return normalizedData;
+      });
+    }
     if (mode === 'edit' && isInitialized) {
       setHasChanges(true);
     }
@@ -229,7 +271,13 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
           status: 'PLANNING',
           start_date: null,
           end_date: null,
-          budget: '',
+          budget: null,
+          client_name: '',
+          client_contact: '',
+          client_email: '',
+          client_phone: '',
+          location: '',
+          notes: '',
         });
         setSelectedDisciplines([]);
         setDisciplineDocumentTypes({});
@@ -272,44 +320,22 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
   // Устанавливаем workflow preset после загрузки presets (для случаев, когда presets загружаются позже)
   useEffect(() => {
     if (mode === 'edit' && projectId && isInitialized && projectDialogStore.workflowPresets.length > 0) {
-      console.log('[ProjectDialog] useEffect: проверка установки workflow preset', {
-        projectId,
-        pendingWorkflowPresetId,
-        selectedWorkflowPreset,
-        presetsCount: projectDialogStore.workflowPresets.length,
-        presetIds: projectDialogStore.workflowPresets.map(p => p.id)
-      });
-      
       // Если есть сохраненный preset ID, который еще не установлен
       if (pendingWorkflowPresetId !== null && selectedWorkflowPreset !== pendingWorkflowPresetId) {
         const presetExists = projectDialogStore.workflowPresets.some(p => 
           p.id == pendingWorkflowPresetId || p.id === Number(pendingWorkflowPresetId) || String(p.id) === String(pendingWorkflowPresetId)
         );
-        const foundPreset = projectDialogStore.workflowPresets.find(p => 
-          p.id == pendingWorkflowPresetId || p.id === Number(pendingWorkflowPresetId) || String(p.id) === String(pendingWorkflowPresetId)
-        );
-        
-        console.log('[ProjectDialog] useEffect: проверка preset', {
-          pendingWorkflowPresetId,
-          pendingWorkflowPresetIdType: typeof pendingWorkflowPresetId,
-          presetExists,
-          foundPreset,
-          allPresetIds: projectDialogStore.workflowPresets.map(p => ({ id: p.id, type: typeof p.id, name: p.name }))
-        });
         
         if (presetExists) {
-          console.log('[ProjectDialog] useEffect: устанавливаем workflow preset:', pendingWorkflowPresetId);
           setSelectedWorkflowPreset(pendingWorkflowPresetId);
           setPendingWorkflowPresetId(null);
         } else {
-          console.warn('[ProjectDialog] useEffect: preset все еще не найден в списке, пытаемся загрузить из проекта:', pendingWorkflowPresetId);
           // Пытаемся загрузить preset из данных проекта
           (async () => {
             try {
               const projectData = await projectDialogStore.loadProjectData(projectId);
               if (projectData.workflowPreset && projectData.workflowPreset.id === pendingWorkflowPresetId) {
                 const presetFromProject = projectData.workflowPreset;
-                console.log('[ProjectDialog] useEffect: используем preset из данных проекта:', presetFromProject);
                 
                 // Проверяем, что preset еще не добавлен
                 const alreadyExists = projectDialogStore.workflowPresets.some(p => 
@@ -317,17 +343,14 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
                 );
                 
                 if (!alreadyExists) {
-                  console.log('[ProjectDialog] useEffect: добавляем preset из проекта в список загруженных presets');
                   projectDialogStore.workflowPresets.push(presetFromProject);
                 }
                 
                 setSelectedWorkflowPreset(pendingWorkflowPresetId);
                 setPendingWorkflowPresetId(null);
-              } else {
-                console.warn('[ProjectDialog] useEffect: preset не найден в данных проекта');
               }
             } catch (error) {
-              console.error('[ProjectDialog] useEffect: ошибка загрузки preset из проекта:', error);
+              // Ошибка загрузки preset из проекта
             }
           })();
         }
@@ -386,7 +409,7 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
         name: project.name || '',
         project_code: project.project_code || '',
         description: project.description || '',
-        status: projectStatus,
+        status: projectStatus || 'PLANNING',
         start_date: project.start_date ? new Date(project.start_date) : null,
         end_date: project.end_date ? new Date(project.end_date) : null,
         budget: project.budget?.toString() || '',
@@ -418,59 +441,22 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
 
       // Устанавливаем workflow preset - проверяем, что он есть в списке загруженных пресетов
       const workflowPresetId = projectData.workflowPreset?.id;
-      console.log('[ProjectDialog] Загрузка workflow preset для проекта:', {
-        projectId,
-        workflowPresetFromProject: projectData.workflowPreset,
-        workflowPresetId,
-        workflowPresetIdType: typeof workflowPresetId,
-        loadedPresetsCount: projectDialogStore.workflowPresets.length,
-        loadedPresetIds: projectDialogStore.workflowPresets.map(p => p.id),
-        loadedPresetIdsTypes: projectDialogStore.workflowPresets.map(p => ({ id: p.id, type: typeof p.id })),
-        allPresets: projectDialogStore.workflowPresets.map(p => ({ id: p.id, name: p.name, is_global: p.is_global }))
-      });
       
       if (workflowPresetId !== null && workflowPresetId !== undefined && workflowPresetId !== 0) {
         // Проверяем, что пресет есть в списке загруженных
         // Используем строгое сравнение с учетом типов (может быть число vs строка)
         const presetExists = projectDialogStore.workflowPresets.some(p => {
-          const match = p.id == workflowPresetId; // Используем == для сравнения с учетом приведения типов
-          if (!match && p.id === Number(workflowPresetId)) {
-            console.log('[ProjectDialog] Найдено совпадение после приведения типов:', { presetId: p.id, workflowPresetId, presetIdType: typeof p.id, workflowPresetIdType: typeof workflowPresetId });
-          }
-          return match || p.id === Number(workflowPresetId) || String(p.id) === String(workflowPresetId);
-        });
-        
-        const foundPreset = projectDialogStore.workflowPresets.find(p => 
-          p.id == workflowPresetId || p.id === Number(workflowPresetId) || String(p.id) === String(workflowPresetId)
-        );
-        
-        console.log('[ProjectDialog] Проверка существования preset:', {
-          workflowPresetId,
-          workflowPresetIdType: typeof workflowPresetId,
-          presetExists,
-          presetInList: foundPreset,
-          allPresetIds: projectDialogStore.workflowPresets.map(p => ({ id: p.id, type: typeof p.id, name: p.name })),
-          comparisonResults: projectDialogStore.workflowPresets.map(p => ({
-            presetId: p.id,
-            workflowPresetId,
-            strictEqual: p.id === workflowPresetId,
-            looseEqual: p.id == workflowPresetId,
-            numberEqual: p.id === Number(workflowPresetId),
-            stringEqual: String(p.id) === String(workflowPresetId)
-          }))
+          return p.id == workflowPresetId || p.id === Number(workflowPresetId) || String(p.id) === String(workflowPresetId);
         });
         
         if (presetExists) {
-          console.log('[ProjectDialog] Устанавливаем workflow preset:', workflowPresetId);
           setSelectedWorkflowPreset(workflowPresetId);
           setPendingWorkflowPresetId(null);
         } else {
-          console.warn('[ProjectDialog] Preset не найден в списке, используем данные из проекта:', workflowPresetId);
           // Preset недоступен через getAll(), но мы уже получили его через getWorkflowPreset(projectId)
           // Используем данные preset из projectData.workflowPreset и добавляем в список для отображения
           if (projectData.workflowPreset) {
             const presetFromProject = projectData.workflowPreset;
-            console.log('[ProjectDialog] Используем preset из данных проекта:', presetFromProject);
             
             // Проверяем, что preset еще не добавлен (на случай, если он был добавлен между проверками)
             const alreadyExists = projectDialogStore.workflowPresets.some(p => 
@@ -478,24 +464,19 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
             );
             
             if (!alreadyExists) {
-              console.log('[ProjectDialog] Добавляем preset из проекта в список загруженных presets');
               // Добавляем preset в список для отображения
               projectDialogStore.workflowPresets.push(presetFromProject);
-            } else {
-              console.log('[ProjectDialog] Preset уже есть в списке после повторной проверки');
             }
             
             setSelectedWorkflowPreset(workflowPresetId);
             setPendingWorkflowPresetId(null);
           } else {
-            console.warn('[ProjectDialog] Preset не найден в данных проекта, сохраняем ID для последующей установки:', workflowPresetId);
             // Сохраняем ID для установки позже, когда presets загрузятся
             setPendingWorkflowPresetId(workflowPresetId);
             setSelectedWorkflowPreset(null);
           }
         }
       } else {
-        console.log('[ProjectDialog] Workflow preset не установлен для проекта (null/undefined/0):', workflowPresetId);
         setSelectedWorkflowPreset(null);
         setPendingWorkflowPresetId(null);
       }

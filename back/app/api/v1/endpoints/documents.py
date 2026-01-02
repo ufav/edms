@@ -1466,8 +1466,21 @@ async def release_revision(
         raise HTTPException(status_code=404, detail="Документ не найден")
     
     # Проверяем права доступа
+    # 1. Администратор может выпускать любые ревизии
+    # 2. Создатель документа может выпускать ревизии своих документов
+    # 3. Участник проекта (не читатель) может выпускать ревизии документов в проекте
     if not current_user.is_admin and document.created_by != current_user.id:
-        raise HTTPException(status_code=403, detail="Нет прав доступа к документу")
+        # Проверяем, является ли пользователь участником проекта с правами (не читателем)
+        from app.models.project import ProjectMember
+        from app.models.project_role import ProjectRole
+        project_member = db.query(ProjectMember).join(ProjectRole).filter(
+            ProjectMember.project_id == document.project_id,
+            ProjectMember.user_id == current_user.id,
+            ProjectRole.code != 'viewer'  # Исключаем читателей
+        ).first()
+        
+        if not project_member:
+            raise HTTPException(status_code=403, detail="Нет прав для выпуска этой ревизии")
     
     # Проверяем, что ревизия в статусе Draft
     draft_status = db.query(WorkflowStatus).filter(WorkflowStatus.name == "Draft").first()
@@ -2402,10 +2415,11 @@ async def cancel_document_revision(
     if not current_user.is_admin and document.created_by != current_user.id:
         # Проверяем, является ли пользователь участником проекта с правами (не читателем)
         from app.models.project import ProjectMember
-        project_member = db.query(ProjectMember).filter(
+        from app.models.project_role import ProjectRole
+        project_member = db.query(ProjectMember).join(ProjectRole).filter(
             ProjectMember.project_id == document.project_id,
             ProjectMember.user_id == current_user.id,
-            ProjectMember.role != 'viewer'  # Исключаем читателей
+            ProjectRole.code != 'viewer'  # Исключаем читателей
         ).first()
         
         if not project_member:

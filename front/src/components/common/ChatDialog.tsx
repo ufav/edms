@@ -436,6 +436,9 @@ const ChatDialog: React.FC<ChatDialogProps> = ({
       onClose={onClose}
       maxWidth={false}
       fullWidth={false}
+      disablePortal={false}
+      disableEnforceFocus={false}
+      disableRestoreFocus={false}
       sx={{
         '& .MuiDialog-paper': {
           position: 'fixed',

@@ -23,17 +23,6 @@ const WorkflowTab: React.FC<WorkflowTabProps> = ({
   onWorkflowPresetChange
 }) => {
   const { t } = useTranslation();
-  
-  // Отладка
-  React.useEffect(() => {
-    console.log('[WorkflowTab] Рендер компонента:', {
-      workflowPresetsCount: workflowPresets.length,
-      workflowPresetIds: workflowPresets.map(p => p.id),
-      selectedWorkflowPreset,
-      presetExists: selectedWorkflowPreset ? workflowPresets.some(p => p.id === selectedWorkflowPreset) : false,
-      foundPreset: selectedWorkflowPreset ? workflowPresets.find(p => p.id === selectedWorkflowPreset) : null
-    });
-  }, [workflowPresets, selectedWorkflowPreset]);
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>

@@ -21,6 +21,19 @@ export interface Review {
     description: string;
     description_native: string;
   } | null;
+  current_description?: {
+    id: number;
+    code: string;
+    description: string;
+    description_native: string;
+  } | null;
+  sequence_order?: number | null;
+  is_final?: boolean | null;
+  requires_transmittal?: boolean | null;
+  release_date?: string | null;
+  due_date?: string | null;
+  due_days?: number | null;
+  is_overdue?: boolean;
 }
 
 class ReviewStore {

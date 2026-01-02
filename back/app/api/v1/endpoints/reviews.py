@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_
 from typing import List, Optional
 from pydantic import BaseModel
+from datetime import datetime, timedelta, timezone
 
 class ApproveRequest(BaseModel):
     comments: Optional[str] = None
@@ -216,6 +217,15 @@ async def get_pending_approvals(
         # Берем файлы из заранее загруженной мапы
         files_info = files_by_revision_id.get(revision.id, []) if revision else []
         
+        # Вычисляем due_date и is_overdue
+        due_date = None
+        is_overdue = False
+        now = datetime.now(timezone.utc)
+        
+        if revision and revision.created_at and sequence and sequence.due_days:
+            due_date = revision.created_at + timedelta(days=sequence.due_days)
+            is_overdue = due_date < now
+        
         result.append({
             "document_id": doc.id,
             "document_title": doc.title,
@@ -244,7 +254,15 @@ async def get_pending_approvals(
             "current_description": description_info,
             "sequence_order": sequence.sequence_order if sequence else None,
             "is_final": sequence.is_final if sequence else None,
-            "requires_transmittal": sequence.requires_transmittal if sequence else None
+            "requires_transmittal": sequence.requires_transmittal if sequence else None,
+            # Дата/время выпуска (создания ревизии)
+            "release_date": revision.created_at.isoformat() if revision and revision.created_at else None,
+            # Due date вычисляется как created_at + due_days
+            "due_date": due_date.isoformat() if due_date else None,
+            # Количество дней на выполнение
+            "due_days": sequence.due_days if sequence and sequence.due_days else None,
+            # Флаг просроченности
+            "is_overdue": is_overdue
         })
     
     return result
@@ -512,4 +530,114 @@ async def reject_document(
         "revision_id": latest_revision.id,
         "rejected_by": current_user.id,
         "comments": comments
+    }
+
+
+@router.get("/stats")
+async def get_reviews_stats(
+    project_id: int = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Получить статистику по ревью для дашборда:
+    - Всего ожидающих ответа
+    - Внутренние (requires_transmittal = False)
+    - Через трансмиттал (requires_transmittal = True)
+    - Просроченные (due_date < текущая дата)
+    """
+    # Получаем статус "In Review"
+    in_review_status = db.query(WorkflowStatus).filter(
+        WorkflowStatus.name == "In Review"
+    ).first()
+    
+    if not in_review_status:
+        return {
+            "total": 0,
+            "internal": 0,
+            "transmittal": 0,
+            "overdue": 0
+        }
+    
+    # Создаем подзапрос для получения последней ревизии каждого документа (без фильтра по статусу)
+    # Важно: сначала находим последнюю ревизию, потом проверяем её статус
+    latest_revision_subquery = db.query(
+        DocumentRevision.document_id,
+        func.max(DocumentRevision.created_at).label('max_created_at')
+    ).filter(
+        DocumentRevision.is_deleted == 0
+    ).group_by(DocumentRevision.document_id).subquery()
+    
+    # Базовый запрос для всех ревью в статусе "In Review"
+    # Ищем документы, у которых последняя ревизия в статусе "In Review"
+    base_query = db.query(
+        Document,
+        DocumentRevision,
+        WorkflowPresetSequence
+    ).join(
+        latest_revision_subquery,
+        Document.id == latest_revision_subquery.c.document_id
+    ).join(
+        DocumentRevision,
+        and_(
+            DocumentRevision.document_id == Document.id,
+            DocumentRevision.created_at == latest_revision_subquery.c.max_created_at,
+            DocumentRevision.is_deleted == 0,
+            DocumentRevision.workflow_status_id == in_review_status.id  # Проверяем статус последней ревизии
+        )
+    ).join(
+        Project,
+        Project.id == Document.project_id
+    ).outerjoin(
+        WorkflowPresetSequence,
+        and_(
+            WorkflowPresetSequence.preset_id == Project.workflow_preset_id,
+            WorkflowPresetSequence.revision_step_id == DocumentRevision.revision_step_id,
+            WorkflowPresetSequence.revision_description_id == DocumentRevision.revision_description_id
+        )
+    ).filter(
+        Document.is_deleted == 0
+    )
+    
+    if project_id:
+        base_query = base_query.filter(Project.id == project_id)
+    
+    # Получаем все результаты
+    results = base_query.all()
+    
+    # Текущая дата для проверки просроченных
+    now = datetime.now(timezone.utc)
+    
+    total = 0
+    internal = 0
+    transmittal = 0
+    overdue = 0
+    
+    for row in results:
+        doc, revision, sequence = row
+        # revision не может быть None, так как мы используем join, но на всякий случай проверяем
+        if not revision:
+            continue
+        
+        total += 1
+        
+        # Проверяем requires_transmittal
+        requires_transmittal = sequence.requires_transmittal if sequence else False
+        
+        if requires_transmittal:
+            transmittal += 1
+        else:
+            internal += 1
+        
+        # Проверяем просроченные (due_date = created_at + due_days)
+        if sequence and sequence.due_days and revision.created_at:
+            due_date = revision.created_at + timedelta(days=sequence.due_days)
+            if due_date < now:
+                overdue += 1
+    
+    return {
+        "total": total,
+        "internal": internal,
+        "transmittal": transmittal,
+        "overdue": overdue
     }

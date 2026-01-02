@@ -37,7 +37,7 @@ export interface UseServerDocumentPaginationReturn {
   error: string | null;
   
   // Методы
-  refresh: () => Promise<void>;
+  refresh: (forcePage?: number) => Promise<void>;
 }
 
 export const useServerDocumentPagination = ({ 
@@ -68,13 +68,15 @@ export const useServerDocumentPagination = ({
   }, [projectId, status, search, disciplineId, documentTypeId, revisionDescriptionId, areaId, dateFrom, dateTo, sortBy, sortDir]);
 
   // Загрузка данных
-  const loadDocuments = useCallback(async () => {
+  const loadDocuments = useCallback(async (forcePage?: number) => {
     try {
       setIsLoading(true);
       setError(null);
       
+      const currentPage = forcePage !== undefined ? forcePage : page;
+      
       const response = await documentsApi.getPage({
-        page,
+        page: currentPage,
         size,
         project_id: projectId,
         status,
@@ -92,6 +94,11 @@ export const useServerDocumentPagination = ({
       setDocuments(response.items);
       setTotal(response.total);
       setPages(response.pages);
+      
+      // Если использовали forcePage, обновляем состояние страницы
+      if (forcePage !== undefined && forcePage !== page) {
+        setPage(forcePage);
+      }
     } catch (err: any) {
       console.error('Error loading documents:', err);
       setError(err.message || 'Ошибка загрузки документов');

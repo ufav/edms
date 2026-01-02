@@ -64,13 +64,6 @@ class ProjectDialogStore {
         referencesApi.getAreas()
       ]);
 
-      console.log('[ProjectDialogStore] Загружены workflow presets:', {
-        count: workflowPresetsData.length,
-        presetIds: workflowPresetsData.map((p: any) => p.id),
-        presetIdsWithTypes: workflowPresetsData.map((p: any) => ({ id: p.id, type: typeof p.id, name: p.name, is_global: p.is_global })),
-        presets: workflowPresetsData
-      });
-
       runInAction(() => {
         this.disciplines = disciplinesData;
         this.documentTypes = documentTypesData;
@@ -127,13 +120,7 @@ class ProjectDialogStore {
         projectsApi.getDisciplines(projectId),
         projectsApi.getRevisionDescriptions(projectId).catch(() => []),
         projectsApi.getRevisionSteps(projectId).catch(() => []),
-        projectsApi.getWorkflowPreset(projectId).then(preset => {
-          console.log('[ProjectDialogStore] Загружен workflow preset для проекта:', { projectId, preset });
-          return preset;
-        }).catch(err => {
-          console.warn('[ProjectDialogStore] Ошибка загрузки workflow preset для проекта:', { projectId, error: err });
-          return null;
-        }),
+        projectsApi.getWorkflowPreset(projectId).catch(() => null),
         projectsApi.getAllDocumentTypes(projectId).catch(() => ({})),
         projectParticipantsApi.getAll(projectId).catch(() => []),
         projectsApi.members.getAll(projectId).catch(() => []),
@@ -179,18 +166,12 @@ class ProjectDialogStore {
   async reloadWorkflowPresets() {
     try {
       const workflowPresetsData = await workflowPresetsApi.getAll();
-      console.log('[ProjectDialogStore] Перезагружены workflow presets:', {
-        count: workflowPresetsData.length,
-        presetIds: workflowPresetsData.map((p: any) => p.id),
-        presets: workflowPresetsData
-      });
       
       runInAction(() => {
         this.workflowPresets = workflowPresetsData;
         this.isWorkflowPresetsLoaded = true;
       });
     } catch (error: any) {
-      console.error('[ProjectDialogStore] Ошибка перезагрузки workflow presets:', error);
       runInAction(() => {
         this.error = `Ошибка перезагрузки пресетов: ${error.message || 'Неизвестная ошибка'}`;
       });

@@ -27,18 +27,16 @@ class ConnectionManager:
         if user_id in self.active_connections[ticket_id]:
             try:
                 await self.active_connections[ticket_id][user_id].close()
-            except Exception as e:
-                logger.warning(f"Error closing old connection: {e}")
+            except Exception:
+                pass
         
         self.active_connections[ticket_id][user_id] = websocket
-        logger.info(f"User {user_id} connected to ticket {ticket_id}")
     
     def disconnect(self, ticket_id: int, user_id: int):
         """Отключение пользователя от тикета"""
         if ticket_id in self.active_connections:
             if user_id in self.active_connections[ticket_id]:
                 del self.active_connections[ticket_id][user_id]
-                logger.info(f"User {user_id} disconnected from ticket {ticket_id}")
             
             # Если больше нет подключений к тикету, удаляем его
             if not self.active_connections[ticket_id]:
@@ -52,8 +50,7 @@ class ConnectionManager:
                     websocket = self.active_connections[ticket_id][user_id]
                     await websocket.send_json(message)
                     return True
-                except Exception as e:
-                    logger.error(f"Error sending message to user {user_id}: {e}")
+                except Exception:
                     self.disconnect(ticket_id, user_id)
                     return False
         return False
@@ -61,11 +58,7 @@ class ConnectionManager:
     async def broadcast_to_ticket(self, message: dict, ticket_id: int, exclude_user_id: int = None):
         """Отправка сообщения всем подключенным к тикету пользователям"""
         if ticket_id not in self.active_connections:
-            logger.warning(f"No active connections for ticket {ticket_id}")
             return
-        
-        connected_users = list(self.active_connections[ticket_id].keys())
-        logger.info(f"Broadcasting to ticket {ticket_id}, connected users: {connected_users}, exclude: {exclude_user_id}")
         
         disconnected_users = []
         for user_id, websocket in self.active_connections[ticket_id].items():
@@ -74,9 +67,7 @@ class ConnectionManager:
             
             try:
                 await websocket.send_json(message)
-                logger.debug(f"Message sent to user {user_id} for ticket {ticket_id}")
-            except Exception as e:
-                logger.error(f"Error broadcasting to user {user_id}: {e}", exc_info=True)
+            except Exception:
                 disconnected_users.append(user_id)
         
         # Удаляем отключенных пользователей

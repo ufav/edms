@@ -284,9 +284,9 @@ const DocumentForm: React.FC<DocumentFormProps> = ({
                       const areaLabel = i18n.language === 'en' ? area.name : (area.description || area.name);
                       return `${area.code} - ${areaLabel}`;
                     }
-                    return t('document.not_specified');
+                    return '';
                   }
-                  return t('document.not_specified');
+                  return '';
                 })()}
                 fullWidth
                 InputProps={{ readOnly: true }}

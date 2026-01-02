@@ -43,7 +43,14 @@ const DocumentReleaseModal: React.FC<DocumentReleaseModalProps> = ({
   const isReleaseDisabled = !comment.trim() || loading;
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
+    <Dialog 
+      open={open} 
+      onClose={handleClose} 
+      maxWidth="sm" 
+      fullWidth
+      disableEnforceFocus
+      disableRestoreFocus
+    >
       <DialogTitle>
         {t('document.release_revision')}
       </DialogTitle>

@@ -700,25 +700,31 @@ async def close_ticket_from_telegram(
             ticket_id=ticket_id,
             exclude_user_id=None
         )
-    except Exception as e:
-        logger.error(f"Error broadcasting ticket closure via WebSocket: {e}")
+    except Exception:
+        pass
     
-    # Создаем уведомление для пользователя
+    # Создаем уведомление для пользователя только если он не находится в чате
     try:
-        from app.services.notification_service import NotificationService
-        notification_service = NotificationService()
+        # Проверяем, есть ли активное WebSocket соединение для владельца тикета
+        connected_users = connection_manager.get_connected_users(ticket_id)
+        user_is_in_chat = ticket.user_id in connected_users
         
-        await notification_service.create_notification(
-            user_id=ticket.user_id,
-            type="ticket_closed",
-            title=f"Тикет #{ticket_id} закрыт",
-            message=f'Ваш тикет "{ticket.subject}" был закрыт поддержкой.',
-            document_id=None,
-            related_entity_type="support_ticket",
-            related_entity_id=ticket_id
-        )
-    except Exception as e:
-        logger.error(f"Error creating notification for ticket closed: {e}")
+        # Отправляем уведомление только если пользователь не в чате
+        if not user_is_in_chat:
+            from app.services.notification_service import NotificationService
+            notification_service = NotificationService()
+            
+            await notification_service.create_notification(
+                user_id=ticket.user_id,
+                type="ticket_closed",
+                title=f"Тикет #{ticket_id} закрыт",
+                message=f'Ваш тикет "{ticket.subject}" был закрыт поддержкой.',
+                document_id=None,
+                related_entity_type="support_ticket",
+                related_entity_id=ticket_id
+            )
+    except Exception:
+        pass
 
 
 async def reopen_ticket_from_telegram(
@@ -782,8 +788,8 @@ async def reopen_ticket_from_telegram(
             ticket_id=ticket_id,
             exclude_user_id=None
         )
-    except Exception as e:
-        logger.error(f"Error broadcasting ticket_reopened via WebSocket: {e}")
+    except Exception:
+        pass
 
 
 async def create_support_reply_from_telegram(
@@ -867,7 +873,6 @@ async def create_support_reply_from_telegram(
         )
         # Pydantic v2 использует model_dump() с mode='json' для правильной сериализации datetime
         message_dict = message_response.model_dump(mode='json')
-        logger.info(f"Broadcasting message {message.id} to ticket {ticket_id} via WebSocket")
         await connection_manager.broadcast_to_ticket(
             {
                 "type": "new_message",
@@ -876,28 +881,33 @@ async def create_support_reply_from_telegram(
             ticket_id=ticket_id,
             exclude_user_id=None
         )
-        logger.info(f"Message {message.id} broadcasted successfully")
-    except Exception as e:
-        logger.error(f"Error broadcasting message via WebSocket: {e}", exc_info=True)
+    except Exception:
+        pass
     
-    # Создаем уведомление для пользователя
+    # Создаем уведомление для пользователя только если он не находится в чате
     try:
-        from app.services.notification_service import NotificationService
-        notification_service = NotificationService()
+        # Проверяем, есть ли активное WebSocket соединение для владельца тикета
+        connected_users = connection_manager.get_connected_users(ticket_id)
+        user_is_in_chat = ticket.user_id in connected_users
         
-        # Обрезаем текст сообщения для уведомления (если слишком длинный)
-        notification_message = message_text[:200] + "..." if len(message_text) > 200 else message_text
-        
-        await notification_service.create_notification(
-            user_id=ticket.user_id,
-            type="support_reply",
-            title=f"Ответ по тикету #{ticket_id}",
-            message=f"Поддержка ответила на ваш тикет \"{ticket.subject}\":\n{notification_message}",
-            priority="high",
-            document_id=None,
-            related_entity_type="support_ticket",
-            related_entity_id=ticket_id
-        )
-    except Exception as e:
-        logger.error(f"Error creating notification for ticket reply: {e}")
+        # Отправляем уведомление только если пользователь не в чате
+        if not user_is_in_chat:
+            from app.services.notification_service import NotificationService
+            notification_service = NotificationService()
+            
+            # Обрезаем текст сообщения для уведомления (если слишком длинный)
+            notification_message = message_text[:200] + "..." if len(message_text) > 200 else message_text
+            
+            await notification_service.create_notification(
+                user_id=ticket.user_id,
+                type="support_reply",
+                title=f"Ответ по тикету #{ticket_id}",
+                message=f"Поддержка ответила на ваш тикет \"{ticket.subject}\":\n{notification_message}",
+                priority="high",
+                document_id=None,
+                related_entity_type="support_ticket",
+                related_entity_id=ticket_id
+            )
+    except Exception:
+        pass
 

@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import {
   AppBar,
   Toolbar,
@@ -43,6 +43,7 @@ import { useTranslation } from 'react-i18next';
 import { observer } from 'mobx-react-lite';
 import { projectStore } from '../stores/ProjectStore';
 import { userStore } from '../stores/UserStore';
+import { reviewStore } from '../stores/ReviewStore';
 import { usePermissions } from '../hooks/usePermissions';
 import type { Project } from '../stores/ProjectStore';
 
@@ -153,6 +154,13 @@ const Layout: React.FC<LayoutProps> = observer(({
     }
   }, [notificationsOpen]);
 
+  // Загружаем ревью при изменении проекта
+  useEffect(() => {
+    if (projectStore.selectedProject?.id) {
+      reviewStore.loadReviews(projectStore.selectedProject.id);
+    }
+  }, [projectStore.selectedProject?.id]);
+
   const handleClose = () => {
     setAnchorEl(null);
   };
@@ -161,19 +169,29 @@ const Layout: React.FC<LayoutProps> = observer(({
     setMobileOpen(!mobileOpen);
   };
 
-  const menuItems = [
-    { id: 'dashboard', label: t('menu.dashboard'), icon: <DashboardIcon /> },
-    { id: 'projects', label: t('menu.projects'), icon: <ProjectIcon /> },
-    { id: 'documents', label: t('menu.documents'), icon: <DocumentIcon /> },
-    { id: 'transmittals', label: t('menu.transmittals'), icon: <TransmittalIcon /> },
-    { id: 'reviews', label: t('menu.reviews'), icon: <ReviewIcon /> },
-    ...(permissions.canViewWorkflows ? [{ id: 'workflows', label: t('menu.workflows'), icon: <WorkflowIcon /> }] : []),
-    ...(permissions.canViewUsers ? [{ id: 'users', label: t('menu.users'), icon: <UserIcon /> }] : []),
-    ...(permissions.canViewAdmin ? [
-      { id: 'audit-logs', label: t('menu.audit_logs'), icon: <HistoryIcon /> },
-      { id: 'admin', label: t('admin.title'), icon: <SettingsIcon />, external: true }
-    ] : []),
-  ];
+  const menuItems = useMemo(() => {
+    const pendingReviewsCount = reviewStore.reviews.length;
+    return [
+      { id: 'dashboard', label: t('menu.dashboard'), icon: <DashboardIcon /> },
+      { id: 'projects', label: t('menu.projects'), icon: <ProjectIcon /> },
+      { id: 'documents', label: t('menu.documents'), icon: <DocumentIcon /> },
+      { id: 'transmittals', label: t('menu.transmittals'), icon: <TransmittalIcon /> },
+      { 
+        id: 'reviews', 
+        label: t('menu.reviews'), 
+        icon: (
+          <Badge badgeContent={pendingReviewsCount > 0 ? pendingReviewsCount : undefined} color="error">
+            <ReviewIcon />
+          </Badge>
+        )
+      },
+      ...(permissions.canViewWorkflows ? [{ id: 'workflows', label: t('menu.workflows'), icon: <WorkflowIcon /> }] : []),
+      ...(permissions.canViewUsers ? [{ id: 'users', label: t('menu.users'), icon: <UserIcon /> }] : []),
+      ...(permissions.canViewAdmin ? [
+        { id: 'audit-logs', label: t('menu.audit_logs'), icon: <HistoryIcon /> }
+      ] : []),
+    ];
+  }, [t, reviewStore.reviews.length, permissions.canViewWorkflows, permissions.canViewUsers, permissions.canViewAdmin]);
 
   // Обновляем заголовок вкладки браузера в зависимости от текущего раздела
   useEffect(() => {
@@ -383,6 +401,17 @@ const Layout: React.FC<LayoutProps> = observer(({
                 </ListItemIcon>
                 <ListItemText>{t('support.my_tickets') || 'Мои обращения'}</ListItemText>
               </MenuItem>
+              {permissions.canViewAdmin && (
+                <MenuItem onClick={() => {
+                  handleClose();
+                  window.open('/admin', '_blank');
+                }}>
+                  <ListItemIcon>
+                    <SettingsIcon fontSize="small" />
+                  </ListItemIcon>
+                  <ListItemText>{t('admin.title')}</ListItemText>
+                </MenuItem>
+              )}
               <Divider />
               <MenuItem onClick={() => {
                 handleClose();

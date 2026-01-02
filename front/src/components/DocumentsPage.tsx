@@ -154,6 +154,7 @@ const DocumentsPage: React.FC = observer(() => {
     size,
     total,
     pages,
+    setPage,
     handleChangePage,
     handleChangeSize,
     documents: paginatedDocuments,
@@ -180,6 +181,18 @@ const DocumentsPage: React.FC = observer(() => {
     sortDir: order,
     pageSize: 13,
   });
+
+  // Слушаем событие обновления документов (например, после утверждения/отклонения)
+  useEffect(() => {
+    const handleDocumentsRefresh = () => {
+      refreshDocumentsData();
+    };
+
+    window.addEventListener('documents:refresh', handleDocumentsRefresh);
+    return () => {
+      window.removeEventListener('documents:refresh', handleDocumentsRefresh);
+    };
+  }, [refreshDocumentsData]);
   
   // Обработчик сортировки
   const handleRequestSort = (event: React.MouseEvent<unknown>, property: string) => {
@@ -676,11 +689,13 @@ const DocumentsPage: React.FC = observer(() => {
           open={newRevisionOpen}
           documentId={selectedDocumentId}
           onClose={handleCloseNewRevision}
-          onSuccess={() => {
+          onSuccess={async () => {
             if (selectedDocumentId) {
               documentRevisionStore.reloadRevisions(selectedDocumentId);
             }
-            refreshDocuments();
+            // Обновляем данные таблицы, принудительно загружая первую страницу
+            // (документ с новой ревизией должен быть на первой странице при сортировке по updated_at desc)
+            await refreshDocumentsData(1);
             refreshActiveRevisions(); // Обновляем активные ревизии для трансмиттала
           }}
         />

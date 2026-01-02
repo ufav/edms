@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   Box,
   Button,
@@ -19,6 +19,7 @@ import {
   Select,
   MenuItem,
 } from '@mui/material';
+import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import { observer } from 'mobx-react-lite';
 import { projectStore } from '../stores/ProjectStore';
 import type { Project } from '../stores/ProjectStore';
@@ -34,6 +35,7 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = observer(({ onProjectSel
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const dialogContentRef = useRef<HTMLDivElement>(null);
 
   const handleProjectClick = (project: Project) => {
     projectStore.selectProject(project);
@@ -90,6 +92,15 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = observer(({ onProjectSel
     );
   }, [projectStore.projects, statusFilter]);
 
+  // Явно переводим фокус внутрь Dialog при открытии
+  useEffect(() => {
+    if (open) {
+      setTimeout(() => {
+        dialogContentRef.current?.focus();
+      }, 0);
+    }
+  }, [open]);
+
   return (
     <>
       {/* Кнопка выбора проекта */}
@@ -138,6 +149,8 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = observer(({ onProjectSel
         maxWidth="lg"
         fullWidth
         fullScreen={isMobile}
+        disableAutoFocus
+        disableRestoreFocus
         PaperProps={{
           sx: { borderRadius: isMobile ? 0 : 2 }
         }}
@@ -145,7 +158,11 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = observer(({ onProjectSel
         <DialogTitle sx={{ position: 'sticky', top: 0, zIndex: 2, backgroundColor: 'background.paper' }}>
           {t('projects.selection.title')}
         </DialogTitle>
-        <DialogContent sx={{ p: 0, display: 'flex', flexDirection: 'column', height: 'calc(100vh - 120px)', overflow: 'hidden' }}>
+        <DialogContent 
+          ref={dialogContentRef}
+          tabIndex={-1}
+          sx={{ p: 0, display: 'flex', flexDirection: 'column', height: 'calc(100vh - 120px)', overflow: 'hidden' }}
+        >
           {projectStore.isLoading ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
               <CircularProgress />
@@ -199,7 +216,10 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = observer(({ onProjectSel
                 },
               }}>
                 <Grid container spacing={1.5}>
-                {filteredProjects.map((project) => (
+                {filteredProjects.map((project) => {
+                  const isSelected = projectStore.selectedProject?.id === project.id;
+                  const statusColor = getStatusColor(project.status);
+                  return (
                   <Grid item xs={10} sm={5} md={3} key={project.id}>
                     <Card
                       onClick={() => handleProjectClick(project)}
@@ -207,17 +227,35 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = observer(({ onProjectSel
                         aspectRatio: '1',
                         width: '100%',
                         cursor: 'pointer',
-                        border: '1px solid #e0e0e0',
+                        border: isSelected ? `3px solid ${statusColor.bg}` : '1px solid #e0e0e0',
+                        backgroundColor: isSelected ? `${statusColor.bg}40` : 'transparent',
                         boxShadow: 'none',
+                        position: 'relative',
                         '&:hover': {
-                          backgroundColor: 'rgba(25, 118, 210, 0.04)',
-                          borderColor: '#1976d2',
-                          boxShadow: 'none'
+                          backgroundColor: isSelected ? `${statusColor.bg}60` : 'rgba(25, 118, 210, 0.04)',
+                          borderColor: isSelected ? statusColor.bg : '#1976d2',
                         },
                         display: 'flex',
                         flexDirection: 'column'
                       }}
                     >
+                      {isSelected && (
+                        <Box
+                          sx={{
+                            position: 'absolute',
+                            top: 8,
+                            right: 8,
+                            zIndex: 1,
+                            color: statusColor.text,
+                            opacity: 0.7,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          <CheckCircleIcon sx={{ fontSize: 24 }} />
+                        </Box>
+                      )}
                       <CardContent sx={{ flex: 1, display: 'flex', flexDirection: 'column', p: 2 }}>
                         <Typography variant="subtitle1" sx={{ fontWeight: 'bold', mb: 1 }}>
                           {project.name}
@@ -299,8 +337,9 @@ const ProjectSelector: React.FC<ProjectSelectorProps> = observer(({ onProjectSel
                         </Box>
                       </CardContent>
                     </Card>
-                  </Grid>
-                ))}
+                    </Grid>
+                  );
+                })}
                 </Grid>
                 
                 {filteredProjects.length === 0 && (

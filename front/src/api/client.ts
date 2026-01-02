@@ -679,6 +679,18 @@ export const projectsApi = {
     return response.data;
   },
 
+  // Получить статистику по шагам ревизий для проекта
+  getRevisionStepsStats: async (projectId: number): Promise<Array<{
+    step_id: number;
+    step_code: string;
+    step_description?: string;
+    step_description_native?: string;
+    documents_count: number;
+  }>> => {
+    const response = await apiClient.get(`/projects/${projectId}/revision-steps-stats`);
+    return response.data;
+  },
+
   // Получить выбранный пресет workflow для проекта
   getWorkflowPreset: async (projectId: number): Promise<any> => {
     const response = await apiClient.get(`/projects/${projectId}/workflow-preset`);
@@ -1118,7 +1130,20 @@ export const reviewsApi = {
     const body = comments && comments.trim() ? { comments } : {};
     const response = await apiClient.post(`/reviews/reject/${documentId}`, body);
     return response.data;
-  }
+  },
+
+  // Получить статистику ревью
+  getReviewsStats: async (projectId?: number): Promise<{
+    total: number;
+    internal: number;
+    transmittal: number;
+    overdue: number;
+  }> => {
+    const params: any = {};
+    if (projectId) params.project_id = projectId;
+    const response = await apiClient.get('/reviews/stats', { params });
+    return response.data;
+  },
 };
 
 // API методы для пользователей

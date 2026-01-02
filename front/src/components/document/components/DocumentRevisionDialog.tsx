@@ -61,20 +61,16 @@ const DocumentRevisionDialog: React.FC<DocumentRevisionDialogProps> = ({
       onSuccess();
       handleClose();
     } catch (error: any) {
-      console.log('Error details:', error?.response?.data?.detail);
       let errorMessage = t('revision.upload_error');
       
       // Обрабатываем структурированную ошибку для ревизий
       if (error?.response?.data?.detail?.error_type === 'revision_status_error') {
         const { revision, status } = error.response.data.detail;
-        console.log('Revision error details:', { revision, status });
         // Используем ручную интерполяцию, если t() не работает
         const template = t('documents.revision_error');
         const interpolatedMessage = template
           .replace('{revision}', revision || 'Unknown')
           .replace('{status}', status || 'Unknown');
-        console.log('Template:', template);
-        console.log('Interpolated message:', interpolatedMessage);
         errorMessage = interpolatedMessage;
       } else if (error?.response?.data?.detail) {
         // Если detail - это строка, используем её
@@ -100,7 +96,14 @@ const DocumentRevisionDialog: React.FC<DocumentRevisionDialogProps> = ({
   };
 
   return (
-    <Dialog open={open} onClose={handleClose} maxWidth="sm" fullWidth>
+    <Dialog 
+      open={open} 
+      onClose={handleClose} 
+      maxWidth="sm" 
+      fullWidth
+      disableEnforceFocus
+      disableRestoreFocus
+    >
       <DialogTitle>{t('revision.dialog_title')}</DialogTitle>
       
       <DialogContent>

@@ -138,7 +138,7 @@ const MainTab: React.FC<MainTabProps> = ({
           <TextField
             fullWidth
             label={t('createProject.fields.name')}
-            value={formData.name}
+            value={formData.name || ''}
             onChange={(e) => handleInputChange('name', e.target.value)}
             required
             variant="standard"
@@ -148,7 +148,7 @@ const MainTab: React.FC<MainTabProps> = ({
           <TextField
             fullWidth
             label={t('createProject.fields.project_code')}
-            value={formData.project_code}
+            value={formData.project_code || ''}
             onChange={(e) => handleInputChange('project_code', e.target.value)}
             onBlur={handleProjectCodeBlur}
             placeholder="PRJ-001"
@@ -188,7 +188,7 @@ const MainTab: React.FC<MainTabProps> = ({
           <FormControl fullWidth variant="standard">
             <InputLabel>{t('common.status')}</InputLabel>
             <Select
-              value={formData.status}
+              value={formData.status || 'PLANNING'}
               onChange={(e) => handleInputChange('status', e.target.value)}
               label={t('common.status')}
               MenuProps={{
@@ -210,7 +210,7 @@ const MainTab: React.FC<MainTabProps> = ({
             multiline
             rows={3}
             label={t('createProject.fields.description')}
-            value={formData.description}
+            value={formData.description || ''}
             onChange={(e) => handleInputChange('description', e.target.value)}
             variant="standard"
           />
@@ -219,8 +219,8 @@ const MainTab: React.FC<MainTabProps> = ({
         <Grid item xs={12} md={3}>
           <DatePicker
             label={t('createProject.fields.start_date')}
-            value={formData.start_date}
-            onChange={(date) => handleInputChange('start_date', date)}
+            value={formData.start_date ?? null}
+            onChange={(date) => handleInputChange('start_date', date ?? null)}
             slotProps={{
               textField: {
                 fullWidth: true,
@@ -232,8 +232,8 @@ const MainTab: React.FC<MainTabProps> = ({
         <Grid item xs={12} md={3}>
           <DatePicker
             label={t('createProject.fields.end_date')}
-            value={formData.end_date}
-            onChange={(date) => handleInputChange('end_date', date)}
+            value={formData.end_date ?? null}
+            onChange={(date) => handleInputChange('end_date', date ?? null)}
             slotProps={{
               textField: {
                 fullWidth: true,

@@ -32,19 +32,21 @@ import {
   Close as RejectIcon,
   Visibility as ViewIcon,
   Download as DownloadIcon,
-  Refresh as RefreshIcon,
   Search as SearchIcon
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import { observer } from 'mobx-react-lite';
-import { reviewsApi } from '../../api/client';
+import { reviewsApi, documentsApi } from '../../api/client';
 import { projectStore } from '../../stores/ProjectStore';
 import { reviewStore } from '../../stores/ReviewStore';
+import { documentRevisionStore } from '../../stores/DocumentRevisionStore';
 import { formatFileSize } from '../document/utils/fileTypeUtils';
 import AppPagination from '../AppPagination';
 import ProjectRequired from '../ProjectRequired';
 import ReviewsTableSkeleton from './ReviewsTableSkeleton';
 import NotificationSnackbar from '../NotificationSnackbar';
+import { DocumentViewer } from '../document';
+import type { Document as ApiDocument } from '../../api/client';
 
 interface PendingApproval {
   document_id: number;
@@ -75,6 +77,10 @@ interface PendingApproval {
   sequence_order: number | null;
   is_final: boolean | null;
   requires_transmittal: boolean | null;
+  release_date: string | null;
+  due_date: string | null;
+  due_days: number | null;
+  is_overdue: boolean;
 }
 
 // Диалог подтверждения действия
@@ -196,6 +202,7 @@ interface ReviewTableProps {
   error: string | null;
   onApprove: (approval: PendingApproval) => void;
   onReject: (approval: PendingApproval) => void;
+  onShowDocument: (documentId: number) => void;
 }
 
 const ReviewTable: React.FC<ReviewTableProps> = ({
@@ -205,8 +212,9 @@ const ReviewTable: React.FC<ReviewTableProps> = ({
   error,
   onApprove,
   onReject,
+  onShowDocument,
 }) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
 
   const formatDate = (dateString: string): string => {
     try {
@@ -220,6 +228,41 @@ const ReviewTable: React.FC<ReviewTableProps> = ({
     } catch (error) {
       return '-';
     }
+  };
+
+  // Функция для вычисления количества дней просрочки
+  const getOverdueDays = (dueDate: string | null): number | null => {
+    if (!dueDate) return null;
+    try {
+      const due = new Date(dueDate);
+      const now = new Date();
+      const diffTime = now.getTime() - due.getTime();
+      const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+      return diffDays > 0 ? diffDays : null;
+    } catch (error) {
+      return null;
+    }
+  };
+
+  // Функция для правильного склонения слова "день" в русском языке
+  const getDaysWord = (days: number): string => {
+    if (i18n.language === 'ru') {
+      const lastDigit = days % 10;
+      const lastTwoDigits = days % 100;
+      
+      if (lastTwoDigits >= 11 && lastTwoDigits <= 14) {
+        return t('reviews.days_plural');
+      }
+      if (lastDigit === 1) {
+        return t('reviews.day_singular');
+      }
+      if (lastDigit >= 2 && lastDigit <= 4) {
+        return t('reviews.days_few');
+      }
+      return t('reviews.days_plural');
+    }
+    // Для английского
+    return days === 1 ? t('reviews.day_singular') : t('reviews.days_plural');
   };
 
   if (isLoading) {
@@ -290,36 +333,29 @@ const ReviewTable: React.FC<ReviewTableProps> = ({
                 fontWeight: 'bold',
                 fontSize: '0.875rem',
                 whiteSpace: 'nowrap',
-                width: '20%',
-                minWidth: '200px'
+                width: '15%',
+                minWidth: '150px'
               }}>{t('reviews.document')}</TableCell>
               <TableCell sx={{ 
                 fontWeight: 'bold',
                 fontSize: '0.875rem',
                 whiteSpace: 'nowrap',
-                width: '15%',
-                minWidth: '150px'
-              }}>{t('reviews.project')}</TableCell>
-              <TableCell sx={{ 
-                fontWeight: 'bold',
-                fontSize: '0.875rem',
-                whiteSpace: 'nowrap',
-                width: '10%',
-                minWidth: '100px'
+                width: '8%',
+                minWidth: '80px'
               }}>{t('reviews.revision')}</TableCell>
               <TableCell sx={{ 
                 fontWeight: 'bold',
                 fontSize: '0.875rem',
                 whiteSpace: 'nowrap',
-                width: '15%',
-                minWidth: '150px'
+                width: '12%',
+                minWidth: '120px'
               }}>{t('reviews.current_step')}</TableCell>
               <TableCell sx={{ 
                 fontWeight: 'bold',
                 fontSize: '0.875rem',
                 whiteSpace: 'nowrap',
-                width: '20%',
-                minWidth: '200px'
+                width: '15%',
+                minWidth: '150px'
               }}>{t('reviews.file_info')}</TableCell>
               <TableCell sx={{ 
                 fontWeight: 'bold',
@@ -327,7 +363,21 @@ const ReviewTable: React.FC<ReviewTableProps> = ({
                 whiteSpace: 'nowrap',
                 width: '12%',
                 minWidth: '120px'
-              }}>{t('reviews.uploaded_at')}</TableCell>
+              }}>{t('reviews.release_date')}</TableCell>
+              <TableCell sx={{ 
+                fontWeight: 'bold',
+                fontSize: '0.875rem',
+                whiteSpace: 'nowrap',
+                width: '10%',
+                minWidth: '100px'
+              }}>{t('reviews.due_days')}</TableCell>
+              <TableCell sx={{ 
+                fontWeight: 'bold',
+                fontSize: '0.875rem',
+                whiteSpace: 'nowrap',
+                width: '12%',
+                minWidth: '120px'
+              }}>{t('reviews.due_date')}</TableCell>
               <TableCell sx={{ 
                 fontWeight: 'bold',
                 fontSize: '0.875rem',
@@ -374,22 +424,39 @@ const ReviewTable: React.FC<ReviewTableProps> = ({
                   },
                 }}
               >
-                <TableCell sx={{ width: '20%', minWidth: '200px' }}>
-                  <Box>
-                    <Typography variant="body2" fontWeight="medium" noWrap>
-                      {approval.document_title}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary" noWrap>
+                <TableCell sx={{ width: '15%', minWidth: '150px' }}>
+                  <Box sx={{ maxWidth: '100%', overflow: 'hidden' }}>
+                    <Typography 
+                      variant="body2" 
+                      fontWeight="medium" 
+                      noWrap
+                      onClick={() => onShowDocument(approval.document_id)}
+                      sx={{ 
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        maxWidth: '100%',
+                        cursor: 'pointer',
+                        '&:hover': { textDecoration: 'underline' }
+                      }}
+                    >
                       {approval.document_number || t('common.no_number')}
+                    </Typography>
+                    <Typography 
+                      variant="caption" 
+                      color="text.secondary" 
+                      noWrap
+                      sx={{ 
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        maxWidth: '100%',
+                        display: 'block'
+                      }}
+                    >
+                      {approval.document_title}
                     </Typography>
                   </Box>
                 </TableCell>
-                <TableCell sx={{ width: '15%', minWidth: '150px' }}>
-                  <Typography variant="body2" noWrap>
-                    {approval.project_name || '-'}
-                  </Typography>
-                </TableCell>
-                <TableCell sx={{ width: '10%', minWidth: '100px' }}>
+                <TableCell sx={{ width: '8%', minWidth: '80px' }}>
                   <Chip 
                     label={approval.current_description?.code 
                       ? `${approval.current_description.code}${approval.revision_number || ''}` 
@@ -402,7 +469,7 @@ const ReviewTable: React.FC<ReviewTableProps> = ({
                     }}
                   />
                 </TableCell>
-                <TableCell sx={{ width: '15%', minWidth: '150px' }}>
+                <TableCell sx={{ width: '12%', minWidth: '120px' }}>
                   {approval.current_step ? (
                     <Box>
                       <Typography variant="body2" fontWeight="medium" noWrap>
@@ -416,7 +483,7 @@ const ReviewTable: React.FC<ReviewTableProps> = ({
                     '-'
                   )}
                 </TableCell>
-                <TableCell sx={{ width: '20%', minWidth: '200px' }}>
+                <TableCell sx={{ width: '15%', minWidth: '150px' }}>
                   {approval.file_name ? (
                     <Box>
                       <Typography variant="body2" noWrap>
@@ -432,8 +499,47 @@ const ReviewTable: React.FC<ReviewTableProps> = ({
                 </TableCell>
                 <TableCell sx={{ width: '12%', minWidth: '120px' }}>
                   <Typography variant="body2" noWrap>
-                    {approval.created_at ? formatDate(approval.created_at) : '-'}
+                    {approval.release_date ? formatDate(approval.release_date) : '-'}
                   </Typography>
+                </TableCell>
+                <TableCell sx={{ width: '10%', minWidth: '100px' }}>
+                  {approval.due_days ? (
+                    <Typography variant="body2" noWrap>
+                      {approval.due_days} {t('reviews.days')}
+                    </Typography>
+                  ) : (
+                    '-'
+                  )}
+                </TableCell>
+                <TableCell sx={{ width: '12%', minWidth: '120px' }}>
+                  {approval.due_date ? (
+                    <Box>
+                      <Typography 
+                        variant="body2" 
+                        noWrap
+                        sx={{
+                          color: approval.is_overdue ? 'error.main' : 'text.primary',
+                          fontWeight: approval.is_overdue ? 'bold' : 'normal'
+                        }}
+                      >
+                        {formatDate(approval.due_date)}
+                      </Typography>
+                      {approval.is_overdue && (() => {
+                        const overdueDays = getOverdueDays(approval.due_date);
+                        return overdueDays ? (
+                          <Typography variant="caption" color="error" noWrap>
+                            {t('reviews.overdue_on')} {overdueDays} {getDaysWord(overdueDays)}
+                          </Typography>
+                        ) : (
+                          <Typography variant="caption" color="error" noWrap>
+                            {t('reviews.overdue')}
+                          </Typography>
+                        );
+                      })()}
+                    </Box>
+                  ) : (
+                    '-'
+                  )}
                 </TableCell>
                 <TableCell sx={{ width: '8%', minWidth: '100px' }} align="center">
                   <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
@@ -494,6 +600,11 @@ const ReviewsPage: React.FC = observer(() => {
   });
   
   const [actionLoading, setActionLoading] = useState(false);
+  
+  // Состояние для открытия документа
+  const [documentDetailsOpen, setDocumentDetailsOpen] = useState(false);
+  const [selectedDocument, setSelectedDocument] = useState<ApiDocument | null>(null);
+  const [selectedDocumentId, setSelectedDocumentId] = useState<number | null>(null);
   
   // Состояние для уведомлений
   const [notification, setNotification] = useState({
@@ -587,6 +698,9 @@ const ReviewsPage: React.FC = observer(() => {
       // Обновляем список с принудительной перезагрузкой
       await reviewStore.loadReviews(projectStore.selectedProject?.id, true);
       
+      // Отправляем событие для обновления таблицы документов
+      window.dispatchEvent(new CustomEvent('documents:refresh'));
+      
       setApprovalDialog({ open: false, document: null, action: 'approve' });
     } catch (err: any) {
       setError(err.message || t('reviews.action_error'));
@@ -598,6 +712,39 @@ const ReviewsPage: React.FC = observer(() => {
     } finally {
       setActionLoading(false);
     }
+  };
+
+  // Обработчик открытия документа
+  const handleShowDocument = async (documentId: number) => {
+    try {
+      const document = await documentsApi.getById(documentId);
+      setSelectedDocument(document);
+      setSelectedDocumentId(documentId);
+      setDocumentDetailsOpen(true);
+      
+      try {
+        await documentRevisionStore.loadRevisions(documentId);
+      } catch (error: any) {
+        // Игнорируем ошибки загрузки ревизий
+      }
+    } catch (error: any) {
+      const errorMessage = error?.response?.data?.detail || error?.message || t('documents.load_document_error');
+      setNotification({
+        open: true,
+        message: errorMessage,
+        severity: 'error'
+      });
+    }
+  };
+
+  // Обработчик закрытия документа
+  const handleCloseDocumentDetails = () => {
+    setDocumentDetailsOpen(false);
+    setSelectedDocument(null);
+    if (selectedDocumentId) {
+      documentRevisionStore.clearRevisions(selectedDocumentId);
+    }
+    setSelectedDocumentId(null);
   };
 
   return (
@@ -624,16 +771,6 @@ const ReviewsPage: React.FC = observer(() => {
         <Typography variant={isMobile ? "h5" : "h4"} component="h1">
           {t('reviews.title')}
         </Typography>
-        <Box sx={{ display: 'flex', gap: 1, width: isMobile ? '100%' : 'auto' }}>
-          <Button
-            startIcon={<RefreshIcon />}
-            onClick={loadPendingApprovals}
-            variant="outlined"
-            sx={{ flex: isMobile ? 1 : 'none' }}
-          >
-            {t('common.refresh')}
-          </Button>
-        </Box>
       </Box>
 
       <ReviewFilters
@@ -653,6 +790,7 @@ const ReviewsPage: React.FC = observer(() => {
           error={reviewStore.error}
           onApprove={handleApprove}
           onReject={handleReject}
+          onShowDocument={handleShowDocument}
         />
       </Box>
 
@@ -684,6 +822,17 @@ const ReviewsPage: React.FC = observer(() => {
         message={notification.message}
         severity={notification.severity}
         onClose={handleCloseNotification}
+      />
+
+      {/* Просмотр документа */}
+      <DocumentViewer
+        open={documentDetailsOpen}
+        document={selectedDocument}
+        documentId={selectedDocumentId}
+        isCreating={false}
+        onClose={handleCloseDocumentDetails}
+        onNewRevision={() => {}}
+        onCompareRevisions={() => {}}
       />
       </Box>
     </ProjectRequired>

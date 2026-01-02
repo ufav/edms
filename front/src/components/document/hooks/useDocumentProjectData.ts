@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { projectsApi } from '../../../api/client';
 import { userStore } from '../../../stores/UserStore';
 import { projectStore } from '../../../stores/ProjectStore';
@@ -24,24 +24,56 @@ export const useDocumentProjectData = ({
   const [loadingProjectData, setLoadingProjectData] = useState(false);
   const [documentCreator, setDocumentCreator] = useState<any>(null);
   const [workflowPresetSequence, setWorkflowPresetSequence] = useState<any[]>([]);
+  
+  // Используем ref для отслеживания последнего загруженного проекта и предотвращения повторных загрузок
+  const lastLoadedProjectIdRef = useRef<number | null>(null);
+  const lastLoadedDisciplineIdRef = useRef<number | null>(null);
+  const lastLoadedCreatorIdRef = useRef<number | null>(null);
 
   // Загрузка данных проекта при открытии диалога
   useEffect(() => {
-    if (open) {
-      // Загружаем данные для создания, редактирования и просмотра документа
-      if (projectStore.selectedProject?.id) {
-        loadProjectData(projectStore.selectedProject.id);
+    if (open && projectStore.selectedProject?.id) {
+      const projectId = projectStore.selectedProject.id;
+      // Загружаем данные только если проект изменился
+      if (lastLoadedProjectIdRef.current !== projectId) {
+        lastLoadedProjectIdRef.current = projectId;
+        loadProjectData(projectId);
       }
-      // Загружаем типы документов для текущей дисциплины в режиме редактирования
-      if (isEditing && document?.discipline_id && projectStore.selectedProject?.id) {
-        loadDocumentTypes(projectStore.selectedProject.id, document.discipline_id);
-      }
-      // Загружаем информацию о создателе документа для режима просмотра
-      if (!isCreating && document?.created_by) {
-        loadDocumentCreator(document.created_by);
-      }
+    } else if (!open) {
+      // Сбрасываем при закрытии диалога
+      lastLoadedProjectIdRef.current = null;
     }
-  }, [open, isCreating, isEditing, projectStore.selectedProject?.id, documentId, document?.discipline_id]);
+  }, [open, projectStore.selectedProject?.id]);
+
+  // Загрузка типов документов для текущей дисциплины в режиме редактирования
+  useEffect(() => {
+    if (open && isEditing && document?.discipline_id && projectStore.selectedProject?.id) {
+      const disciplineId = document.discipline_id;
+      // Загружаем только если дисциплина изменилась
+      if (lastLoadedDisciplineIdRef.current !== disciplineId) {
+        lastLoadedDisciplineIdRef.current = disciplineId;
+        loadDocumentTypes(projectStore.selectedProject.id, disciplineId);
+      }
+    } else if (!open || !isEditing) {
+      // Сбрасываем при закрытии диалога или выходе из режима редактирования
+      lastLoadedDisciplineIdRef.current = null;
+    }
+  }, [open, isEditing, document?.discipline_id, projectStore.selectedProject?.id]);
+
+  // Загрузка информации о создателе документа для режима просмотра
+  useEffect(() => {
+    if (open && !isCreating && document?.created_by) {
+      const creatorId = document.created_by;
+      // Загружаем только если создатель изменился
+      if (lastLoadedCreatorIdRef.current !== creatorId) {
+        lastLoadedCreatorIdRef.current = creatorId;
+        loadDocumentCreator(creatorId);
+      }
+    } else if (!open || isCreating) {
+      // Сбрасываем при закрытии диалога или переходе в режим создания
+      lastLoadedCreatorIdRef.current = null;
+    }
+  }, [open, isCreating, document?.created_by]);
 
   // Загрузка дисциплин проекта
   const loadProjectData = async (projectId: number) => {
@@ -53,10 +85,8 @@ export const useDocumentProjectData = ({
       // Загружаем workflow preset sequence для создания и просмотра документа
       try {
         const sequence = await projectsApi.getWorkflowPresetSequence(projectId);
-        console.log('Loaded workflow preset sequence:', sequence);
         setWorkflowPresetSequence(sequence || []);
       } catch (error) {
-        console.error('Error loading workflow preset sequence:', error);
         setWorkflowPresetSequence([]);
       }
       
@@ -65,7 +95,7 @@ export const useDocumentProjectData = ({
         setProjectDocumentTypes([]);
       }
     } catch (error) {
-      console.error('Error loading project data:', error);
+      // Ошибка загрузки данных проекта
     } finally {
       setLoadingProjectData(false);
     }

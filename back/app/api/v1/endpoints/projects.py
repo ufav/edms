@@ -730,41 +730,45 @@ async def update_project(
         if value is not None:
             # Проверяем изменение статуса проекта
             if field == "status":
-                # Проверяем, есть ли утвержденные документы в проекте
-                from app.models.document import Document, DocumentRevision
-                from app.models.references import WorkflowStatus
+                # Преобразуем значение в строку для сравнения
+                status_str = value.value if hasattr(value, 'value') else str(value)
+                status_str_upper = status_str.upper()
                 
-                approved_like_statuses = db.query(WorkflowStatus).filter(
-                    WorkflowStatus.name.in_(["Approved", "Approved with Comments", "Not Reviewed"])
-                ).all()
-                approved_like_ids = {s.id for s in approved_like_statuses}
-                
-                has_approved_document = False
-                if approved_like_ids:
-                    # Проверяем, есть ли в проекте документы с утвержденными ревизиями
-                    project_documents = db.query(Document).filter(
-                        Document.project_id == project_id,
-                        Document.is_deleted == 0
-                    ).all()
+                # Разрешаем изменение на PLANNING в любом случае
+                if status_str_upper == "PLANNING":
+                    # Можно всегда установить статус на PLANNING
+                    pass
+                else:
+                    # Для других статусов проверяем, есть ли утвержденные документы
+                    from app.models.document import Document, DocumentRevision
+                    from app.models.references import WorkflowStatus
                     
-                    for doc in project_documents:
-                        latest_revision = db.query(DocumentRevision).filter(
-                            DocumentRevision.document_id == doc.id,
-                            DocumentRevision.is_deleted == 0
-                        ).order_by(DocumentRevision.created_at.desc()).first()
+                    approved_like_statuses = db.query(WorkflowStatus).filter(
+                        WorkflowStatus.name.in_(["Approved", "Approved with Comments", "Not Reviewed"])
+                    ).all()
+                    approved_like_ids = {s.id for s in approved_like_statuses}
+                    
+                    has_approved_document = False
+                    if approved_like_ids:
+                        # Проверяем, есть ли в проекте документы с утвержденными ревизиями
+                        project_documents = db.query(Document).filter(
+                            Document.project_id == project_id,
+                            Document.is_deleted == 0
+                        ).all()
                         
-                        if latest_revision and latest_revision.workflow_status_id in approved_like_ids:
-                            has_approved_document = True
-                            break
-                
-                # Если пытаются установить статус не PLANNING, но нет утвержденных документов
-                # Разрешаем только PLANNING
-                if not has_approved_document:
-                    # Преобразуем значение в строку для сравнения
-                    status_str = value.value if hasattr(value, 'value') else str(value)
-                    # Проверяем, что статус не PLANNING (в любом регистре)
-                    # В БД статусы хранятся в верхнем регистре (PLANNING, ACTIVE и т.д.)
-                    if status_str.upper() != "PLANNING":
+                        for doc in project_documents:
+                            latest_revision = db.query(DocumentRevision).filter(
+                                DocumentRevision.document_id == doc.id,
+                                DocumentRevision.is_deleted == 0
+                            ).order_by(DocumentRevision.created_at.desc()).first()
+                            
+                            if latest_revision and latest_revision.workflow_status_id in approved_like_ids:
+                                has_approved_document = True
+                                break
+                    
+                    # Если пытаются установить статус не PLANNING, но нет утвержденных документов
+                    # Разрешаем только PLANNING
+                    if not has_approved_document:
                         raise HTTPException(
                             status_code=400, 
                             detail="Статус проекта может быть изменен только после появления первого утвержденного документа"
@@ -1609,3 +1613,105 @@ async def get_project_workflow_preset(
             }
     
     return {"id": None, "name": None, "description": None}
+
+
+@router.get("/{project_id}/revision-steps-stats")
+async def get_revision_steps_stats(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Получение статистики по шагам ревизий для проекта"""
+    project = db.query(Project).filter(Project.id == project_id, Project.is_deleted == 0).first()
+    if not project:
+        raise HTTPException(status_code=404, detail="Проект не найден")
+    
+    check_project_access(project, current_user, db)
+    
+    from app.models.references import RevisionStep
+    
+    # Получаем все шаги ревизий проекта
+    from app.models.project import ProjectRevisionStep
+    project_steps = db.query(ProjectRevisionStep).filter(
+        ProjectRevisionStep.project_id == project_id
+    ).all()
+    
+    step_ids = [ps.revision_step_id for ps in project_steps]
+    if not step_ids:
+        return []
+    
+    # Получаем информацию о шагах
+    revision_steps = db.query(RevisionStep).filter(
+        RevisionStep.id.in_(step_ids)
+    ).all()
+    
+    step_info_map = {rs.id: rs for rs in revision_steps}
+    
+    # Получаем все документы проекта
+    documents = db.query(Document).filter(
+        Document.project_id == project_id,
+        Document.is_deleted == 0
+    ).all()
+    
+    # Создаем подзапрос для получения последней ревизии каждого документа
+    latest_revision_subquery = db.query(
+        DocumentRevision.document_id,
+        func.max(DocumentRevision.created_at).label('max_created_at')
+    ).filter(
+        DocumentRevision.is_deleted == 0
+    ).group_by(DocumentRevision.document_id).subquery()
+    
+    # Получаем последние ревизии всех документов
+    latest_revisions = db.query(
+        DocumentRevision
+    ).join(
+        latest_revision_subquery,
+        and_(
+            DocumentRevision.document_id == latest_revision_subquery.c.document_id,
+            DocumentRevision.created_at == latest_revision_subquery.c.max_created_at,
+            DocumentRevision.is_deleted == 0
+        )
+    ).filter(
+        DocumentRevision.document_id.in_([doc.id for doc in documents])
+    ).all()
+    
+    # Подсчитываем количество документов на каждом шаге
+    step_counts = {}
+    for revision in latest_revisions:
+        if revision.revision_step_id and revision.revision_step_id in step_info_map:
+            step_id = revision.revision_step_id
+            if step_id not in step_counts:
+                step_counts[step_id] = 0
+            step_counts[step_id] += 1
+    
+    # Получаем порядок шагов из workflow preset sequence
+    step_order_map = {}
+    if project.workflow_preset_id:
+        from app.models.project import WorkflowPresetSequence
+        sequences = db.query(WorkflowPresetSequence).filter(
+            WorkflowPresetSequence.preset_id == project.workflow_preset_id
+        ).order_by(WorkflowPresetSequence.sequence_order).all()
+        
+        # Создаем карту порядка для шагов (берем минимальный sequence_order для каждого шага)
+        for seq in sequences:
+            if seq.revision_step_id and seq.revision_step_id not in step_order_map:
+                step_order_map[seq.revision_step_id] = seq.sequence_order
+    
+    # Формируем результат
+    result = []
+    for step_id in step_ids:
+        step = step_info_map.get(step_id)
+        if step:
+            result.append({
+                "step_id": step.id,
+                "step_code": step.code,
+                "step_description": step.description,
+                "step_description_native": step.description_native,
+                "documents_count": step_counts.get(step.id, 0),
+                "sequence_order": step_order_map.get(step.id, 9999)  # Если нет в sequence, ставим в конец
+            })
+    
+    # Сортируем по порядку из workflow preset, затем по коду шага
+    result.sort(key=lambda x: (x["sequence_order"], x["step_code"] or ""))
+    
+    return result

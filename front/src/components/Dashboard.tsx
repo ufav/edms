@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Box, Typography, Grid, Card, CardContent, Button, Paper, CircularProgress, Alert, useTheme, useMediaQuery } from '@mui/material';
+import { Box, Typography, Grid, Card, CardContent, Button, Paper, CircularProgress, Alert, useTheme, useMediaQuery, Skeleton } from '@mui/material';
 import { 
   Add as AddIcon, 
   Description as DocumentIcon, 
@@ -46,6 +46,7 @@ const Dashboard: React.FC = observer(() => {
   const stats = dashboardStore.getStats();
   const recentActivities = dashboardStore.getRecentActivities(t);
   const disciplineStats = dashboardStore.getDisciplineStats();
+  const revisionStepsStats = dashboardStore.getRevisionStepsStats();
 
   // Загружаем дисциплины для выбранного проекта (для локализации названий)
   useEffect(() => {
@@ -88,8 +89,66 @@ const Dashboard: React.FC = observer(() => {
 
   if (dashboardStore.isLoading) {
     return (
-      <Box sx={{ width: '100%', p: 3, display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
-        <CircularProgress size={60} />
+      <Box sx={{ width: '100%', p: 3 }}>
+        <Skeleton variant="text" width={300} height={40} sx={{ mb: 1.5 }} />
+        
+        {/* Statistics Cards Skeleton */}
+        <Grid container spacing={isMobile ? 1 : 1.5} sx={{ mb: isMobile ? 1 : 1.5 }}>
+          {[1, 2, 3, 4, 5].map((i) => (
+            <Grid item xs={12} sm={6} md={2} key={i}>
+              <Card sx={{ boxShadow: 'none', border: '1px solid #e0e0e0' }}>
+                <CardContent>
+                  <Box display="flex" alignItems="center" justifyContent="space-between">
+                    <Box sx={{ flex: 1 }}>
+                      <Skeleton variant="text" width="60%" height={20} sx={{ mb: 1 }} />
+                      <Skeleton variant="text" width="40%" height={40} />
+                    </Box>
+                    <Skeleton variant="circular" width={40} height={40} />
+                  </Box>
+                </CardContent>
+              </Card>
+            </Grid>
+          ))}
+        </Grid>
+
+        {/* Progress Sections Skeleton */}
+        <Grid container spacing={isMobile ? 2 : 3}>
+          <Grid item xs={12} md={6}>
+            <Paper sx={{ p: isMobile ? 2 : 3, boxShadow: 'none', border: '1px solid #e0e0e0' }}>
+              <Skeleton variant="text" width={200} height={32} sx={{ mb: 1.5 }} />
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: isMobile ? 0.75 : 1 }}>
+                {[1, 2, 3, 4].map((i) => (
+                  <Box key={i} sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                    <Skeleton 
+                      variant="rectangular" 
+                      width="100%" 
+                      height={32} 
+                      sx={{ borderRadius: '999px' }}
+                    />
+                  </Box>
+                ))}
+              </Box>
+            </Paper>
+          </Grid>
+
+          <Grid item xs={12} md={6}>
+            <Paper sx={{ p: isMobile ? 2 : 3, boxShadow: 'none', border: '1px solid #e0e0e0' }}>
+              <Skeleton variant="text" width={250} height={32} sx={{ mb: 1.5 }} />
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: isMobile ? 0.5 : 0.75 }}>
+                {[1, 2, 3, 4].map((i) => (
+                  <Box key={i} sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                    <Skeleton 
+                      variant="rectangular" 
+                      width="100%" 
+                      height={32} 
+                      sx={{ borderRadius: '999px' }}
+                    />
+                  </Box>
+                ))}
+              </Box>
+            </Paper>
+          </Grid>
+        </Grid>
       </Box>
     );
   }
@@ -111,27 +170,9 @@ const Dashboard: React.FC = observer(() => {
       </Typography>
       
       {/* Statistics Cards */}
-      <Grid container spacing={isMobile ? 2 : 3} sx={{ mb: 4 }}>
-        <Grid item xs={12} sm={6} md={3}>
-          <Card sx={{ boxShadow: '0 2px 8px rgba(0,0,0,0.1)', border: '1px solid #e0e0e0' }}>
-            <CardContent>
-              <Box display="flex" alignItems="center" justifyContent="space-between">
-                <Box>
-                  <Typography color="text.secondary" gutterBottom>
-                    {t('dashboard.total_projects')}
-                  </Typography>
-                  <Typography variant="h4" component="div" sx={{ fontWeight: 'bold' }}>
-                    {stats.totalProjects}
-                  </Typography>
-                </Box>
-                <ProjectIcon color="primary" sx={{ fontSize: 40 }} />
-              </Box>
-            </CardContent>
-          </Card>
-        </Grid>
-
-        <Grid item xs={12} sm={6} md={3}>
-          <Card sx={{ boxShadow: '0 2px 8px rgba(0,0,0,0.1)', border: '1px solid #e0e0e0' }}>
+      <Grid container spacing={isMobile ? 1 : 1.5} sx={{ mb: isMobile ? 1 : 1.5 }}>
+        <Grid item xs={12} sm={6} md={2}>
+          <Card sx={{ boxShadow: 'none', border: '1px solid #e0e0e0' }}>
             <CardContent>
               <Box display="flex" alignItems="center" justifyContent="space-between">
                 <Box>
@@ -148,16 +189,52 @@ const Dashboard: React.FC = observer(() => {
           </Card>
         </Grid>
 
-        <Grid item xs={12} sm={6} md={3}>
-          <Card sx={{ boxShadow: '0 2px 8px rgba(0,0,0,0.1)', border: '1px solid #e0e0e0' }}>
+        <Grid item xs={12} sm={6} md={2}>
+          <Card sx={{ boxShadow: 'none', border: '1px solid #e0e0e0' }}>
             <CardContent>
               <Box display="flex" alignItems="center" justifyContent="space-between">
                 <Box>
                   <Typography color="text.secondary" gutterBottom>
-                    {t('dashboard.total_transmittals')}
+                    {t('dashboard.reviews_pending')}
                   </Typography>
                   <Typography variant="h4" component="div" sx={{ fontWeight: 'bold' }}>
-                    {stats.totalTransmittals}
+                    {stats.reviewsTotal}
+                  </Typography>
+                </Box>
+                <ReviewIcon color="primary" sx={{ fontSize: 40 }} />
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        <Grid item xs={12} sm={6} md={2}>
+          <Card sx={{ boxShadow: 'none', border: '1px solid #e0e0e0' }}>
+            <CardContent>
+              <Box display="flex" alignItems="center" justifyContent="space-between">
+                <Box>
+                  <Typography color="text.secondary" gutterBottom>
+                    {t('dashboard.reviews_internal')}
+                  </Typography>
+                  <Typography variant="h4" component="div" sx={{ fontWeight: 'bold' }}>
+                    {stats.reviewsInternal}
+                  </Typography>
+                </Box>
+                <ReviewIcon color="info" sx={{ fontSize: 40 }} />
+              </Box>
+            </CardContent>
+          </Card>
+        </Grid>
+
+        <Grid item xs={12} sm={6} md={2}>
+          <Card sx={{ boxShadow: 'none', border: '1px solid #e0e0e0' }}>
+            <CardContent>
+              <Box display="flex" alignItems="center" justifyContent="space-between">
+                <Box>
+                  <Typography color="text.secondary" gutterBottom>
+                    {t('dashboard.reviews_transmittal')}
+                  </Typography>
+                  <Typography variant="h4" component="div" sx={{ fontWeight: 'bold' }}>
+                    {stats.reviewsTransmittal}
                   </Typography>
                 </Box>
                 <TransmittalIcon color="warning" sx={{ fontSize: 40 }} />
@@ -166,16 +243,16 @@ const Dashboard: React.FC = observer(() => {
           </Card>
         </Grid>
 
-        <Grid item xs={12} sm={6} md={3}>
-          <Card sx={{ boxShadow: '0 2px 8px rgba(0,0,0,0.1)', border: '1px solid #e0e0e0' }}>
+        <Grid item xs={12} sm={6} md={2}>
+          <Card sx={{ boxShadow: 'none', border: '1px solid #e0e0e0' }}>
             <CardContent>
               <Box display="flex" alignItems="center" justifyContent="space-between">
                 <Box>
                   <Typography color="text.secondary" gutterBottom>
-                    {t('dashboard.pending_reviews')}
+                    {t('dashboard.reviews_overdue')}
                   </Typography>
-                  <Typography variant="h4" component="div" sx={{ fontWeight: 'bold' }}>
-                    {stats.pendingReviews}
+                  <Typography variant="h4" component="div" sx={{ fontWeight: 'bold', color: 'error.main' }}>
+                    {stats.reviewsOverdue}
                   </Typography>
                 </Box>
                 <ReviewIcon color="error" sx={{ fontSize: 40 }} />
@@ -189,13 +266,13 @@ const Dashboard: React.FC = observer(() => {
       {/* блок быстрых действий можно вернуть, раскомментировав код ниже */}
       {/* <Grid container spacing={isMobile ? 2 : 3}>...</Grid> */}
 
-      <Grid container spacing={isMobile ? 2 : 3}>
+      <Grid container spacing={isMobile ? 1 : 1.5}>
         <Grid item xs={12} md={6}>
-          <Paper sx={{ p: isMobile ? 2 : 3, boxShadow: '0 2px 8px rgba(0,0,0,0.1)', border: '1px solid #e0e0e0' }}>
-            <Typography variant="h6" gutterBottom>
+          <Paper sx={{ p: isMobile ? 2 : 3, boxShadow: 'none', border: '1px solid #e0e0e0' }}>
+            <Typography variant="h6" gutterBottom sx={{ mb: 1.5 }}>
               {t('dashboard.discipline_stats_title')}
             </Typography>
-            <Box sx={{ display: 'flex', flexDirection: 'column', gap: isMobile ? 1.5 : 2 }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: isMobile ? 0.5 : 0.75 }}>
               {disciplineStats.length > 0 ? (
                 disciplineStats.map((item) => {
                   // Пытаемся найти дисциплину в store по id или коду
@@ -228,26 +305,20 @@ const Dashboard: React.FC = observer(() => {
                       key={item.disciplineId ?? code ?? 'none'}
                       sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}
                     >
-                      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <Typography variant="body2" sx={{ mr: 1 }} noWrap>
-                          {label}
-                        </Typography>
-                        <Typography variant="body2" sx={{ fontWeight: 'bold', whiteSpace: 'nowrap' }}>
-                          {closed}/{total} ({percent}%)
-                        </Typography>
-                      </Box>
-
-                      {/* Примитивный горизонтальный чарт: доля закрытых документов */}
+                      {/* Прогресс-бар с названием дисциплины поверх */}
                       <Box
                         sx={{
                           position: 'relative',
                           width: '100%',
-                          height: 8,
+                          height: 32,
                           borderRadius: 999,
                           backgroundColor: 'grey.200',
                           overflow: 'hidden',
+                          display: 'flex',
+                          alignItems: 'center',
                         }}
                       >
+                        {/* Заполненная часть прогресс-бара */}
                         <Box
                           sx={{
                             position: 'absolute',
@@ -256,10 +327,46 @@ const Dashboard: React.FC = observer(() => {
                             bottom: 0,
                             width: `${percent}%`,
                             maxWidth: '100%',
-                            background: 'linear-gradient(90deg, #4caf50, #81c784)',
+                            background: 'linear-gradient(90deg, #81c784, #a5d6a7)',
                             transition: 'width 0.3s ease',
                           }}
                         />
+                        {/* Название дисциплины и процент поверх прогресс-бара */}
+                        <Box
+                          sx={{
+                            position: 'relative',
+                            zIndex: 1,
+                            width: '100%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            px: 2,
+                          }}
+                        >
+                          <Typography 
+                            variant="body2" 
+                            sx={{ 
+                              mr: 1,
+                              fontWeight: 500,
+                              color: 'text.primary',
+                              textShadow: '0 1px 2px rgba(0,0,0,0.1)',
+                            }} 
+                            noWrap
+                          >
+                            {label}
+                          </Typography>
+                          <Typography 
+                            variant="body2" 
+                            sx={{ 
+                              fontWeight: 'bold', 
+                              whiteSpace: 'nowrap',
+                              color: 'text.primary',
+                              textShadow: '0 1px 2px rgba(0,0,0,0.1)',
+                            }}
+                          >
+                            {closed}/{total} ({percent}%)
+                          </Typography>
+                        </Box>
                       </Box>
                     </Box>
                   );
@@ -274,7 +381,105 @@ const Dashboard: React.FC = observer(() => {
         </Grid>
 
         <Grid item xs={12} md={6}>
-          <Paper sx={{ p: isMobile ? 2 : 3, boxShadow: '0 2px 8px rgba(0,0,0,0.1)', border: '1px solid #e0e0e0' }}>
+          <Paper sx={{ p: isMobile ? 2 : 3, boxShadow: 'none', border: '1px solid #e0e0e0' }}>
+            <Typography variant="h6" gutterBottom sx={{ mb: 1.5 }}>
+              {t('dashboard.revision_steps_stats_title')}
+            </Typography>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: isMobile ? 0.5 : 0.75 }}>
+              {revisionStepsStats.length > 0 ? (
+                revisionStepsStats.map((item) => {
+                  const code = item.stepCode || '';
+                  const name = i18n.language === 'en' 
+                    ? (item.stepDescription || '') 
+                    : (item.stepDescriptionNative || item.stepDescription || '');
+                  const label = code && name ? `${code} - ${name}` : (code || name || t('document.not_specified'));
+                  const count = item.documentsCount;
+                  const total = stats.totalDocuments;
+                  const percent = total > 0 ? Math.round((count / total) * 100) : 0;
+
+                  return (
+                    <Box
+                      key={item.stepId ?? code ?? 'none'}
+                      sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}
+                    >
+                      {/* Прогресс-бар с названием шага поверх */}
+                      <Box
+                        sx={{
+                          position: 'relative',
+                          width: '100%',
+                          height: 32,
+                          borderRadius: 999,
+                          backgroundColor: 'grey.200',
+                          overflow: 'hidden',
+                          display: 'flex',
+                          alignItems: 'center',
+                        }}
+                      >
+                        {/* Заполненная часть прогресс-бара */}
+                        <Box
+                          sx={{
+                            position: 'absolute',
+                            left: 0,
+                            top: 0,
+                            bottom: 0,
+                            width: `${percent}%`,
+                            maxWidth: '100%',
+                            background: 'linear-gradient(90deg, #64b5f6, #90caf9)',
+                            transition: 'width 0.3s ease',
+                          }}
+                        />
+                        {/* Название шага и количество поверх прогресс-бара */}
+                        <Box
+                          sx={{
+                            position: 'relative',
+                            zIndex: 1,
+                            width: '100%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            px: 2,
+                          }}
+                        >
+                          <Typography 
+                            variant="body2" 
+                            sx={{ 
+                              mr: 1,
+                              fontWeight: 500,
+                              color: 'text.primary',
+                              textShadow: '0 1px 2px rgba(0,0,0,0.1)',
+                            }} 
+                            noWrap
+                          >
+                            {label}
+                          </Typography>
+                          <Typography 
+                            variant="body2" 
+                            sx={{ 
+                              fontWeight: 'bold', 
+                              whiteSpace: 'nowrap',
+                              color: 'text.primary',
+                              textShadow: '0 1px 2px rgba(0,0,0,0.1)',
+                            }}
+                          >
+                            {count}
+                          </Typography>
+                        </Box>
+                      </Box>
+                    </Box>
+                  );
+                })
+              ) : (
+                <Typography variant="body2" color="text.secondary">
+                  {t('dashboard.no_revision_steps_stats')}
+                </Typography>
+              )}
+            </Box>
+          </Paper>
+        </Grid>
+
+        {/* Последние активности - скрыто */}
+        {/* <Grid item xs={12} md={6}>
+          <Paper sx={{ p: isMobile ? 2 : 3, boxShadow: 'none', border: '1px solid #e0e0e0' }}>
             <Typography variant="h6" gutterBottom>
               {t('dashboard.recent_activities')}
             </Typography>
@@ -300,7 +505,7 @@ const Dashboard: React.FC = observer(() => {
               )}
             </Box>
           </Paper>
-        </Grid>
+        </Grid> */}
       </Grid>
 
       {/* Модалки существующих компонентов */}

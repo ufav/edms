@@ -491,11 +491,9 @@ async def create_support_message(
             ticket_id=ticket_id,
             exclude_user_id=current_user.id
         )
-    except Exception as e:
-        # Логируем ошибку, но не прерываем выполнение
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.error(f"Error broadcasting message via WebSocket: {e}")
+    except Exception:
+        # Ошибка WebSocket, не прерываем выполнение
+        pass
     
     # Отправка уведомления в Telegram
     if telegram_service.is_configured():
@@ -557,10 +555,9 @@ async def reopen_ticket(
             ticket_id=ticket_id,
             exclude_user_id=None
         )
-    except Exception as e:
-        import logging
-        logger = logging.getLogger(__name__)
-        logger.error(f"Error broadcasting ticket reopening via WebSocket: {e}")
+    except Exception:
+        # Ошибка WebSocket, не прерываем выполнение
+        pass
     
     # Отправка уведомления в Telegram администратору
     if telegram_service.is_configured():

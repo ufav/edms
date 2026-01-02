@@ -83,7 +83,6 @@ const SupportFileImage: React.FC<{
           setLoading(false);
         }
       } catch (err) {
-        console.error('Error loading image:', err);
         if (isMounted) {
           setError(true);
           setLoading(false);
@@ -198,26 +197,23 @@ const SupportChatDialog: React.FC<SupportChatDialogProps> = ({ open, ticketId, o
 
   // Мемоизируем колбэки, чтобы они не пересоздавались при каждом рендере
   const handleWebSocketMessage = useCallback((newMessage: any) => {
-    console.log('handleWebSocketMessage called with:', newMessage);
     setMessages((prev) => {
       // Проверяем, нет ли уже такого сообщения (избегаем дубликатов)
       const exists = prev.some((msg) => msg.id === newMessage.id);
       if (exists) {
-        console.log('Message already exists, skipping:', newMessage.id);
         return prev;
       }
       const converted = convertSupportMessageToChatMessage(newMessage);
-      console.log('Adding new message:', converted);
       return [...prev, converted];
     });
   }, [convertSupportMessageToChatMessage]);
   
   const handleWebSocketConnected = useCallback(() => {
-    console.log('WebSocket connected for ticket', ticketId);
-  }, [ticketId]);
+    // WebSocket подключен
+  }, []);
   
   const handleWebSocketError = useCallback((err: Event) => {
-    console.error('WebSocket error:', err);
+    // Ошибка WebSocket
   }, []);
 
   // WebSocket для real-time обновлений
@@ -506,7 +502,7 @@ const SupportChatDialog: React.FC<SupportChatDialogProps> = ({ open, ticketId, o
                     a.click();
                     URL.revokeObjectURL(url);
                   } catch (err) {
-                    console.error('Error downloading file:', err);
+                    // Ошибка скачивания файла
                   }
                 }
               }}
