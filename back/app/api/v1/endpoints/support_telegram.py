@@ -19,6 +19,7 @@ from app.models.notification import Notification
 from app.services.auth import get_current_active_user
 from app.services.websocket_manager import connection_manager
 from app.services.telegram_service import telegram_service
+from app.api.v1.endpoints.support import SupportMessageResponse
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -854,15 +855,18 @@ async def create_support_reply_from_telegram(
     
     # Отправляем через WebSocket
     try:
-        message_dict = {
-            "id": message.id,
-            "ticket_id": message.ticket_id,
-            "sender_type": message.sender_type,
-            "sender_id": message.sender_id,
-            "message_text": message.message_text,
-            "created_at": message.created_at.isoformat(),
-            "files": [],
-        }
+        # Используем тот же формат, что и в support.py
+        message_response = SupportMessageResponse(
+            id=message.id,
+            ticket_id=message.ticket_id,
+            sender_type=message.sender_type,
+            sender_id=message.sender_id,
+            message_text=message.message_text,
+            created_at=message.created_at,
+            files=[],  # Сообщения из Telegram не содержат файлов
+        )
+        # Pydantic v2 использует model_dump()
+        message_dict = message_response.model_dump()
         await connection_manager.broadcast_to_ticket(
             {
                 "type": "new_message",
