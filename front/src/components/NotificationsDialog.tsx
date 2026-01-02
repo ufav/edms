@@ -51,6 +51,7 @@ const NotificationsDialog: React.FC<NotificationsDialogProps> = ({
   anchorEl,
   onClose,
   onNotificationClick,
+  onUnreadCountChange,
 }) => {
   const { t } = useTranslation();
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -117,7 +118,9 @@ const NotificationsDialog: React.FC<NotificationsDialogProps> = ({
           n.id === notificationId ? { ...n, is_read: true } : n
         )
       );
-      setUnreadCount((prev) => Math.max(0, prev - 1));
+      const newCount = Math.max(0, unreadCount - 1);
+      setUnreadCount(newCount);
+      onUnreadCountChange?.(newCount);
     } catch (error) {
       console.error('Error marking notification as read:', error);
     }
@@ -129,9 +132,7 @@ const NotificationsDialog: React.FC<NotificationsDialogProps> = ({
       setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
       setUnreadCount(0);
       // Уведомляем родительский компонент об изменении счетчика
-      if (onUnreadCountChange) {
-        onUnreadCountChange(0);
-      }
+      onUnreadCountChange?.(0);
     } catch (error) {
       console.error('Error marking all as read:', error);
     }
