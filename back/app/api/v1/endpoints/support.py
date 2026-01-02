@@ -481,8 +481,8 @@ async def create_support_message(
     
     # Отправка сообщения через WebSocket всем подключенным к тикету (кроме отправителя)
     try:
-        # Pydantic v2 использует model_dump()
-        message_dict = message_response.model_dump()
+        # Pydantic v2 использует model_dump() с mode='json' для правильной сериализации datetime
+        message_dict = message_response.model_dump(mode='json')
         await connection_manager.broadcast_to_ticket(
             {
                 "type": "new_message",

@@ -865,8 +865,9 @@ async def create_support_reply_from_telegram(
             created_at=message.created_at,
             files=[],  # Сообщения из Telegram не содержат файлов
         )
-        # Pydantic v2 использует model_dump()
-        message_dict = message_response.model_dump()
+        # Pydantic v2 использует model_dump() с mode='json' для правильной сериализации datetime
+        message_dict = message_response.model_dump(mode='json')
+        logger.info(f"Broadcasting message {message.id} to ticket {ticket_id} via WebSocket")
         await connection_manager.broadcast_to_ticket(
             {
                 "type": "new_message",
@@ -875,8 +876,9 @@ async def create_support_reply_from_telegram(
             ticket_id=ticket_id,
             exclude_user_id=None
         )
+        logger.info(f"Message {message.id} broadcasted successfully")
     except Exception as e:
-        logger.error(f"Error broadcasting message via WebSocket: {e}")
+        logger.error(f"Error broadcasting message via WebSocket: {e}", exc_info=True)
     
     # Создаем уведомление для пользователя
     try:

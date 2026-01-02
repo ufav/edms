@@ -198,13 +198,17 @@ const SupportChatDialog: React.FC<SupportChatDialogProps> = ({ open, ticketId, o
 
   // Мемоизируем колбэки, чтобы они не пересоздавались при каждом рендере
   const handleWebSocketMessage = useCallback((newMessage: any) => {
+    console.log('handleWebSocketMessage called with:', newMessage);
     setMessages((prev) => {
       // Проверяем, нет ли уже такого сообщения (избегаем дубликатов)
       const exists = prev.some((msg) => msg.id === newMessage.id);
       if (exists) {
+        console.log('Message already exists, skipping:', newMessage.id);
         return prev;
       }
-      return [...prev, convertSupportMessageToChatMessage(newMessage)];
+      const converted = convertSupportMessageToChatMessage(newMessage);
+      console.log('Adding new message:', converted);
+      return [...prev, converted];
     });
   }, [convertSupportMessageToChatMessage]);
   

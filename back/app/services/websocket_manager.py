@@ -61,7 +61,11 @@ class ConnectionManager:
     async def broadcast_to_ticket(self, message: dict, ticket_id: int, exclude_user_id: int = None):
         """Отправка сообщения всем подключенным к тикету пользователям"""
         if ticket_id not in self.active_connections:
+            logger.warning(f"No active connections for ticket {ticket_id}")
             return
+        
+        connected_users = list(self.active_connections[ticket_id].keys())
+        logger.info(f"Broadcasting to ticket {ticket_id}, connected users: {connected_users}, exclude: {exclude_user_id}")
         
         disconnected_users = []
         for user_id, websocket in self.active_connections[ticket_id].items():
@@ -70,8 +74,9 @@ class ConnectionManager:
             
             try:
                 await websocket.send_json(message)
+                logger.debug(f"Message sent to user {user_id} for ticket {ticket_id}")
             except Exception as e:
-                logger.error(f"Error broadcasting to user {user_id}: {e}")
+                logger.error(f"Error broadcasting to user {user_id}: {e}", exc_info=True)
                 disconnected_users.append(user_id)
         
         # Удаляем отключенных пользователей

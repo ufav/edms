@@ -116,14 +116,18 @@ export const useSupportWebSocket = ({
           }
           
           const data: WebSocketMessage = JSON.parse(event.data);
+          console.log('WebSocket message received:', data);
           
           if (data.type === 'connected') {
             console.log('WebSocket connection confirmed');
           } else if (data.type === 'new_message' && data.message) {
+            console.log('New message via WebSocket:', data.message);
             onMessageRef.current?.(data.message);
+          } else {
+            console.warn('Unknown WebSocket message type:', data.type);
           }
         } catch (err) {
-          console.error('Error parsing WebSocket message:', err);
+          console.error('Error parsing WebSocket message:', err, event.data);
         }
       };
 
