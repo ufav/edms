@@ -25,34 +25,46 @@ async def websocket_endpoint(
     """
     WebSocket endpoint для real-time обновлений тикета поддержки
     """
+    logger.info(f"WebSocket connection attempt for ticket {ticket_id}")
     # Сначала принимаем соединение (иначе FastAPI вернет 403)
     await websocket.accept()
+    logger.info(f"WebSocket accepted for ticket {ticket_id}")
     
     try:
         # Получаем токен из query параметров
         token = websocket.query_params.get("token")
         if not token:
+            logger.warning(f"No token provided for ticket {ticket_id}")
             await websocket.close(code=1008, reason="Token required")
             return
+        
+        logger.debug(f"Token received for ticket {ticket_id}")
         
         # Декодируем токен
         payload = decode_token(token)
         if not payload:
+            logger.warning(f"Invalid token for ticket {ticket_id}")
             await websocket.close(code=1008, reason="Invalid token")
             return
         
         username = payload.get("sub")
         if not username:
+            logger.warning(f"No username in token for ticket {ticket_id}")
             await websocket.close(code=1008, reason="Invalid token")
             return
+        
+        logger.info(f"Token decoded, username: {username}, ticket_id: {ticket_id}")
         
         # Получаем пользователя из БД (WebSocket не поддерживает Depends, используем get_db напрямую)
         db = next(get_db())
         try:
             user = db.query(User).filter(User.username == username).first()
             if not user or not user.is_active:
+                logger.warning(f"User {username} not found or inactive for ticket {ticket_id}")
                 await websocket.close(code=1008, reason="User not found or inactive")
                 return
+            
+            logger.info(f"User found: {user.id} ({username}), checking ticket {ticket_id}")
             
             # Проверяем, что тикет существует и принадлежит пользователю
             ticket = db.query(SupportTicket).filter(

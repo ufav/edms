@@ -28,6 +28,7 @@ api_router.include_router(transmittal_import_settings.router, prefix="/transmitt
 api_router.include_router(transmittal_import.router, prefix="/transmittal-import", tags=["transmittal-import"])
 api_router.include_router(audit.router, prefix="/audit-logs", tags=["audit-logs"])
 api_router.include_router(notifications.router, prefix="", tags=["notifications"])
+# WebSocket роутер должен быть зарегистрирован ПЕРЕД обычными роутерами, чтобы избежать конфликтов
+api_router.include_router(support_websocket.router, prefix="/support", tags=["support"])
 api_router.include_router(support.router, prefix="/support", tags=["support"])
 api_router.include_router(support_telegram.router, prefix="/support", tags=["support"])
-api_router.include_router(support_websocket.router, prefix="/support", tags=["support"])
