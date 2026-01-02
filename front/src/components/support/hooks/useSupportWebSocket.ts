@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { getAuthToken } from '../../../api/client';
 
+// Используем тот же базовый URL, что и в client.ts
+const getApiBaseUrlFromEnv = () => {
+  return (import.meta as any)?.env?.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+};
+
 interface WebSocketMessage {
   type: string;
   message?: any;
@@ -43,7 +48,21 @@ export const useSupportWebSocket = ({
   }, [onMessage, onConnected, onError]);
 
   const getApiBaseUrl = useCallback(() => {
-    const apiUrl = (import.meta as any)?.env?.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+    // Если мы в браузере, используем текущий хост
+    if (typeof window !== 'undefined') {
+      const protocol = window.location.protocol === 'https:' ? 'https' : 'http';
+      const host = window.location.host;
+      // Если API_BASE_URL указывает на другой хост, используем его
+      const envApiUrl = getApiBaseUrlFromEnv();
+      if (envApiUrl && !envApiUrl.includes('localhost')) {
+        // Используем URL из переменной окружения, но убираем /api/v1
+        return envApiUrl.replace(/\/api\/v1$/, '') || `${protocol}://${host}`;
+      }
+      // Иначе используем текущий хост
+      return `${protocol}://${host}`;
+    }
+    // Fallback для SSR
+    const apiUrl = getApiBaseUrlFromEnv();
     return apiUrl.replace(/\/api\/v1$/, '') || 'http://localhost:8000';
   }, []);
 
@@ -82,6 +101,7 @@ export const useSupportWebSocket = ({
     // Убираем протокол и формируем правильный URL
     const host = baseUrl.replace(/^https?:\/\//, '').replace(/\/$/, '');
     const wsUrl = `${wsProtocol}://${host}/api/v1/support/ws/tickets/${ticketId}?token=${encodeURIComponent(token)}`;
+    console.log('Connecting to WebSocket:', { ticketId, wsUrl: wsUrl.replace(token, '***') });
 
     try {
       // Закрываем предыдущее соединение, если оно есть

@@ -61,8 +61,18 @@ async def websocket_endpoint(
             ).first()
             
             if not ticket:
+                # Проверяем, существует ли тикет вообще (для отладки)
+                ticket_exists = db.query(SupportTicket).filter(
+                    SupportTicket.id == ticket_id
+                ).first()
+                if ticket_exists:
+                    logger.warning(f"Ticket {ticket_id} exists but belongs to user {ticket_exists.user_id}, not {user.id}")
+                else:
+                    logger.warning(f"Ticket {ticket_id} does not exist at all")
                 await websocket.close(code=1008, reason="Ticket not found")
                 return
+            
+            logger.info(f"User {user.id} connected to ticket {ticket_id}")
             
             # Подключаемся к менеджеру соединений
             await connection_manager.connect(websocket, ticket_id, user.id)
