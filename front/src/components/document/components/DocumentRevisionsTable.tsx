@@ -19,6 +19,7 @@ import {
   Cancel as CancelIcon,
   Delete as DeleteIcon,
   CheckCircle as ReleaseIcon,
+  Visibility as VisibilityIcon,
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import { observer } from 'mobx-react-lite';
@@ -29,6 +30,7 @@ import { getFileTypeInfo } from '../utils/fileTypeUtils';
 import RevisionsTableSkeleton from './RevisionsTableSkeleton';
 import ConfirmDialog from '../../ConfirmDialog';
 import DocumentReleaseModal from './DocumentReleaseModal';
+import AutodeskViewerDialog from './AutodeskViewerDialog';
 
 interface DocumentRevisionsTableProps {
   documentId: number | null;
@@ -77,6 +79,13 @@ const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer((
   const [releaseModal, setReleaseModal] = useState({
     isOpen: false,
     revisionId: null as number | null,
+  });
+
+  // Состояние для диалога просмотра DWG
+  const [viewerDialog, setViewerDialog] = useState({
+    isOpen: false,
+    revisionId: null as number | null,
+    fileName: '',
   });
 
   // Функция для определения цвета workflow статуса
@@ -215,6 +224,36 @@ const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer((
       onRelease(releaseModal.revisionId, comment);
     }
     handleCloseReleaseModal();
+  };
+
+  // Функции для управления диалогом просмотра DWG
+  const handleOpenViewer = (revision: any) => {
+    setViewerDialog({
+      isOpen: true,
+      revisionId: revision.id,
+      fileName: revision.file_name || 'document.dwg',
+    });
+  };
+
+  const handleCloseViewer = () => {
+    setViewerDialog({
+      isOpen: false,
+      revisionId: null,
+      fileName: '',
+    });
+  };
+
+  // Проверка, является ли файл DWG или DXF
+  const isDwgFile = (fileName?: string, fileType?: string): boolean => {
+    if (!fileName && !fileType) return false;
+    const lowerFileName = fileName?.toLowerCase() || '';
+    const lowerFileType = fileType?.toLowerCase() || '';
+    return (
+      lowerFileName.endsWith('.dwg') ||
+      lowerFileName.endsWith('.dxf') ||
+      lowerFileType.includes('dwg') ||
+      lowerFileType.includes('dxf')
+    );
   };
 
   const hasRevisions = !isCreating && documentId && documentRevisionStore.getRevisions(documentId || 0).length > 0;
@@ -456,6 +495,15 @@ const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer((
                         >
                           <DownloadIcon />
                         </IconButton>
+                        {isDwgFile(revision.file_name, revision.file_type) && documentId && (
+                          <IconButton 
+                            size="small" 
+                            title={t('document.view_dwg') || 'Просмотр DWG'}
+                            onClick={() => handleOpenViewer(revision)}
+                          >
+                            <VisibilityIcon />
+                          </IconButton>
+                        )}
                         <IconButton 
                           size="small" 
                           title={t('document.compare')}
@@ -534,6 +582,17 @@ const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer((
         onClose={handleCloseReleaseModal}
         onRelease={handleReleaseWithComment}
       />
+
+      {/* Диалог просмотра DWG через Autodesk Viewer */}
+      {viewerDialog.isOpen && documentId && viewerDialog.revisionId && (
+        <AutodeskViewerDialog
+          open={viewerDialog.isOpen}
+          documentId={documentId}
+          revisionId={viewerDialog.revisionId}
+          fileName={viewerDialog.fileName}
+          onClose={handleCloseViewer}
+        />
+      )}
     </Box>
   );
 });

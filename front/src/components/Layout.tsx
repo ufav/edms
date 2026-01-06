@@ -214,11 +214,7 @@ const Layout: React.FC<LayoutProps> = observer(({
             button
             key={item.id}
             onClick={() => {
-              if (item.external) {
-                window.open('/admin', '_blank');
-              } else {
-                onPageChange(item.id);
-              }
+              onPageChange(item.id);
               setMobileOpen(false);
             }}
             selected={currentPage === item.id}
@@ -310,11 +306,7 @@ const Layout: React.FC<LayoutProps> = observer(({
                     data-page={item.id}
                     color="inherit"
                     onClick={() => {
-                      if (item.external) {
-                        window.open('/admin', '_blank');
-                      } else {
-                        onPageChange(item.id);
-                      }
+                      onPageChange(item.id);
                     }}
                     sx={{
                       backgroundColor: currentPage === item.id ? 'rgba(255,255,255,0.2)' : 'transparent',
@@ -541,3 +533,4 @@ const Layout: React.FC<LayoutProps> = observer(({
 });
 
 export default Layout;
+// {/* Support Chat Dialog - для открытия конкретного тикета */}

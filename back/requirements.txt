@@ -38,3 +38,6 @@ sqladmin==0.18.0
 
 # Telegram Bot
 python-telegram-bot==20.7
+
+# HTTP requests
+requests==2.31.0

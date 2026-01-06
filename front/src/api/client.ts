@@ -982,6 +982,27 @@ export const documentsApi = {
   },
 };
 
+// API методы для Autodesk Platform Services
+export const autodeskApi = {
+  // Получить токен для Autodesk Viewer
+  getViewerToken: async (): Promise<{ access_token: string; expires_in: number }> => {
+    const response = await apiClient.get('/autodesk/viewer/token');
+    return response.data;
+  },
+
+  // Подготовить файл для просмотра (загрузить в Autodesk и запустить перевод)
+  prepareFileForViewer: async (documentId: number, revisionId: number): Promise<{ urn: string; object_id: string; status: string; message: string }> => {
+    const response = await apiClient.post(`/autodesk/documents/${documentId}/revisions/${revisionId}/viewer/prepare`);
+    return response.data;
+  },
+
+  // Получить статус перевода файла
+  getViewerStatus: async (documentId: number, revisionId: number): Promise<{ status: string; message: string }> => {
+    const response = await apiClient.get(`/autodesk/documents/${documentId}/revisions/${revisionId}/viewer/status`);
+    return response.data;
+  },
+};
+
 // API методы для трансмитталов
 export const transmittalsApi = {
   // Получить все трансмитталы

@@ -49,6 +49,11 @@ class Settings(BaseSettings):
     TELEGRAM_ADMIN_CHAT_ID: str = os.getenv('TELEGRAM_ADMIN_CHAT_ID', '')
     TELEGRAM_WEBHOOK_SECRET: str = os.getenv('TELEGRAM_WEBHOOK_SECRET', '')
     
+    # Autodesk Platform Services (APS)
+    AUTODESK_CLIENT_ID: str = os.getenv('AUTODESK_CLIENT_ID', '')
+    AUTODESK_CLIENT_SECRET: str = os.getenv('AUTODESK_CLIENT_SECRET', '')
+    AUTODESK_BUCKET_KEY: str = os.getenv('AUTODESK_BUCKET_KEY', 'edms-bucket')
+    
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = [origin.strip() for origin in os.getenv(
         'BACKEND_CORS_ORIGINS',

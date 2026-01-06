@@ -2,14 +2,13 @@ import React from 'react';
 import { Box, Tooltip, Typography } from '@mui/material';
 import { FiberManualRecord } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
-import { useConnectionStatus } from '../hooks/useConnectionStatus';
+import { useConnectionStatusWebSocket } from '../hooks/useConnectionStatusWebSocket';
 
 const ConnectionStatusDot: React.FC = () => {
   const { t } = useTranslation();
-  const { status } = useConnectionStatus({
-    checkInterval: 30000, // Проверка каждые 30 секунд
-    healthEndpoint: '/health',
-    timeout: 3000,
+  const { status } = useConnectionStatusWebSocket({
+    pingInterval: 30000, // Ping каждые 30 секунд
+    reconnectInterval: 5000, // Переподключение каждые 5 секунд при ошибке
   });
 
   const getStatusConfig = () => {
