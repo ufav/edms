@@ -6,8 +6,11 @@ import { transmittalsApi, documentsApi } from '../../../api/client';
 import referenceDataStore from '../../../stores/ReferenceDataStore';
 import TransmittalDialog from './TransmittalDialog';
 import { transmittalStore } from '../../../stores/TransmittalStore';
-import { DocumentViewer } from '../../document';
+import { DocumentViewer, DocumentRevisionDialog, DocumentCompareDialog } from '../../document';
+import DocumentComments from '../../document/components/DocumentComments';
 import { useTransmittalViewerState } from '../hooks/useTransmittalViewerState';
+import { useDocumentDialogs } from '../../document/hooks/useDocumentDialogs';
+import { documentRevisionStore } from '../../../stores/DocumentRevisionStore';
 import NotificationSnackbar from '../../NotificationSnackbar';
 
 interface TransmittalViewDialogProps {
@@ -22,6 +25,19 @@ const TransmittalViewDialog: React.FC<TransmittalViewDialogProps> = observer(({ 
   const [docViewerId, setDocViewerId] = React.useState<number | null>(null);
   const [docData, setDocData] = React.useState<any | null>(null);
 
+  // Используем хук для диалогов документа
+  const {
+    newRevisionOpen,
+    compareOpen,
+    commentsOpen,
+    handleOpenNewRevision,
+    handleCloseNewRevision,
+    handleOpenCompare,
+    handleCloseCompare,
+    handleOpenComments,
+    handleCloseComments,
+  } = useDocumentDialogs();
+
   // Используем хук для редактирования
   const transmittalState = useTransmittalViewerState({
     transmittal: transmittalStore.selectedTransmittal,
@@ -31,12 +47,12 @@ const TransmittalViewDialog: React.FC<TransmittalViewDialogProps> = observer(({ 
         await transmittalsApi.update(transmittalId, transmittalData);
         // Перезагружаем данные трансмиттала
         await transmittalStore.loadTransmittalDetails(transmittalId);
-        
+
         // Обновляем основной список трансмитталов
         if (transmittalStore.selectedTransmittal?.project_id) {
           await transmittalStore.loadTransmittals(transmittalStore.selectedTransmittal.project_id, true);
         }
-        
+
         // Обновляем selectedTransmittal из обновленного списка (как в документах)
         const updatedTransmittal = transmittalStore.transmittals.find(t => t.id === transmittalId);
         if (updatedTransmittal) {
@@ -52,7 +68,7 @@ const TransmittalViewDialog: React.FC<TransmittalViewDialogProps> = observer(({ 
   useEffect(() => {
     const load = async () => {
       if (!open || !transmittalId) return;
-      try { await referenceDataStore.loadAllReferenceData(); } catch {}
+      try { await referenceDataStore.loadAllReferenceData(); } catch { }
       await transmittalStore.loadTransmittalDetails(transmittalId);
     };
     load();
@@ -88,6 +104,28 @@ const TransmittalViewDialog: React.FC<TransmittalViewDialogProps> = observer(({ 
     onClose();
   };
 
+  // Обработчик выпуска ревизии документа
+  const handleReleaseDocument = async (revisionId: number, comment?: string) => {
+    try {
+      await documentsApi.releaseRevision(revisionId, comment);
+
+      // Обновляем данные ревизий для текущего документа
+      if (docViewerId) {
+        await documentRevisionStore.reloadRevisions(docViewerId);
+      }
+
+      // Обновляем данные трансмиттала
+      if (transmittalId) {
+        await transmittalStore.loadTransmittalDetails(transmittalId);
+      }
+
+      transmittalState.showNotification(t('documents.release_success'), 'success');
+    } catch (error) {
+      console.error('Error releasing revision:', error);
+      transmittalState.showNotification(t('documents.release_error'), 'error');
+    }
+  };
+
   return (
     <>
       <TransmittalDialog
@@ -121,7 +159,7 @@ const TransmittalViewDialog: React.FC<TransmittalViewDialogProps> = observer(({ 
           try {
             const doc = await documentsApi.getById(documentId);
             setDocData(doc);
-          } catch {}
+          } catch { }
           setDocViewerOpen(true);
         }}
         titleOverride={t('transmittals.view_title', { defaultValue: 'Просмотр трансмиттала' })}
@@ -139,8 +177,8 @@ const TransmittalViewDialog: React.FC<TransmittalViewDialogProps> = observer(({ 
         }}
         formatDate={(date) => date}
       />
-    
-    <DocumentViewer
+
+      <DocumentViewer
         open={docViewerOpen}
         document={docData}
         documentId={docViewerId}
@@ -150,19 +188,46 @@ const TransmittalViewDialog: React.FC<TransmittalViewDialogProps> = observer(({ 
           setDocViewerId(null);
           setDocData(null);
         }}
-        onNewRevision={() => {}}
-        onCompareRevisions={() => {}}
+        onNewRevision={handleOpenNewRevision}
+        onCompareRevisions={handleOpenCompare}
         onCreateDocument={undefined}
         onSaveDocument={undefined}
-        onOpenComments={undefined}
+        onOpenComments={handleOpenComments}
+        onRelease={handleReleaseDocument}
       />
-      
+
       {/* Уведомления */}
       <NotificationSnackbar
         open={transmittalState.notificationOpen}
         message={transmittalState.notificationMessage}
         severity={transmittalState.notificationSeverity}
         onClose={transmittalState.hideNotification}
+      />
+
+      <DocumentRevisionDialog
+        open={newRevisionOpen}
+        documentId={docViewerId}
+        onClose={handleCloseNewRevision}
+        onSuccess={async () => {
+          if (docViewerId) {
+            documentRevisionStore.reloadRevisions(docViewerId);
+          }
+          if (transmittalId) {
+            await transmittalStore.loadTransmittalDetails(transmittalId);
+          }
+        }}
+      />
+
+      <DocumentCompareDialog
+        open={compareOpen}
+        documentId={docViewerId}
+        onClose={handleCloseCompare}
+      />
+
+      <DocumentComments
+        open={commentsOpen}
+        documentId={docViewerId}
+        onClose={handleCloseComments}
       />
     </>
   );

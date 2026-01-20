@@ -43,10 +43,9 @@ async def get_transmittal_import_settings(
 ):
     """Получить настройки импорта трансмитталов для проекта"""
     
-    # Получаем настройки для текущего пользователя
+    # Получаем настройки для проекта (общие для всех пользователей)
     settings = db.query(TransmittalImportSettings).filter(
-        TransmittalImportSettings.project_id == project_id,
-        TransmittalImportSettings.user_id == current_user.id
+        TransmittalImportSettings.project_id == project_id
     ).all()
     
     # Получаем список участников проекта
@@ -94,7 +93,8 @@ async def get_transmittal_import_settings(
                 "table_fields": {
                     "document_number_label": "",
                     "status_label": ""
-                }
+                },
+                "status_mapping": []
             }
             
             result.append(TransmittalImportSettingsResponse(

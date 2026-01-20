@@ -1074,6 +1074,14 @@ export const transmittalsApi = {
     const response = await apiClient.get('/transmittals/statuses/');
     return response.data;
   },
+
+  // Обновить CCS статус ревизии в трансмиттале (только для incoming)
+  updateRevisionCcsStatus: async (transmittalId: number, revisionId: number, ccsStatus: 'open' | 'closed'): Promise<{ message: string; transmittal_revision_id: number; ccs_status: string }> => {
+    const response = await apiClient.put(`/transmittals/${transmittalId}/revisions/${revisionId}/ccs-status`, {
+      ccs_status: ccsStatus
+    });
+    return response.data;
+  },
 };
 
 // Тип для сущности Review (минимально необходимый для фронта)

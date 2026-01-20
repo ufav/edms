@@ -1703,6 +1703,37 @@ async def create_document_revision(
                     "status": status_name
                 }
             )
+        
+        # Проверяем CCS статус в трансмитталах (только для incoming)
+        from app.models.transmittal import TransmittalRevision, Transmittal, CCSStatus
+        
+        # Ищем transmittal_revision для последней ревизии
+        transmittal_revision = db.query(TransmittalRevision).join(
+            Transmittal, Transmittal.id == TransmittalRevision.transmittal_id
+        ).filter(
+            TransmittalRevision.revision_id == latest_revision.id,
+            Transmittal.direction == 'in',  # Только incoming
+            Transmittal.is_deleted == 0
+        ).first()
+        
+        if transmittal_revision and transmittal_revision.ccs_status == CCSStatus.OPEN:
+            # Формируем полный код ревизии для сообщения об ошибке
+            full_revision_code = latest_revision.number
+            if latest_revision.revision_description_id:
+                revision_description = db.query(RevisionDescription).filter(
+                    RevisionDescription.id == latest_revision.revision_description_id
+                ).first()
+                if revision_description:
+                    full_revision_code = f"{revision_description.code}{latest_revision.number}"
+            
+            raise HTTPException(
+                status_code=400,
+                detail={
+                    "error_type": "ccs_status_error",
+                    "revision": full_revision_code,
+                    "message": "Невозможно создать новую ревизию: предыдущая ревизия находится в трансмиттале с открытым CCS статусом"
+                }
+            )
     
     # Определяем следующую редакцию
     if latest_revision:

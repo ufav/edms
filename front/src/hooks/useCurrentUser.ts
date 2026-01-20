@@ -23,10 +23,10 @@ export const useCurrentUser = () => {
   // Функция для проверки, может ли пользователь управлять проектом
   const canManageProject = (project: any) => {
     if (!user) return false;
-    
+
     // Админ может управлять любыми проектами
     if (isAdmin) return true;
-    
+
     // Проверяем роль пользователя в проекте
     return project.user_role === 'admin';
   };
@@ -34,30 +34,43 @@ export const useCurrentUser = () => {
   // Функция для проверки, может ли пользователь редактировать проект
   const canEditProject = (project: any) => {
     if (!user) return false;
-    
+
     // Админ может редактировать любые проекты
     if (isAdmin) return true;
-    
+
     // Оператор может редактировать только свои проекты (где он владелец)
     if (isOperator) {
       return project.owner_id === user.id;
     }
-    
+
     return false;
   };
 
   // Функция для проверки, может ли пользователь удалить проект
   const canDeleteProject = (project: any) => {
     if (!user) return false;
-    
+
     // Админ может удалять любые проекты
     if (isAdmin) return true;
-    
+
     // Оператор может удалять только свои проекты (где он владелец)
     if (isOperator) {
       return project.owner_id === user.id;
     }
-    
+
+    return false;
+  };
+
+  // Функция для проверки, может ли пользователь редактировать настройки импорта
+  const canEditImportSettings = (project: any) => {
+    if (!user) return false;
+
+    // Админ может редактировать настройки импорта
+    if (isAdmin) return true;
+
+    // Владелец проекта может редактировать настройки импорта
+    if (project?.owner_id === user.id) return true;
+
     return false;
   };
 
@@ -69,6 +82,7 @@ export const useCurrentUser = () => {
     isViewer,
     canManageProject,
     canEditProject,
-    canDeleteProject
+    canDeleteProject,
+    canEditImportSettings
   };
 };

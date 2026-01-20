@@ -146,6 +146,7 @@ export interface TransmittalSettingsDialogProps {
   open: boolean;
   visibleCols: TransmittalColumnVisibility;
   columnOrder: TransmittalColumnOrder[];
+  canEditImportSettings?: boolean;
   onClose: () => void;
   onColumnVisibilityChange: (column: TransmittalColumnKey, visible: boolean) => void;
   onColumnOrderChange: (newOrder: TransmittalColumnOrder[]) => void;
@@ -181,6 +182,7 @@ export const TransmittalSettingsDialog: React.FC<TransmittalSettingsDialogProps>
   open,
   visibleCols,
   columnOrder,
+  canEditImportSettings = false,
   onClose,
   onColumnVisibilityChange,
   onColumnOrderChange,
@@ -208,7 +210,7 @@ export const TransmittalSettingsDialog: React.FC<TransmittalSettingsDialogProps>
       const newIndex = columnOrder.findIndex((item) => item.column === over?.id);
 
       const newOrder = arrayMove(columnOrder, oldIndex, newIndex);
-      
+
       // Обновляем порядок
       const updatedOrder = newOrder.map((item, index) => ({
         ...item,
@@ -222,16 +224,16 @@ export const TransmittalSettingsDialog: React.FC<TransmittalSettingsDialogProps>
   const sortableColumns = columnOrder.filter(col => col.column !== 'actions');
 
   return (
-    <Dialog 
-      open={open} 
-      onClose={onClose} 
-      maxWidth="md" 
+    <Dialog
+      open={open}
+      onClose={onClose}
+      maxWidth="md"
       fullWidth
       scroll="paper"
     >
       <DialogTitle>{t('transmittals.settings.title')}</DialogTitle>
 
-      <Box sx={{ 
+      <Box sx={{
         position: 'sticky',
         top: 0,
         zIndex: 1,
@@ -244,7 +246,7 @@ export const TransmittalSettingsDialog: React.FC<TransmittalSettingsDialogProps>
         <Tabs
           value={tabValue}
           onChange={handleTabChange}
-          sx={{ 
+          sx={{
             '& .MuiTab-root': {
               '&:focus': {
                 outline: 'none !important',
@@ -263,20 +265,22 @@ export const TransmittalSettingsDialog: React.FC<TransmittalSettingsDialogProps>
           variant="scrollable"
           scrollButtons="auto"
         >
-          <Tab 
-            label={t('transmittals.settings.fields_tab')} 
+          <Tab
+            label={t('transmittals.settings.fields_tab')}
             id="transmittal-settings-tab-0"
             aria-controls="transmittal-settings-tabpanel-0"
           />
-          <Tab 
-            label={t('transmittals.import_settings.title')} 
-            id="transmittal-settings-tab-1"
-            aria-controls="transmittal-settings-tabpanel-1"
-          />
+          {canEditImportSettings && (
+            <Tab
+              label={t('transmittals.import_settings.title')}
+              id="transmittal-settings-tab-1"
+              aria-controls="transmittal-settings-tabpanel-1"
+            />
+          )}
         </Tabs>
       </Box>
 
-      <DialogContent sx={{ 
+      <DialogContent sx={{
         height: 700,
         p: 0,
         display: 'flex',
@@ -305,14 +309,14 @@ export const TransmittalSettingsDialog: React.FC<TransmittalSettingsDialogProps>
                 {t('transmittals.settings.fixed_columns')}
               </Typography>
               <FormGroup>
-                <FormControlLabel 
+                <FormControlLabel
                   control={
-                    <Checkbox 
-                      checked={visibleCols.actions ?? true} 
-                      onChange={(e) => onColumnVisibilityChange('actions', e.target.checked)} 
+                    <Checkbox
+                      checked={visibleCols.actions ?? true}
+                      onChange={(e) => onColumnVisibilityChange('actions', e.target.checked)}
                     />
-                  } 
-                  label={t('transmittals.settings.actions_column')} 
+                  }
+                  label={t('transmittals.settings.actions_column')}
                 />
               </FormGroup>
             </Box>
@@ -324,7 +328,7 @@ export const TransmittalSettingsDialog: React.FC<TransmittalSettingsDialogProps>
               <Typography variant="subtitle2" sx={{ mb: 2, fontWeight: 600 }}>
                 {t('transmittals.settings.sortable_columns')}
               </Typography>
-              
+
               <DndContext
                 sensors={sensors}
                 collisionDetection={closestCenter}
@@ -351,20 +355,24 @@ export const TransmittalSettingsDialog: React.FC<TransmittalSettingsDialogProps>
           </Box>
         </TabPanel>
 
-        {/* Вкладка 2: Настройки импорта трансмитталов */}
-        <TabPanel value={tabValue} index={1}>
-          <TransmittalImportSettings ref={importSettingsRef} onClose={onClose} />
-        </TabPanel>
+        {/* Вкладка 2: Настройки импорта трансмитталов (только для админов и владельцев) */}
+        {canEditImportSettings && (
+          <TabPanel value={tabValue} index={1}>
+            <TransmittalImportSettings ref={importSettingsRef} onClose={onClose} />
+          </TabPanel>
+        )}
       </DialogContent>
 
       <DialogActions sx={{ px: 3, py: 2 }}>
         <Box sx={{ display: 'flex', width: '100%', justifyContent: 'flex-end', gap: 1.5 }}>
-          <Button
-            variant="contained"
-            onClick={() => importSettingsRef.current?.save()}
-          >
-            {t('common.save')}
-          </Button>
+          {canEditImportSettings && (
+            <Button
+              variant="contained"
+              onClick={() => importSettingsRef.current?.save()}
+            >
+              {t('common.save')}
+            </Button>
+          )}
           <Button onClick={onClose}>
             {t('common.close')}
           </Button>

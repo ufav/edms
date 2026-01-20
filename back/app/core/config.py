@@ -54,6 +54,15 @@ class Settings(BaseSettings):
     AUTODESK_CLIENT_SECRET: str = os.getenv('AUTODESK_CLIENT_SECRET', '')
     AUTODESK_BUCKET_KEY: str = os.getenv('AUTODESK_BUCKET_KEY', 'edms-bucket')
     
+    # Email/SMTP Settings
+    SMTP_HOST: str = os.getenv('SMTP_HOST', 'smtp.gmail.com')
+    SMTP_PORT: int = int(os.getenv('SMTP_PORT', '587'))
+    SMTP_USER: str = os.getenv('SMTP_USER', '')
+    SMTP_PASSWORD: str = os.getenv('SMTP_PASSWORD', '')
+    SMTP_FROM_EMAIL: str = os.getenv('SMTP_FROM_EMAIL', '')
+    SMTP_FROM_NAME: str = os.getenv('SMTP_FROM_NAME', 'EDMS System')
+    SMTP_USE_TLS: bool = os.getenv('SMTP_USE_TLS', 'true').lower() == 'true'
+    
     # CORS
     BACKEND_CORS_ORIGINS: List[str] = [origin.strip() for origin in os.getenv(
         'BACKEND_CORS_ORIGINS',

@@ -305,12 +305,13 @@ async def get_transmittal(
     
     # Получаем ревизии трансмиттала
     # Используем JOIN'ы вместо N+1 запросов
-    from app.models.references import RevisionDescription
+    from app.models.references import RevisionDescription, WorkflowStatus
     revisions_data = db.query(
         DocumentRevision,
         Document,
         TransmittalRevision,
-        RevisionDescription
+        RevisionDescription,
+        WorkflowStatus
     ).join(
         TransmittalRevision,
         TransmittalRevision.revision_id == DocumentRevision.id
@@ -320,6 +321,9 @@ async def get_transmittal(
     ).outerjoin(
         RevisionDescription,
         RevisionDescription.id == DocumentRevision.revision_description_id
+    ).outerjoin(
+        WorkflowStatus,
+        WorkflowStatus.id == DocumentRevision.workflow_status_id
     ).filter(
         TransmittalRevision.transmittal_id == transmittal_id
     ).all()
@@ -337,16 +341,19 @@ async def get_transmittal(
             files_by_revision_id[f.revision_id].append(f)
     
     result = []
-    for revision, document, tr, rev_descr in revisions_data:
+    for revision, document, tr, rev_descr, workflow_status in revisions_data:
         files_info = files_by_revision_id.get(revision.id, [])
         
         result.append({
             "id": revision.id,
+            "transmittal_revision_id": tr.id,  # ID связи transmittal_revision для обновления ccs_status
             "document_id": document.id,
             "document_title": document.title,
             "document_number": document.number,
             "revision_number": revision.number,
             "revision_description_code": rev_descr.code if rev_descr else None,
+            "ccs_status": tr.ccs_status.value if tr.ccs_status else None,  # CCS статус (только для incoming)
+            "workflow_status": workflow_status.name if workflow_status else None,
             "files": [
                 {
                     "id": f.id,
@@ -392,12 +399,13 @@ async def get_transmittal_revisions(
         raise HTTPException(status_code=404, detail="Трансмиттал не найден")
     
     # Используем JOIN'ы вместо N+1 запросов
-    from app.models.references import RevisionDescription
+    from app.models.references import RevisionDescription, WorkflowStatus
     revisions_data = db.query(
         DocumentRevision,
         Document,
         TransmittalRevision,
-        RevisionDescription
+        RevisionDescription,
+        WorkflowStatus
     ).join(
         TransmittalRevision,
         TransmittalRevision.revision_id == DocumentRevision.id
@@ -407,6 +415,9 @@ async def get_transmittal_revisions(
     ).outerjoin(
         RevisionDescription,
         RevisionDescription.id == DocumentRevision.revision_description_id
+    ).outerjoin(
+        WorkflowStatus,
+        WorkflowStatus.id == DocumentRevision.workflow_status_id
     ).filter(
         TransmittalRevision.transmittal_id == transmittal_id
     ).all()
@@ -424,15 +435,19 @@ async def get_transmittal_revisions(
             files_by_revision_id[f.revision_id].append(f)
     
     result = []
-    for revision, document, tr in revisions_data:
+    for revision, document, tr, rev_descr, workflow_status in revisions_data:
         files_info = files_by_revision_id.get(revision.id, [])
         
         result.append({
             "id": revision.id,
+            "transmittal_revision_id": tr.id,  # ID связи transmittal_revision для обновления ccs_status
             "document_id": document.id,
             "document_title": document.title,
             "document_number": document.number,
             "revision_number": revision.number,
+            "revision_description_code": rev_descr.code if rev_descr else None,
+            "ccs_status": tr.ccs_status.value if tr.ccs_status else None,  # CCS статус (только для incoming)
+            "workflow_status": workflow_status.name if workflow_status else None,
             "files": [
                 {
                     "id": f.id,
@@ -515,6 +530,71 @@ async def remove_revision_from_transmittal(
     db.commit()
     
     return {"message": "Ревизия удалена из трансмиттала"}
+
+
+class CCSStatusUpdate(BaseModel):
+    ccs_status: str  # 'open' | 'closed'
+
+
+@router.put("/{transmittal_id}/revisions/{revision_id}/ccs-status", response_model=dict)
+async def update_revision_ccs_status(
+    transmittal_id: int,
+    revision_id: int,
+    status_data: CCSStatusUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Обновление CCS статуса ревизии в трансмиттале (только для incoming)"""
+    from app.models.transmittal import CCSStatus
+    
+    transmittal = db.query(Transmittal).filter(Transmittal.id == transmittal_id, Transmittal.is_deleted == 0).first()
+    if not transmittal:
+        raise HTTPException(status_code=404, detail="Трансмиттал не найден")
+    
+    # Проверяем, что трансмиттал incoming
+    if transmittal.direction != 'in':
+        raise HTTPException(status_code=400, detail="CCS статус доступен только для входящих трансмитталов")
+    
+    transmittal_revision = db.query(TransmittalRevision).filter(
+        TransmittalRevision.transmittal_id == transmittal_id,
+        TransmittalRevision.revision_id == revision_id
+    ).first()
+    
+    if not transmittal_revision:
+        raise HTTPException(status_code=404, detail="Ревизия не найдена в трансмиттале")
+    
+    # Валидируем значение статуса
+    try:
+        new_status = CCSStatus(status_data.ccs_status.lower())
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Неверное значение статуса. Допустимые: 'open', 'closed'")
+    
+    # Сохраняем старое значение для лога
+    old_status = transmittal_revision.ccs_status.value if transmittal_revision.ccs_status else None
+    
+    # Обновляем статус
+    transmittal_revision.ccs_status = new_status
+    db.commit()
+    
+    # Логирование действия
+    log_action(
+        db=db,
+        user_id=current_user.id,
+        action="update",
+        entity_type="transmittal_revision",
+        entity_id=transmittal_revision.id,
+        old_values={"ccs_status": old_status},
+        new_values={"ccs_status": new_status.value},
+        request=request,
+    )
+    
+    return {
+        "message": "CCS статус обновлен",
+        "transmittal_revision_id": transmittal_revision.id,
+        "ccs_status": new_status.value
+    }
+
 
 @router.get("/documents/active-revisions", response_model=List[dict])
 async def get_active_revisions(
@@ -649,46 +729,31 @@ async def send_transmittal(
     if transmittal.created_by != current_user.id and not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Нет прав для отправки трансмиттала")
     
-    # Сохраняем старые значения для лога
-    old_values = {
-        "id": transmittal.id,
-        "status_id": transmittal.status_id,
-        "direction": transmittal.direction,
-        "transmittal_date": transmittal.transmittal_date.isoformat() if transmittal.transmittal_date else None,
-        "sender_id": transmittal.sender_id,
-    }
-    
-    # Обновляем трансмиттал
+    # Импорты
     from datetime import datetime
     from app.models.references import TransmittalStatus
-    
-    # Получаем статус "sent"
-    sent_status = db.query(TransmittalStatus).filter(TransmittalStatus.name == "Sent").first()
-    if not sent_status:
-        raise HTTPException(status_code=500, detail="Статус 'sent' не найден")
-    
-    transmittal.status_id = sent_status.id
-    # Новая модель дат/направления
-    transmittal.direction = "out"
-    transmittal.transmittal_date = datetime.utcnow()
-    transmittal.sender_id = current_user.id  # Кто отправил
-    
-    # Обновляем workflow статусы ревизий документов в трансмиттале
     from app.models.document import DocumentRevision, Document
     from app.models.references import WorkflowStatus
     from app.models.document_workflow_history import DocumentWorkflowHistory
     from app.models.project import WorkflowPresetSequence, Project
+    from app.models.transmittal import TransmittalRevision
+    from app.models.project_participant import ProjectParticipant
+    from app.models.contact import Contact
+    from app.models.download_link import DownloadLink
+    from app.services.email_service import email_service
     
-    # Получаем статус "In Review"
+    # === ШАГ 1: Подготовка данных (без изменения БД) ===
+    
+    # Получаем статусы
+    sent_status = db.query(TransmittalStatus).filter(TransmittalStatus.name == "Sent").first()
+    if not sent_status:
+        raise HTTPException(status_code=500, detail="Статус 'sent' не найден")
+    
     in_review_status = db.query(WorkflowStatus).filter(WorkflowStatus.name == "In Review").first()
     if not in_review_status:
         raise HTTPException(status_code=500, detail="Статус 'In Review' не найден")
     
     # Получаем все ревизии документов в этом трансмиттале
-    from app.models.transmittal import TransmittalRevision
-    # Получаем все ревизии трансмиттала с JOIN'ом для избежания N+1 запросов
-    from sqlalchemy.orm import joinedload
-    
     transmittal_revisions_data = db.query(
         TransmittalRevision,
         DocumentRevision
@@ -699,23 +764,117 @@ async def send_transmittal(
         TransmittalRevision.transmittal_id == transmittal_id
     ).all()
     
+    if not transmittal_revisions_data:
+        raise HTTPException(status_code=400, detail="В трансмиттале нет документов")
+    
+    # Валидируем переходы статусов (до любых изменений)
+    from app.utils.workflow_status_validator import WorkflowStatusValidator
+    for transmittal_revision, revision in transmittal_revisions_data:
+        if revision:
+            old_status_id = revision.workflow_status_id
+            if not WorkflowStatusValidator.validate_transition(db, old_status_id, in_review_status.id):
+                from_status = db.query(WorkflowStatus).filter(WorkflowStatus.id == old_status_id).first() if old_status_id else None
+                from_status_name = from_status.name if from_status else "Draft"
+                error_msg = WorkflowStatusValidator.get_transition_error_message(from_status_name, "In Review")
+                raise HTTPException(status_code=400, detail=error_msg)
+    
+    # === ШАГ 2: Проверяем возможность отправки email ===
+    
+    # Находим участника проекта (контрагента) с контактом
+    participant = db.query(ProjectParticipant).filter(
+        ProjectParticipant.project_id == transmittal.project_id,
+        ProjectParticipant.company_id == transmittal.counterparty_id
+    ).first()
+    
+    if not participant or not participant.contact_id:
+        raise HTTPException(status_code=400, detail="У контрагента не указано контактное лицо")
+    
+    contact = db.query(Contact).filter(Contact.id == participant.contact_id).first()
+    if not contact or not contact.email:
+        raise HTTPException(status_code=400, detail="У контактного лица не указан email")
+    
+    if not email_service.is_configured():
+        raise HTTPException(status_code=500, detail="Email сервис не настроен")
+    
+    # === ШАГ 3: Создаем ссылку для скачивания ===
+    
+    download_link = DownloadLink.create_link(
+        transmittal_id=transmittal.id,
+        user_id=current_user.id,
+        expires_in_days=7,
+        max_downloads=10
+    )
+    db.add(download_link)
+    db.flush()  # Получаем ID без коммита
+    
+    base_url = str(request.base_url).rstrip('/')
+    download_link_url = f"{base_url}/{download_link.token}"
+    
+    # Получаем список документов в трансмиттале
+    documents = []
+    for tr, revision in transmittal_revisions_data:
+        if revision:
+            doc = db.query(Document).filter(Document.id == revision.document_id).first()
+            if doc:
+                documents.append({
+                    "number": doc.number,
+                    "title": doc.title or doc.number
+                })
+    
+    # Получаем информацию об отправителе
+    sender_name = current_user.full_name or current_user.username
+    sender_company = "EDMS"
+    project = db.query(Project).filter(Project.id == transmittal.project_id).first()
+    project_name = project.name if project else "Проект"
+    
+    # === ШАГ 4: Отправляем email ===
+    
+    try:
+        email_sent = email_service.send_transmittal_notification(
+            to_emails=[contact.email],
+            transmittal_number=transmittal.transmittal_number,
+            transmittal_title=transmittal.title or f"Трансмиттал {transmittal.transmittal_number}",
+            project_name=project_name,
+            sender_name=sender_name,
+            sender_company=sender_company,
+            documents=documents,
+            download_link=download_link_url,
+            expires_in_days=7
+        )
+    except Exception as e:
+        db.rollback()
+        import logging
+        logging.error(f"Failed to send email for transmittal {transmittal_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Ошибка отправки email: {str(e)}")
+    
+    if not email_sent:
+        db.rollback()
+        raise HTTPException(status_code=500, detail="Не удалось отправить email")
+    
+    # === ШАГ 5: Email успешно отправлен — теперь меняем статусы ===
+    
+    # Сохраняем старые значения для лога
+    old_values = {
+        "id": transmittal.id,
+        "status_id": transmittal.status_id,
+        "direction": transmittal.direction,
+        "transmittal_date": transmittal.transmittal_date.isoformat() if transmittal.transmittal_date else None,
+        "sender_id": transmittal.sender_id,
+    }
+    
+    # Обновляем трансмиттал
+    transmittal.status_id = sent_status.id
+    transmittal.direction = "out"
+    transmittal.transmittal_date = datetime.utcnow()
+    transmittal.sender_id = current_user.id
+    
     # Обновляем workflow_status_id для каждой ревизии и создаем записи в истории
     for transmittal_revision, revision in transmittal_revisions_data:
         if revision:
-            # Сохраняем старый статус перед обновлением
             old_status_id = revision.workflow_status_id
-            
-            # Валидируем переход статусов
-            from app.utils.workflow_status_validator import WorkflowStatusValidator
-            if not WorkflowStatusValidator.validate_transition(db, old_status_id, in_review_status.id):
-                from_status_name = revision.workflow_status.name if revision.workflow_status else "Draft"
-                error_msg = WorkflowStatusValidator.get_transition_error_message(from_status_name, "In Review")
-                raise HTTPException(status_code=400, detail=error_msg)
-            
-            # Обновляем статус ревизии
             revision.workflow_status_id = in_review_status.id
             
-            # Проверяем, требует ли эта ревизия трансмиттал через JOIN запрос
+            # Проверяем, требует ли эта ревизия трансмиттал
             workflow_sequence = db.query(WorkflowPresetSequence).join(
                 Project, Project.workflow_preset_id == WorkflowPresetSequence.preset_id
             ).join(
@@ -726,7 +885,6 @@ async def send_transmittal(
                 WorkflowPresetSequence.revision_step_id == revision.revision_step_id
             ).first()
             
-            # Если требует трансмиттал, создаем запись в истории
             if workflow_sequence and workflow_sequence.requires_transmittal:
                 workflow_history = DocumentWorkflowHistory(
                     revision_id=revision.id,
@@ -742,11 +900,9 @@ async def send_transmittal(
     db.refresh(transmittal)
     
     # Логирование действия
-    from app.models.references import TransmittalStatus
-    sent_status = db.query(TransmittalStatus).filter(TransmittalStatus.name == "Sent").first()
     new_values = {
         "id": transmittal.id,
-        "status_id": sent_status.id if sent_status else transmittal.status_id,
+        "status_id": sent_status.id,
         "direction": "out",
         "transmittal_date": transmittal.transmittal_date.isoformat() if transmittal.transmittal_date else None,
         "sender_id": current_user.id,
@@ -763,7 +919,13 @@ async def send_transmittal(
         request=request,
     )
     
-    return {"message": "Трансмиттал успешно отправлен", "transmittal_id": transmittal.id}
+    return {
+        "message": "Трансмиттал успешно отправлен", 
+        "transmittal_id": transmittal.id,
+        "email_sent": True,
+        "email_recipient": contact.email,
+        "download_link": download_link_url
+    }
 
 
 @router.put("/{transmittal_id}/receive")

@@ -33,7 +33,7 @@ import { useRefreshStore } from '../hooks/useRefreshStore';
 
 const TransmittalsPage: React.FC = observer(() => {
   const { t, i18n } = useTranslation();
-  const { isViewer } = useCurrentUser();
+  const { isViewer, canEditImportSettings } = useCurrentUser();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const { refreshTransmittals } = useRefreshStore();
@@ -58,7 +58,7 @@ const TransmittalsPage: React.FC = observer(() => {
   const sendDialog = useDeleteDialog();
   const [page, setPage] = useState<number>(1); // 1-based for MUI Pagination
   const rowsPerPage = 13; // фиксированное количество на страницу
-  
+
   // Хук для настроек трансмитталов
   const transmittalSettings = useTransmittalSettings();
 
@@ -71,16 +71,16 @@ const TransmittalsPage: React.FC = observer(() => {
       transmittalStore.loadTransmittals(projectStore.selectedProject.id);
     }
   }, [projectStore.selectedProject]);
-  
+
   // Фильтрация трансмитталов
   const filteredTransmittals = transmittalStore.transmittals.filter(t => {
     const statusMatch = filterStatus === 'all' || t.status?.toLowerCase() === filterStatus.toLowerCase();
     const projectMatch = filterProject === 'all' || t.project_id.toString() === filterProject;
     const selectedProjectMatch = !projectStore.hasSelectedProject || t.project_id === projectStore.selectedProject?.id;
-    const searchMatch = searchTerm === '' || 
+    const searchMatch = searchTerm === '' ||
       t.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       t.transmittal_number.toLowerCase().includes(searchTerm.toLowerCase());
-    
+
     return statusMatch && projectMatch && selectedProjectMatch && searchMatch;
   });
 
@@ -130,16 +130,16 @@ const TransmittalsPage: React.FC = observer(() => {
     } else {
       await transmittalStore.loadTransmittals(undefined, true);
     }
-    
+
     // Формируем сообщение об успешном импорте
     let message = t('transmittals.import_success', { number: result.transmittal_number });
-    
+
     // Если есть несуществующие документы, добавляем информацию о них
     if (result.missing_documents && result.missing_documents.length > 0) {
       const missingDocs = result.missing_documents.join(', ');
       message += `\n\n${t('transmittals.import_missing_documents', { documents: missingDocs })}`;
     }
-    
+
     // Показываем уведомление об успешном импорте
     setNotification({
       open: true,
@@ -155,18 +155,18 @@ const TransmittalsPage: React.FC = observer(() => {
   const handleCreateTransmittal = async (transmittalData: any) => {
     try {
       if (!projectStore.selectedProject) return;
-      
+
       await transmittalsApi.create({
         ...transmittalData,
         project_id: projectStore.selectedProject.id,
       });
-      
+
       setNotification({
         open: true,
         message: t('transmittals.create_success'),
         severity: 'success'
       });
-      
+
       // Перезагружаем список трансмитталов
       transmittalStore.loadTransmittals(projectStore.selectedProject.id, true);
       setCreateDialogOpen(false);
@@ -182,13 +182,13 @@ const TransmittalsPage: React.FC = observer(() => {
   const handleSend = async (transmittal: any) => {
     try {
       await transmittalsApi.send(transmittal.id);
-      
+
       setNotification({
         open: true,
         message: t('transmittals.send_success'),
         severity: 'success'
       });
-      
+
       // Перезагружаем список трансмитталов
       if (projectStore.selectedProject) {
         transmittalStore.loadTransmittals(projectStore.selectedProject.id, true);
@@ -323,21 +323,21 @@ const TransmittalsPage: React.FC = observer(() => {
 
   return (
     <ProjectRequired>
-      <Box sx={{ 
-        width: '100%', 
-        minWidth: 0, 
+      <Box sx={{
+        width: '100%',
+        minWidth: 0,
         pt: 3, // padding только сверху
         px: 3, // padding только по бокам
         pb: 0, // убираем padding снизу
         height: !isMobile ? 'calc(100vh - 117px)' : '100vh', // Всегда вычитаем высоту пагинации для десктопа
-        display: 'flex', 
+        display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden', // Убираем прокрутку страницы
       }}>
-        <Box sx={{ 
-          display: 'flex', 
-          justifyContent: 'space-between', 
-          alignItems: isMobile ? 'flex-start' : 'center', 
+        <Box sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: isMobile ? 'flex-start' : 'center',
           mb: 3,
           flexDirection: isMobile ? 'column' : 'row',
           gap: isMobile ? 2 : 0,
@@ -377,8 +377,8 @@ const TransmittalsPage: React.FC = observer(() => {
         />
 
         {/* Контейнер таблицы */}
-        <Box sx={{ 
-          flex: 1, 
+        <Box sx={{
+          flex: 1,
           minHeight: 0,
         }}>
           <TransmittalTable
@@ -398,7 +398,7 @@ const TransmittalsPage: React.FC = observer(() => {
         {/* Фиксированная пагинация без выбора кол-ва строк */}
         {!transmittalStore.isLoading && (
           <AppPagination
-              count={filteredTransmittals.length}
+            count={filteredTransmittals.length}
             page={Math.min(page, totalPages)}
             onPageChange={(_, value) => setPage(value)}
             rowsPerPage={rowsPerPage}
@@ -447,6 +447,7 @@ const TransmittalsPage: React.FC = observer(() => {
         open={transmittalSettings.settingsOpen}
         visibleCols={transmittalSettings.visibleCols}
         columnOrder={transmittalSettings.columnOrder}
+        canEditImportSettings={canEditImportSettings(projectStore.selectedProject)}
         onClose={() => transmittalSettings.setSettingsOpen(false)}
         onColumnVisibilityChange={transmittalSettings.onColumnVisibilityChange}
         onColumnOrderChange={transmittalSettings.onColumnOrderChange}

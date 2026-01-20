@@ -3,7 +3,7 @@ API v1 router configuration
 """
 
 from fastapi import APIRouter
-from app.api.v1.endpoints import auth, users, projects, documents, transmittals, reviews, disciplines, user_settings, references, workflow_presets, workflow_rule_application, project_participants, contacts, company_roles, roles, document_comments, transmittal_import_settings, transmittal_import, audit, support, support_telegram, support_websocket, notifications, autodesk, health_websocket
+from app.api.v1.endpoints import auth, users, projects, documents, transmittals, reviews, disciplines, user_settings, references, workflow_presets, workflow_rule_application, project_participants, contacts, company_roles, roles, document_comments, transmittal_import_settings, transmittal_import, audit, support, support_telegram, support_websocket, notifications, autodesk, health_websocket, download
 
 api_router = APIRouter()
 
@@ -29,6 +29,7 @@ api_router.include_router(transmittal_import.router, prefix="/transmittal-import
 api_router.include_router(audit.router, prefix="/audit-logs", tags=["audit-logs"])
 api_router.include_router(notifications.router, prefix="", tags=["notifications"])
 api_router.include_router(autodesk.router, prefix="/autodesk", tags=["autodesk"])
+api_router.include_router(download.router, prefix="/download", tags=["download"])
 # WebSocket роутеры должны быть зарегистрированы ПЕРЕД обычными роутерами, чтобы избежать конфликтов
 api_router.include_router(health_websocket.router, prefix="", tags=["health"])
 api_router.include_router(support_websocket.router, prefix="/support", tags=["support"])

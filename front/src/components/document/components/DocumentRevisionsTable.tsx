@@ -13,9 +13,9 @@ import {
   IconButton,
   CircularProgress,
 } from '@mui/material';
-import { 
-  Download as DownloadIcon, 
-  Compare as CompareIcon, 
+import {
+  Download as DownloadIcon,
+  Compare as CompareIcon,
   Cancel as CancelIcon,
   Delete as DeleteIcon,
   CheckCircle as ReleaseIcon,
@@ -35,7 +35,7 @@ import AutodeskViewerDialog from './AutodeskViewerDialog';
 interface DocumentRevisionsTableProps {
   documentId: number | null;
   isCreating: boolean;
-  fileMetadata: {name: string, size: number, type: string} | null;
+  fileMetadata: { name: string, size: number, type: string } | null;
   workflowPresetSequence: any[]; // Оставляем для совместимости, но не используем
   isUploadingDocument: boolean;
   uploadProgress: number;
@@ -68,7 +68,7 @@ const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer((
   onRelease,
 }) => {
   const { t, i18n } = useTranslation();
-  
+
   // Состояние для диалога подтверждения выпуска
   const [releaseConfirmDialog, setReleaseConfirmDialog] = useState({
     isOpen: false,
@@ -91,10 +91,10 @@ const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer((
   // Функция для определения цвета workflow статуса
   const getWorkflowStatusColor = (statusId?: number): "default" | "primary" | "secondary" | "error" | "info" | "success" | "warning" => {
     if (!statusId) return "default";
-    
+
     const status = referencesStore.getWorkflowStatus(statusId);
     if (!status) return "default";
-    
+
     switch (status.name) {
       case "Draft":
         return "default"; // серый
@@ -133,25 +133,25 @@ const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer((
     if (revision.is_deleted === 1) {
       return false;
     }
-    
+
     // Можно выпускать только ревизии в статусе Draft
     const draftStatus = referencesStore.workflowStatuses.find(status => status.name === 'Draft');
     if (!draftStatus || revision.workflow_status_id !== draftStatus.id) {
       return false;
     }
-    
+
     // Можно выпускать только последнюю активную ревизию
     const latestRevision = getLatestActiveRevision();
     if (!latestRevision || latestRevision.id !== revision.id) {
       return false;
     }
-    
+
     // Проверяем, требует ли эта ревизия трансмиттал
     // Если ревизия есть в списке активных ревизий для трансмиттала, то она требует трансмиттал
     const isInActiveRevisions = activeRevisionsStore.activeRevisions.some(
       activeRevision => activeRevision.id === revision.id
     );
-    
+
     if (isInActiveRevisions) {
       console.log('Release blocked: revision requires transmittal', {
         revisionId: revision.id,
@@ -161,7 +161,7 @@ const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer((
       });
       return false;
     }
-    
+
     return true;
   };
 
@@ -268,9 +268,9 @@ const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer((
   return (
     <Box sx={{ flexGrow: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
       {hasRevisions || hasFile ? (
-        <TableContainer component={Paper} sx={{ 
-          flexGrow: 1, 
-          maxHeight: '400px', 
+        <TableContainer component={Paper} sx={{
+          flexGrow: 1,
+          maxHeight: '400px',
           overflow: 'auto',
           '&::-webkit-scrollbar': {
             width: '8px',
@@ -290,6 +290,7 @@ const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer((
           <Table stickyHeader size="small">
             <TableHead>
               <TableRow>
+                <TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>ID</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>{t('document.revision')}</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>{t('document.revision_description')}</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>{t('document.step')}</TableCell>
@@ -298,10 +299,10 @@ const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer((
                 <TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>{t('document.file_name')}</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>{t('document.change_description')}</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>{t('document.uploaded_at')}</TableCell>
-                <TableCell 
-                  sx={{ 
-                    position: 'sticky', 
-                    right: 0, 
+                <TableCell
+                  sx={{
+                    position: 'sticky',
+                    right: 0,
                     backgroundColor: 'background.paper',
                     zIndex: 2,
                     width: '160px',
@@ -317,8 +318,8 @@ const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer((
             <TableBody>
               {isCreating && fileMetadata ? (
                 // Показываем загруженный файл в режиме создания
-                <TableRow 
-                  sx={{ 
+                <TableRow
+                  sx={{
                     '&:hover': {
                       backgroundColor: 'rgba(0, 0, 0, 0.04) !important',
                       '& .MuiTableCell-root': {
@@ -327,35 +328,36 @@ const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer((
                     }
                   }}
                 >
+                  <TableCell>-</TableCell>
                   <TableCell>
-                    <Chip 
-                      label={workflowPresetSequence.length > 0 && workflowPresetSequence[0].revision_description 
+                    <Chip
+                      label={workflowPresetSequence.length > 0 && workflowPresetSequence[0].revision_description
                         ? `${workflowPresetSequence[0].revision_description.code}01`
                         : '01'
-                      } 
-                      size="small" 
+                      }
+                      size="small"
                     />
                   </TableCell>
                   <TableCell>
-                    {workflowPresetSequence.length > 0 && workflowPresetSequence[0].revision_description 
+                    {workflowPresetSequence.length > 0 && workflowPresetSequence[0].revision_description
                       ? `${workflowPresetSequence[0].revision_description.code} - ${workflowPresetSequence[0].revision_description.description}`
                       : '-'}
                   </TableCell>
                   <TableCell>
-                    {workflowPresetSequence.length > 0 && workflowPresetSequence[0].revision_step 
+                    {workflowPresetSequence.length > 0 && workflowPresetSequence[0].revision_step
                       ? `${workflowPresetSequence[0].revision_step.code} - ${workflowPresetSequence[0].revision_step.description}`
                       : '-'}
                   </TableCell>
                   <TableCell>
-                    <Chip 
-                      label="Active" 
+                    <Chip
+                      label="Active"
                       size="small"
                       color="success"
                     />
                   </TableCell>
                   <TableCell>
-                    <Chip 
-                      label="Draft" 
+                    <Chip
+                      label="Draft"
                       size="small"
                       color={getWorkflowStatusColor(1) as any}
                     />
@@ -374,10 +376,10 @@ const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer((
                   </TableCell>
                   <TableCell>{t('document.first_revision')}</TableCell>
                   <TableCell>{new Date().toLocaleDateString()}</TableCell>
-                  <TableCell 
-                    sx={{ 
-                      position: 'sticky', 
-                      right: 0, 
+                  <TableCell
+                    sx={{
+                      position: 'sticky',
+                      right: 0,
                       backgroundColor: 'background.paper',
                       zIndex: 1,
                       width: '160px',
@@ -387,9 +389,9 @@ const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer((
                     {isUploadingDocument ? (
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                         <Box sx={{ position: 'relative', display: 'inline-flex' }}>
-                          <CircularProgress 
-                            variant="determinate" 
-                            value={uploadProgress} 
+                          <CircularProgress
+                            variant="determinate"
+                            value={uploadProgress}
                             size={20}
                           />
                           <Box
@@ -415,8 +417,8 @@ const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer((
                         </Box>
                       </Box>
                     ) : (
-                      <IconButton 
-                        size="small" 
+                      <IconButton
+                        size="small"
                         onClick={onRemoveFile}
                         title={t('document.remove_file')}
                         color="default"
@@ -429,9 +431,9 @@ const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer((
               ) : (
                 // Показываем ревизии существующего документа
                 documentRevisionStore.getRevisions(documentId || 0).map((revision) => (
-                  <TableRow 
+                  <TableRow
                     key={revision.id}
-                    sx={{ 
+                    sx={{
                       '&:hover': {
                         backgroundColor: 'rgba(0, 0, 0, 0.04) !important',
                         '& .MuiTableCell-root': {
@@ -440,6 +442,7 @@ const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer((
                       }
                     }}
                   >
+                    <TableCell>{revision.id}</TableCell>
                     <TableCell>
                       <Chip label={referencesStore.getFullRevisionNumber(revision)} size="small" />
                     </TableCell>
@@ -450,15 +453,15 @@ const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer((
                       {referencesStore.getRevisionStepLabel(revision.revision_step_id, i18n.language) || '-'}
                     </TableCell>
                     <TableCell>
-                      <Chip 
-                        label={referencesStore.getRevisionStatusLabel(revision.revision_status_id, i18n.language)} 
+                      <Chip
+                        label={referencesStore.getRevisionStatusLabel(revision.revision_status_id, i18n.language)}
                         size="small"
                         color={getRevisionStatusColor(revision.revision_status_id || null) as any}
                       />
                     </TableCell>
                     <TableCell>
-                      <Chip 
-                        label={referencesStore.getWorkflowStatusLabel(revision.workflow_status_id, i18n.language)} 
+                      <Chip
+                        label={referencesStore.getWorkflowStatusLabel(revision.workflow_status_id, i18n.language)}
                         size="small"
                         color={getWorkflowStatusColor(revision.workflow_status_id) as any}
                       />
@@ -477,10 +480,10 @@ const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer((
                     </TableCell>
                     <TableCell>{revision.change_description || '-'}</TableCell>
                     <TableCell>{formatDate(revision.created_at)}</TableCell>
-                    <TableCell 
-                      sx={{ 
-                        position: 'sticky', 
-                        right: 0, 
+                    <TableCell
+                      sx={{
+                        position: 'sticky',
+                        right: 0,
                         backgroundColor: 'background.paper',
                         zIndex: 1,
                         width: '160px',
@@ -488,28 +491,28 @@ const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer((
                       }}
                     >
                       <Box sx={{ display: 'flex', gap: 1 }}>
-                        <IconButton 
-                          size="small" 
+                        <IconButton
+                          size="small"
                           title={t('document.download')}
                           onClick={() => onDownloadRevision(revision.id, revision.file_name || 'document')}
                         >
                           <DownloadIcon />
                         </IconButton>
                         {isDwgFile(revision.file_name, revision.file_type) && documentId && (
-                          <IconButton 
-                            size="small" 
+                          <IconButton
+                            size="small"
                             title={t('document.view_dwg') || 'Просмотр DWG'}
                             onClick={() => handleOpenViewer(revision)}
                           >
                             <VisibilityIcon />
                           </IconButton>
                         )}
-                        <IconButton 
-                          size="small" 
+                        <IconButton
+                          size="small"
                           title={t('document.compare')}
                           onClick={() => {
                             onCompareRevisions(
-                              referencesStore.getFullRevisionNumber(revision), 
+                              referencesStore.getFullRevisionNumber(revision),
                               ''
                             );
                           }}
@@ -517,26 +520,26 @@ const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer((
                           <CompareIcon />
                         </IconButton>
                         {canReleaseRevision(revision) && onRelease && (
-                          <IconButton 
-                            size="small" 
+                          <IconButton
+                            size="small"
                             title={t('documents.release')}
                             onClick={() => handleOpenReleaseModal(revision.id)}
                           >
                             <ReleaseIcon />
                           </IconButton>
                         )}
-                        {revision.revision_status_id === 1 && 
-                         revision.id === getLatestActiveRevision()?.id && 
-                         canCancelRevision?.(revision) && (
-                          <IconButton 
-                            size="small" 
-                            title={t('documents.cancel_revision')}
-                            onClick={() => onOpenCancelRevisionDialog(revision)}
-                            color="warning"
-                          >
-                            <CancelIcon />
-                          </IconButton>
-                        )}
+                        {revision.revision_status_id === 1 &&
+                          revision.id === getLatestActiveRevision()?.id &&
+                          canCancelRevision?.(revision) && (
+                            <IconButton
+                              size="small"
+                              title={t('documents.cancel_revision')}
+                              onClick={() => onOpenCancelRevisionDialog(revision)}
+                              color="warning"
+                            >
+                              <CancelIcon />
+                            </IconButton>
+                          )}
                       </Box>
                     </TableCell>
                   </TableRow>
@@ -546,12 +549,12 @@ const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer((
           </Table>
         </TableContainer>
       ) : (
-        <TableContainer component={Paper} sx={{ 
-          flexGrow: 1, 
-          maxHeight: '400px', 
+        <TableContainer component={Paper} sx={{
+          flexGrow: 1,
+          maxHeight: '400px',
           overflow: 'auto',
-          display: 'flex', 
-          alignItems: 'center', 
+          display: 'flex',
+          alignItems: 'center',
           justifyContent: 'center',
           '&::-webkit-scrollbar': {
             width: '8px',

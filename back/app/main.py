@@ -85,6 +85,28 @@ async def health_check():
     """Проверка здоровья приложения"""
     return {"status": "healthy", "version": settings.APP_VERSION}
 
+from sqlalchemy.orm import Session
+from fastapi import Depends
+from app.core.database import get_db
+from app.models.download_link import DownloadLink
+
+@app.get("/{token}")
+async def download_short_link(
+    token: str,
+    db: Session = Depends(get_db)
+):
+    """Short link redirect"""
+    if token == "favicon.ico":
+        raise HTTPException(status_code=404)
+        
+    # Check if token exists
+    link = db.query(DownloadLink).filter(DownloadLink.token == token).first()
+    if link:
+        return RedirectResponse(url=f"{settings.API_V1_STR}/download/{token}")
+    
+    # If not a link, might be 404
+    raise HTTPException(status_code=404, detail="Page not found")
+
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(

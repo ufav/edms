@@ -26,7 +26,7 @@ import {
   Alert
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import { 
+import {
   Add as AddIcon,
   Delete as DeleteIcon,
   Business as CompanyIcon,
@@ -60,12 +60,12 @@ const ParticipantsTab: React.FC<ParticipantsTabProps> = ({
   getRoleName,
 }) => {
   const { t } = useTranslation();
-  
+
   // Фильтруем компании, исключая уже добавленные
-  const availableCompanies = companies.filter(company => 
+  const availableCompanies = companies.filter(company =>
     !pendingParticipants.some(participant => participant.company_id === company.id)
   );
-  
+
   const [participantDialogOpen, setParticipantDialogOpen] = useState(false);
   const [isEditingParticipant, setIsEditingParticipant] = useState(false);
   const [selectedParticipant, setSelectedParticipant] = useState<any>(null);
@@ -80,19 +80,19 @@ const ParticipantsTab: React.FC<ParticipantsTabProps> = ({
 
   const validateForm = () => {
     const errors: string[] = [];
-    
+
     if (!participantFormData.company_id) {
       errors.push(t('createProject.messages.company_required'));
     }
-    
+
     if (!participantFormData.contact_id) {
       errors.push(t('createProject.messages.contact_required'));
     }
-    
+
     if (!participantFormData.company_role_id) {
       errors.push(t('createProject.messages.role_required'));
     }
-    
+
     setValidationErrors(errors);
     return errors.length === 0;
   };
@@ -123,7 +123,7 @@ const ParticipantsTab: React.FC<ParticipantsTabProps> = ({
     if (!validateForm()) {
       return; // Не сохраняем, если есть ошибки валидации
     }
-    
+
     const participantData = {
       ...participantFormData,
       company_id: participantFormData.company_id,
@@ -135,7 +135,7 @@ const ParticipantsTab: React.FC<ParticipantsTabProps> = ({
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     };
-    
+
     onSaveParticipant(participantData);
     setParticipantDialogOpen(false);
   };
@@ -171,6 +171,7 @@ const ParticipantsTab: React.FC<ParticipantsTabProps> = ({
                 <TableRow>
                   <TableCell>{t('createProject.table.company')}</TableCell>
                   <TableCell>{t('createProject.table.contact_person')}</TableCell>
+                  <TableCell>Email</TableCell>
                   <TableCell>{t('createProject.table.role')}</TableCell>
                   <TableCell>{t('createProject.table.primary')}</TableCell>
                   <TableCell>{t('createProject.table.actions')}</TableCell>
@@ -189,6 +190,12 @@ const ParticipantsTab: React.FC<ParticipantsTabProps> = ({
                       {(() => {
                         const contact = contacts.find(c => c.id === participant.contact_id);
                         return contact?.full_name || '-';
+                      })()}
+                    </TableCell>
+                    <TableCell>
+                      {(() => {
+                        const contact = contacts.find(c => c.id === participant.contact_id);
+                        return contact?.email || '-';
                       })()}
                     </TableCell>
                     <TableCell>
@@ -279,7 +286,7 @@ const ParticipantsTab: React.FC<ParticipantsTabProps> = ({
               onChange={(_, newValue) => {
                 const companyId = newValue ? newValue.id : null;
                 handleCompanyChange(companyId);
-                
+
                 // Сбрасываем контакт, если он не относится к выбранной компании
                 if (participantFormData.contact_id) {
                   const selectedContact = contacts.find(c => c.id === participantFormData.contact_id);

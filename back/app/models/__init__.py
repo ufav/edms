@@ -12,6 +12,7 @@ from .document_comments import DocumentComment
 from .document_workflow_history import DocumentWorkflowHistory
 from .transmittal import Transmittal, TransmittalRevision
 from .transmittal_import_settings import TransmittalImportSettings
+from .download_link import DownloadLink
 # Temporarily commented out to avoid circular imports
 # from .workflow import (
 #     WorkflowTemplate, WorkflowStep, DocumentWorkflow, DocumentApproval, DocumentHistory,
@@ -39,6 +40,7 @@ __all__ = [
     "DocumentWorkflowHistory",
     "Transmittal", "TransmittalRevision",
     "TransmittalImportSettings",
+    "DownloadLink",
     # "WorkflowTemplate", "WorkflowStep", "DocumentWorkflow", "DocumentApproval", "DocumentHistory",
     # "DocumentStatus", "ApprovalStatus",
     "Notification", "AuditLog",

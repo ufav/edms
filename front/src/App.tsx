@@ -20,6 +20,7 @@ import { userStore } from './stores/UserStore';
 import { settingsStore } from './stores/SettingsStore';
 import referenceDataStore from './stores/ReferenceDataStore';
 import { usePermissions } from './hooks/usePermissions';
+import { ConnectionStatusProvider } from './contexts/ConnectionStatusContext';
 import './i18n';
 
 const theme = createTheme({
@@ -214,29 +215,31 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
-        {isAuthenticated ? (
-          <Routes>
-            {/* Админские роуты */}
-            <Route path="/admin/*" element={<AdminRoutes />} />
-            
-            {/* Основные роуты приложения - используем старую систему */}
-            <Route path="/*" element={
-              <Layout
-                currentPage={currentPage}
-                onPageChange={handlePageChange}
-                onLogout={handleLogout}
-                user={user}
-                onProjectSelect={handleProjectSelect}
-              >
-                {renderPage()}
-              </Layout>
-            } />
-          </Routes>
-        ) : (
-          <Login onLogin={handleLogin} loginError={loginError} />
-        )}
-      </Router>
+      <ConnectionStatusProvider>
+        <Router future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
+          {isAuthenticated ? (
+            <Routes>
+              {/* Админские роуты */}
+              <Route path="/admin/*" element={<AdminRoutes />} />
+              
+              {/* Основные роуты приложения - используем старую систему */}
+              <Route path="/*" element={
+                <Layout
+                  currentPage={currentPage}
+                  onPageChange={handlePageChange}
+                  onLogout={handleLogout}
+                  user={user}
+                  onProjectSelect={handleProjectSelect}
+                >
+                  {renderPage()}
+                </Layout>
+              } />
+            </Routes>
+          ) : (
+            <Login onLogin={handleLogin} loginError={loginError} />
+          )}
+        </Router>
+      </ConnectionStatusProvider>
     </ThemeProvider>
   );
 }

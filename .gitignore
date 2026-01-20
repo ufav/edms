@@ -62,3 +62,6 @@ nginx/ssl/
 front/.cache/
 
 docste1/
+
+# Office temp files
+~$*

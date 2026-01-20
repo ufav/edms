@@ -2,10 +2,18 @@
 Transmittal models for EDMS
 """
 
-from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey
+from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Enum
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from app.core.database import Base
+import enum
+
+
+class CCSStatus(str, enum.Enum):
+    """CCS статусы для ревизий в трансмитталах"""
+    OPEN = "open"
+    CLOSED = "closed"
+
 
 class Transmittal(Base):
     __tablename__ = "transmittals"
@@ -43,6 +51,7 @@ class TransmittalRevision(Base):
     id = Column(Integer, primary_key=True, index=True)
     transmittal_id = Column(Integer, ForeignKey("transmittals.id", ondelete="CASCADE"))
     revision_id = Column(Integer, ForeignKey("document_revisions.id", ondelete="CASCADE"))
+    ccs_status = Column(Enum(CCSStatus), nullable=True)  # Only for incoming (direction='in')
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     # Relationships
