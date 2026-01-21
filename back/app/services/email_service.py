@@ -134,7 +134,7 @@ class EmailService:
             download_link: Link to download documents
             expires_in_days: Days until link expires
         """
-        subject = f"[EDMS] Трансмиттал {transmittal_number} — {project_name}"
+        subject = f"[EDMS] Transmittal {transmittal_number} — {project_name}"
         
         html_content = self._render_transmittal_email(
             transmittal_number=transmittal_number,
@@ -148,16 +148,16 @@ class EmailService:
         )
         
         plain_content = f"""
-Трансмиттал: {transmittal_number}
-Проект: {project_name}
-От: {sender_name}, {sender_company}
+Transmittal: {transmittal_number}
+Project: {project_name}
+Sender: {sender_name}{', ' + sender_company if sender_company else ''}
 
-Документы:
-{chr(10).join([f"- {doc['number']}: {doc['title']}" for doc in documents])}
+Documents:
+{chr(10).join([f"- {doc['number']}: {doc.get('revision', '-')}" for doc in documents])}
 
-Скачать документы: {download_link}
+Download: {download_link}
 
-Ссылка действительна {expires_in_days} дней.
+Link valid for {expires_in_days} days.
         """
         
         return self.send_email(
@@ -196,7 +196,7 @@ class EmailService:
                     <tr>
                         <td style="background: linear-gradient(135deg, #1976d2 0%, #1565c0 100%); padding: 30px; border-radius: 8px 8px 0 0;">
                             <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 600;">
-                                📄 Новый трансмиттал
+                                📄 New Transmittal
                             </h1>
                             <p style="margin: 10px 0 0 0; color: rgba(255,255,255,0.9); font-size: 16px;">
                                 {{ transmittal_number }}
@@ -211,40 +211,51 @@ class EmailService:
                             <table width="100%" style="margin-bottom: 25px;">
                                 <tr>
                                     <td style="padding: 10px 0; border-bottom: 1px solid #eee;">
-                                        <strong style="color: #666;">Проект:</strong>
+                                        <strong style="color: #666;">Project:</strong>
                                         <span style="color: #333; float: right;">{{ project_name }}</span>
                                     </td>
                                 </tr>
                                 <tr>
                                     <td style="padding: 10px 0; border-bottom: 1px solid #eee;">
-                                        <strong style="color: #666;">Название:</strong>
-                                        <span style="color: #333; float: right;">{{ transmittal_title }}</span>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td style="padding: 10px 0; border-bottom: 1px solid #eee;">
-                                        <strong style="color: #666;">Отправитель:</strong>
-                                        <span style="color: #333; float: right;">{{ sender_name }}, {{ sender_company }}</span>
+                                        <strong style="color: #666;">Sender:</strong>
+                                        <span style="color: #333; float: right;">{{ sender_name }}{% if sender_company %}, {{ sender_company }}{% endif %}</span>
                                     </td>
                                 </tr>
                             </table>
                             
                             <!-- Documents -->
                             <h3 style="margin: 0 0 15px 0; color: #333; font-size: 16px;">
-                                📋 Документы ({{ documents|length }}):
+                                📋 Documents ({{ documents|length }}):
                             </h3>
-                            <table width="100%" style="border: 1px solid #e0e0e0; border-radius: 4px; border-collapse: collapse; margin-bottom: 25px;">
+                            <table width="100%" style="border: 1px solid #e0e0e0; border-radius: 4px; border-collapse: collapse; margin-bottom: 25px; table-layout: fixed;">
                                 <thead>
                                     <tr style="background-color: #f5f5f5;">
-                                        <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e0e0e0; color: #666; font-weight: 600;">Номер</th>
-                                        <th style="padding: 12px; text-align: left; border-bottom: 1px solid #e0e0e0; color: #666; font-weight: 600;">Название</th>
+                                        <th style="padding: 12px 10px; text-align: left; border-bottom: 1px solid #e0e0e0; color: #666; font-weight: 600; font-size: 13px; width: 40%;">Document Number</th>
+                                        <th style="padding: 12px 8px; text-align: center; border-bottom: 1px solid #e0e0e0; color: #666; font-weight: 600; font-size: 13px; width: 10%;">Rev.</th>
+                                        <th style="padding: 12px 8px; text-align: center; border-bottom: 1px solid #e0e0e0; color: #666; font-weight: 600; font-size: 13px; width: 10%;">Step</th>
+                                        <th style="padding: 12px 8px; text-align: center; border-bottom: 1px solid #e0e0e0; color: #666; font-weight: 600; font-size: 13px; width: 10%;">Disc.</th>
+                                        <th style="padding: 12px 8px; text-align: center; border-bottom: 1px solid #e0e0e0; color: #666; font-weight: 600; font-size: 13px; width: 15%;">Doc Type</th>
+                                        <th style="padding: 12px 8px; text-align: center; border-bottom: 1px solid #e0e0e0; color: #666; font-weight: 600; font-size: 13px; width: 15%;">Format</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     {% for doc in documents %}
                                     <tr>
-                                        <td style="padding: 10px 12px; border-bottom: 1px solid #eee; color: #1976d2; font-family: monospace;">{{ doc.number }}</td>
-                                        <td style="padding: 10px 12px; border-bottom: 1px solid #eee; color: #333;">{{ doc.title }}</td>
+                                        <td style="padding: 10px; border-bottom: 1px solid #eee; color: #1976d2; font-family: 'Consolas', 'Monaco', monospace; font-size: 13px; word-break: break-all;">{{ doc.number }}</td>
+                                        <td style="padding: 10px 8px; border-bottom: 1px solid #eee; color: #333; text-align: center; font-size: 13px; font-weight: 500;">{{ doc.revision or '-' }}</td>
+                                        <td style="padding: 10px 8px; border-bottom: 1px solid #eee; color: #666; text-align: center; font-size: 13px;">{{ doc.revision_step or '-' }}</td>
+                                        <td style="padding: 10px 8px; border-bottom: 1px solid #eee; color: #666; text-align: center; font-size: 13px;">{{ doc.discipline_code or '-' }}</td>
+                                        <td style="padding: 10px 8px; border-bottom: 1px solid #eee; color: #666; text-align: center; font-size: 13px;">{{ doc.doc_type_code or '-' }}</td>
+                                        <td style="padding: 10px 8px; border-bottom: 1px solid #eee; text-align: center; font-size: 13px;">
+                                            {% if doc.file_type == 'PDF' %}📕
+                                            {% elif doc.file_type == 'DOC' or doc.file_type == 'DOCX' %}📘
+                                            {% elif doc.file_type == 'XLS' or doc.file_type == 'XLSX' %}📗
+                                            {% elif doc.file_type == 'DWG' or doc.file_type == 'DXF' %}📐
+                                            {% elif doc.file_type == 'PNG' or doc.file_type == 'JPG' or doc.file_type == 'JPEG' %}🖼️
+                                            {% elif doc.file_type == 'ZIP' or doc.file_type == 'RAR' %}📦
+                                            {% else %}📄{% endif %}
+                                            <span style="color: #999;">{{ doc.file_type or '-' }}</span>
+                                        </td>
                                     </tr>
                                     {% endfor %}
                                 </tbody>
@@ -256,7 +267,7 @@ class EmailService:
                                     <td align="center" style="padding: 20px 0;">
                                         <a href="{{ download_link }}" 
                                            style="display: inline-block; background: linear-gradient(135deg, #4caf50 0%, #43a047 100%); color: #ffffff; text-decoration: none; padding: 15px 40px; border-radius: 6px; font-size: 16px; font-weight: 600; box-shadow: 0 3px 6px rgba(76, 175, 80, 0.3);">
-                                            ⬇️ Скачать документы
+                                            ⬇️ Download Documents
                                         </a>
                                     </td>
                                 </tr>
@@ -264,7 +275,7 @@ class EmailService:
                             
                             <!-- Expiry notice -->
                             <p style="margin: 20px 0 0 0; color: #999; font-size: 13px; text-align: center;">
-                                ⏱️ Ссылка действительна {{ expires_in_days }} дней
+                                ⏱️ Link valid for {{ expires_in_days }} days
                             </p>
                         </td>
                     </tr>
@@ -273,8 +284,8 @@ class EmailService:
                     <tr>
                         <td style="background-color: #f5f5f5; padding: 20px 30px; border-radius: 0 0 8px 8px; border-top: 1px solid #eee;">
                             <p style="margin: 0; color: #999; font-size: 12px; text-align: center;">
-                                Это автоматическое уведомление от системы EDMS.<br>
-                                Если у вас есть вопросы, обратитесь к отправителю.
+                                This is an automatic notification from the document management system.<br>
+                                If you have any questions, please contact the sender.
                             </p>
                         </td>
                     </tr>

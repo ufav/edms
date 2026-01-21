@@ -21,6 +21,7 @@ import {
   DragIndicator as DragIndicatorIcon,
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
+import { userStore } from '../../../stores/UserStore';
 import {
   DndContext,
   closestCenter,
@@ -42,6 +43,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 
 export interface ColumnVisibility {
+  id: boolean;
   title: boolean;
   number: boolean;
   file: boolean;
@@ -74,11 +76,11 @@ interface SortableColumnItemProps {
   t: (key: string) => string;
 }
 
-const SortableColumnItem: React.FC<SortableColumnItemProps> = ({ 
-  column, 
-  visibleCols, 
-  onColumnVisibilityChange, 
-  t 
+const SortableColumnItem: React.FC<SortableColumnItemProps> = ({
+  column,
+  visibleCols,
+  onColumnVisibilityChange,
+  t
 }) => {
   const {
     attributes,
@@ -97,6 +99,7 @@ const SortableColumnItem: React.FC<SortableColumnItemProps> = ({
 
   const getColumnLabel = (columnKey: ColumnKey) => {
     switch (columnKey) {
+      case 'id': return 'ID';
       case 'title': return t('documents.columns.title');
       case 'number': return t('documents.columns.number');
       case 'file': return t('documents.columns.file');
@@ -118,7 +121,12 @@ const SortableColumnItem: React.FC<SortableColumnItemProps> = ({
   };
 
   // Не показываем actions и checkbox в списке для перетаскивания
+  // Колонку ID показываем только админам
   if (column.column === 'actions') {
+    return null;
+  }
+
+  if (column.column === 'id' && userStore.currentUser?.role !== 'admin') {
     return null;
   }
 
@@ -164,11 +172,11 @@ const SortableColumnItem: React.FC<SortableColumnItemProps> = ({
 export interface DocumentSettingsDialogProps {
   // Состояние диалога
   open: boolean;
-  
+
   // Настройки колонок
   visibleCols: ColumnVisibility;
   columnOrder: ColumnOrder[];
-  
+
   // Обработчики
   onClose: () => void;
   onColumnVisibilityChange: (column: keyof ColumnVisibility, checked: boolean) => void;
@@ -200,7 +208,7 @@ export const DocumentSettingsDialog: React.FC<DocumentSettingsDialogProps> = ({
       const newIndex = columnOrder.findIndex(item => item.column === over.id);
 
       const newOrder = arrayMove(columnOrder, oldIndex, newIndex);
-      
+
       // Обновляем порядок в массиве
       const updatedOrder = newOrder.map((item, index) => ({
         ...item,
@@ -211,8 +219,8 @@ export const DocumentSettingsDialog: React.FC<DocumentSettingsDialogProps> = ({
     }
   };
 
-  // Фильтруем колонки, исключая actions (он всегда справа)
-  const sortableColumns = columnOrder.filter(col => col.column !== 'actions');
+  // Фильтруем колонки, исключая actions (всегда справа) и id (всегда первый)
+  const sortableColumns = columnOrder.filter(col => col.column !== 'actions' && col.column !== 'id');
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
@@ -240,24 +248,24 @@ export const DocumentSettingsDialog: React.FC<DocumentSettingsDialogProps> = ({
               {t('documents.settings.fixed_columns')}
             </Typography>
             <FormGroup>
-              <FormControlLabel 
+              <FormControlLabel
                 control={
-                  <Checkbox 
-                    checked={true} 
+                  <Checkbox
+                    checked={true}
                     disabled
                   />
-                } 
-                label={t('documents.settings.checkbox_column')} 
+                }
+                label={t('documents.settings.checkbox_column')}
                 sx={{ opacity: 0.7 }}
               />
-              <FormControlLabel 
+              <FormControlLabel
                 control={
-                  <Checkbox 
-                    checked={visibleCols.actions ?? true} 
-                    onChange={(e) => onColumnVisibilityChange('actions', e.target.checked)} 
+                  <Checkbox
+                    checked={visibleCols.actions ?? true}
+                    onChange={(e) => onColumnVisibilityChange('actions', e.target.checked)}
                   />
-                } 
-                label={t('documents.settings.actions_column')} 
+                }
+                label={t('documents.settings.actions_column')}
               />
             </FormGroup>
           </Box>

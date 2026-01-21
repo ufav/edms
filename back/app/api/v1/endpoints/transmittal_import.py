@@ -310,9 +310,22 @@ def extract_metadata(excel_data: pd.DataFrame, metadata_fields: Dict[str, Any]) 
     print(f"DEBUG: Поля для поиска: {list(metadata_fields.keys())}")
     
     for field_key, field_config in metadata_fields.items():
-        label = field_config['label']
-        position = field_config['position']
+        if not isinstance(field_config, dict):
+            print(f"DEBUG: [ОШИБКА] Конфигурация для поля '{field_key}' не является словарем: {field_config}")
+            continue
+            
+        label = field_config.get('label')
+        position = field_config.get('position')
         
+        # Если позиция не указана, используем 'right' по умолчанию
+        if not position:
+            print(f"DEBUG: Позиция для поля '{field_key}' не указана, используем 'right' по умолчанию")
+            position = 'right'
+        
+        if not label:
+            print(f"DEBUG: [ОШИБКА] Отсутствует label для поля '{field_key}'")
+            continue
+            
         print(f"DEBUG: ===== Ищем поле '{field_key}' с лейблом '{label}' в позиции '{position}' =====")
         
         found_field = False
@@ -323,47 +336,45 @@ def extract_metadata(excel_data: pd.DataFrame, metadata_fields: Dict[str, Any]) 
                 # Проверяем ВСЕ ячейки, даже пустые
                 cell_str = str(cell_value).strip() if pd.notna(cell_value) else ""
                 
-                # Показываем ВСЕ ячейки для полной диагностики
-                print(f"DEBUG: Ячейка [{row_idx}, {col_idx}]: '{cell_str}'")
+                # Не печатаем все ячейки, чтобы не засорять лог, если их слишком много
+                # print(f"DEBUG: Ячейка [{row_idx}, {col_idx}]: '{cell_str}'")
                 
                 # Проверяем точное совпадение (самое важное)
                 if cell_str == label:
                     print(f"DEBUG: [НАЙДЕНО] ТОЧНОЕ СОВПАДЕНИЕ! Найдено в ячейке [{row_idx}, {col_idx}]: '{cell_str}'")
                     
+                    found_value = None
+                    value_source = "НЕ НАЙДЕНО"
+                    
                     # Находим значение в указанной позиции
                     if position == 'right' and col_idx + 1 < len(row):
+                        value_source = "СПРАВА"
                         next_value = row.iloc[col_idx + 1]
                         if pd.notna(next_value):
-                            metadata[field_key] = str(next_value).strip()
-                            print(f"DEBUG: [НАЙДЕНО] ЗНАЧЕНИЕ СПРАВА: '{metadata[field_key]}'")
-                            found_field = True
-                        else:
-                            print(f"DEBUG: Ячейка справа пустая!")
+                            found_value = str(next_value).strip()
                     elif position == 'left' and col_idx - 1 >= 0:
+                        value_source = "СЛЕВА"
                         prev_value = row.iloc[col_idx - 1]
                         if pd.notna(prev_value):
-                            metadata[field_key] = str(prev_value).strip()
-                            print(f"DEBUG: [НАЙДЕНО] ЗНАЧЕНИЕ СЛЕВА: '{metadata[field_key]}'")
-                            found_field = True
-                        else:
-                            print(f"DEBUG: Ячейка слева пустая!")
+                            found_value = str(prev_value).strip()
                     elif position == 'below' and row_idx + 1 < len(excel_data):
+                        value_source = "СНИЗУ"
                         below_value = excel_data.iloc[row_idx + 1, col_idx]
                         if pd.notna(below_value):
-                            metadata[field_key] = str(below_value).strip()
-                            print(f"DEBUG: [НАЙДЕНО] ЗНАЧЕНИЕ СНИЗУ: '{metadata[field_key]}'")
-                            found_field = True
-                        else:
-                            print(f"DEBUG: Ячейка снизу пустая!")
+                            found_value = str(below_value).strip()
                     elif position == 'above' and row_idx - 1 >= 0:
+                        value_source = "СВЕРХУ"
                         above_value = excel_data.iloc[row_idx - 1, col_idx]
                         if pd.notna(above_value):
-                            metadata[field_key] = str(above_value).strip()
-                            print(f"DEBUG: [НАЙДЕНО] ЗНАЧЕНИЕ СВЕРХУ: '{metadata[field_key]}'")
-                            found_field = True
-                        else:
-                            print(f"DEBUG: Ячейка сверху пустая!")
+                            found_value = str(above_value).strip()
                     
+                    if found_value is not None:
+                        metadata[field_key] = found_value
+                        print(f"DEBUG: [НАЙДЕНО] ЗНАЧЕНИЕ {value_source}: '{found_value}'")
+                        found_field = True
+                    else:
+                        print(f"DEBUG: Ячейка {value_source} пустая или выходит за границы!")
+
                     if found_field:
                         break
             

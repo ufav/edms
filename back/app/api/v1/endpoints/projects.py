@@ -75,6 +75,7 @@ class ProjectCreate(BaseModel):
     name: str
     description: str = None
     project_code: str | None = None
+    spn: str | None = None  # Supplier Package Number
     status: str = "planning"
     start_date: str = None
     end_date: str = None
@@ -92,6 +93,7 @@ class ProjectUpdate(BaseModel):
     name: str = None
     description: str = None
     project_code: str = None
+    spn: str = None  # Supplier Package Number
     status: str = None
     start_date: str = None
     end_date: str = None
@@ -440,6 +442,7 @@ async def get_projects(
             "name": project.name,
             "description": project.description,
             "project_code": project.project_code,
+            "spn": project.spn,
             "status": project.status,
             "start_date": project.start_date.isoformat() if project.start_date else None,
             "end_date": project.end_date.isoformat() if project.end_date else None,
@@ -488,6 +491,7 @@ async def create_project(
         name=project_data.name,
         description=project_data.description,
         project_code=project_data.project_code or _generate_project_code(),
+        spn=project_data.spn,
         status=project_data.status,
         start_date=project_data.start_date,
         end_date=project_data.end_date,
@@ -653,6 +657,7 @@ async def create_project(
         "name": db_project.name,
         "description": db_project.description,
         "project_code": db_project.project_code,
+        "spn": db_project.spn,
         "status": db_project.status,
         "start_date": db_project.start_date.isoformat() if db_project.start_date else None,
         "end_date": db_project.end_date.isoformat() if db_project.end_date else None,
@@ -681,6 +686,7 @@ async def get_project(
         "name": project.name,
         "description": project.description,
         "project_code": project.project_code,
+        "spn": project.spn,
         "status": project.status,
         "start_date": project.start_date.isoformat() if project.start_date else None,
         "end_date": project.end_date.isoformat() if project.end_date else None,
@@ -725,7 +731,7 @@ async def update_project(
     }
 
     # Обновляем простые поля
-    for field in ["name", "description", "project_code", "status", "start_date", "end_date", "budget"]:
+    for field in ["name", "description", "project_code", "spn", "status", "start_date", "end_date", "budget"]:
         value = getattr(project_data, field)
         if value is not None:
             # Проверяем изменение статуса проекта

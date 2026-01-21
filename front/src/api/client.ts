@@ -84,6 +84,7 @@ export interface Project {
   name: string;
   description: string;
   project_code: string;
+  spn?: string;
   status: string;
   start_date: string | null;
   end_date: string | null;
@@ -592,11 +593,11 @@ export const projectsApi = {
   },
 
   // Проверить уникальность кода проекта
-  checkCode: async (projectCode: string): Promise<{ 
-    exists: boolean; 
-    message: string; 
-    owner?: string; 
-    project_name?: string; 
+  checkCode: async (projectCode: string): Promise<{
+    exists: boolean;
+    message: string;
+    owner?: string;
+    project_name?: string;
     is_deleted?: boolean;
   }> => {
     const response = await apiClient.get(`/projects/check-code/${encodeURIComponent(projectCode)}`);
@@ -604,9 +605,9 @@ export const projectsApi = {
   },
 
   // Создать новый проект
-  create: async (projectData: Partial<Project> & { 
-    selected_disciplines?: number[]; 
-    discipline_document_types?: { [key: number]: Array<{ documentTypeId: number, drs?: string }> } 
+  create: async (projectData: Partial<Project> & {
+    selected_disciplines?: number[];
+    discipline_document_types?: { [key: number]: Array<{ documentTypeId: number, drs?: string }> }
   }): Promise<Project> => {
     const response = await apiClient.post('/projects/', projectData);
     return response.data;
@@ -859,7 +860,7 @@ export const documentsApi = {
       return response.data;
     } catch (error: any) {
       console.error('Download error in API client:', error);
-      
+
       // Если ошибка 404, проверяем, является ли response.data JSON с сообщением об ошибке
       if (error.response?.status === 404 && error.response?.data) {
         try {
@@ -875,16 +876,16 @@ export const documentsApi = {
           throw new Error('Файл не найден');
         }
       }
-      
+
       // Для других ошибок
       if (error.response?.status) {
         throw new Error(`Ошибка сервера: ${error.response.status}`);
       }
-      
+
       throw error;
     }
   },
-  
+
   // Импорт документов по путям из Excel
   importByPaths: async (formData: FormData): Promise<any> => {
     const response = await apiClient.post('/documents/import-by-paths', formData, {
@@ -896,7 +897,7 @@ export const documentsApi = {
   },
 
   // Тип элемента ревизии документа из бэкенда
-  
+
   // Получить ревизии документа
   getRevisions: async (documentId: number): Promise<DocumentRevisionItem[]> => {
     const response = await apiClient.get(`/documents/${documentId}/revisions`);
@@ -955,7 +956,7 @@ export const documentsApi = {
       return response.data;
     } catch (error: any) {
       console.error('Download revision error in API client:', error);
-      
+
       // Если ошибка 404, проверяем, является ли response.data JSON с сообщением об ошибке
       if (error.response?.status === 404 && error.response?.data) {
         try {
@@ -971,12 +972,12 @@ export const documentsApi = {
           throw new Error('Файл не найден');
         }
       }
-      
+
       // Для других ошибок
       if (error.response?.status) {
         throw new Error(`Ошибка сервера: ${error.response.status}`);
       }
-      
+
       throw error;
     }
   },
@@ -1285,10 +1286,10 @@ export const languagesApi = {
   },
 
   // Создать язык
-  create: async (languageData: { 
-    name: string; 
+  create: async (languageData: {
+    name: string;
     name_native?: string;
-    code: string; 
+    code: string;
     is_active?: boolean;
   }): Promise<Language> => {
     const response = await apiClient.post('/references/languages', languageData);
@@ -1316,11 +1317,11 @@ export const documentTypesApi = {
   },
 
   // Создать тип документа
-  create: async (documentTypeData: { 
-    name: string; 
-    description?: string; 
-    discipline_id?: number; 
-    is_active: boolean 
+  create: async (documentTypeData: {
+    name: string;
+    description?: string;
+    discipline_id?: number;
+    is_active: boolean
   }): Promise<DocumentType> => {
     const response = await apiClient.post('/disciplines/document-types', documentTypeData);
     return response.data;
@@ -1384,7 +1385,7 @@ export const transmittalImportApi = {
     formData.append('file', file);
     formData.append('project_id', projectId.toString());
     formData.append('counterparty_id', counterpartyId.toString());
-    
+
     const response = await apiClient.post('/transmittal-import/import', formData, {
       headers: {
         'Content-Type': 'multipart/form-data',
@@ -1422,7 +1423,7 @@ export const authApi = {
     const params = new URLSearchParams();
     params.append('username', username);
     params.append('password', password);
-    
+
     const response = await apiClient.post('/auth/login', params, {
       headers: {
         'Content-Type': 'application/x-www-form-urlencoded',
@@ -1469,20 +1470,20 @@ apiClient.interceptors.response.use(
       removeAuthToken();
       // Можно добавить редирект на страницу входа
     }
-    
+
     // Обрабатываем сетевые ошибки
     if (!error.response) {
       // Сетевая ошибка или таймаут
       const networkError = new Error('Network Error');
       return Promise.reject(networkError);
     }
-    
+
     // Обрабатываем ошибки CORS
     if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
       const corsError = new Error('CORS Error');
       return Promise.reject(corsError);
     }
-    
+
     return Promise.reject(error);
   }
 );
@@ -1497,19 +1498,19 @@ export const supportApi = {
     });
     return response.data;
   },
-  
+
   // Получение списка тикетов
   getTickets: async (): Promise<any[]> => {
     const response = await apiClient.get('/support/tickets');
     return response.data;
   },
-  
+
   // Получение тикета с сообщениями
   getTicket: async (ticketId: number): Promise<any> => {
     const response = await apiClient.get(`/support/tickets/${ticketId}`);
     return response.data;
   },
-  
+
   // Отправка сообщения в тикет
   createMessage: async (ticketId: number, formData: FormData): Promise<any> => {
     const response = await apiClient.post(`/support/tickets/${ticketId}/messages`, formData, {
@@ -1519,13 +1520,13 @@ export const supportApi = {
     });
     return response.data;
   },
-  
+
   // Возврат тикета в работу
   reopenTicket: async (ticketId: number): Promise<any> => {
     const response = await apiClient.post(`/support/tickets/${ticketId}/reopen`);
     return response.data;
   },
-  
+
   // Скачивание файла
   downloadFile: async (ticketId: number, fileId: number): Promise<Blob> => {
     const response = await apiClient.get(`/support/tickets/${ticketId}/files/${fileId}/download`, {
@@ -1533,19 +1534,19 @@ export const supportApi = {
     });
     return response.data;
   },
-  
+
   // Получение chat_id из Telegram
   getTelegramChatId: async (): Promise<any> => {
     const response = await apiClient.get('/support/telegram/get-chat-id');
     return response.data;
   },
-  
+
   // Установка webhook для Telegram бота
   setupTelegramWebhook: async (webhookUrl: string): Promise<any> => {
     const response = await apiClient.post(`/support/telegram/setup-webhook?webhook_url=${encodeURIComponent(webhookUrl)}`);
     return response.data;
   },
-  
+
   // Запуск polling для локальной разработки (без webhook)
   startTelegramPolling: async (): Promise<any> => {
     const response = await apiClient.post('/support/telegram/start-polling');
@@ -1559,7 +1560,7 @@ export const workflowApi = {
     const params = new URLSearchParams();
     if (disciplineId) params.append('discipline_id', disciplineId.toString());
     if (documentTypeId) params.append('document_type_id', documentTypeId.toString());
-    
+
     const response = await apiClient.get('/workflow/workflow-templates/', { params });
     return response.data;
   },
@@ -1671,95 +1672,95 @@ export interface Originator {
 // References API
 export const referencesApi = {
   // Revision Statuses
-  getRevisionStatuses: (): Promise<RevisionStatus[]> => 
+  getRevisionStatuses: (): Promise<RevisionStatus[]> =>
     apiClient.get('/references/revision-statuses').then(res => res.data),
-  
-  createRevisionStatus: (data: Partial<RevisionStatus>): Promise<RevisionStatus> => 
+
+  createRevisionStatus: (data: Partial<RevisionStatus>): Promise<RevisionStatus> =>
     apiClient.post('/references/revision-statuses', data).then(res => res.data),
-  
+
   // Revision Descriptions
-  getRevisionDescriptions: (): Promise<RevisionDescription[]> => 
+  getRevisionDescriptions: (): Promise<RevisionDescription[]> =>
     apiClient.get('/references/revision-descriptions').then(res => res.data),
-  
-  createRevisionDescription: (data: Partial<RevisionDescription>): Promise<RevisionDescription> => 
+
+  createRevisionDescription: (data: Partial<RevisionDescription>): Promise<RevisionDescription> =>
     apiClient.post('/references/revision-descriptions', data).then(res => res.data),
-  
+
   // Revision Steps
-  getRevisionSteps: (): Promise<RevisionStep[]> => 
+  getRevisionSteps: (): Promise<RevisionStep[]> =>
     apiClient.get('/references/revision-steps').then(res => res.data),
-  
-  createRevisionStep: (data: Partial<RevisionStep>): Promise<RevisionStep> => 
+
+  createRevisionStep: (data: Partial<RevisionStep>): Promise<RevisionStep> =>
     apiClient.post('/references/revision-steps', data).then(res => res.data),
-  
+
   // Areas (справочник объектов/площадок)
-  getAreas: (): Promise<any[]> => 
+  getAreas: (): Promise<any[]> =>
     apiClient.get('/references/areas').then(res => res.data),
-  
+
   // Originators
-  getOriginators: (): Promise<Originator[]> => 
+  getOriginators: (): Promise<Originator[]> =>
     apiClient.get('/references/originators').then(res => res.data),
-  
-  createOriginator: (data: Partial<Originator>): Promise<Originator> => 
+
+  createOriginator: (data: Partial<Originator>): Promise<Originator> =>
     apiClient.post('/references/originators', data).then(res => res.data),
-  
+
   // Review Codes
-  getReviewCodes: (): Promise<ReviewCode[]> => 
+  getReviewCodes: (): Promise<ReviewCode[]> =>
     apiClient.get('/references/review-codes').then(res => res.data),
-  
-  createReviewCode: (data: Partial<ReviewCode>): Promise<ReviewCode> => 
+
+  createReviewCode: (data: Partial<ReviewCode>): Promise<ReviewCode> =>
     apiClient.post('/references/review-codes', data).then(res => res.data),
-  
+
   // Languages
-  getLanguages: (): Promise<Language[]> => 
+  getLanguages: (): Promise<Language[]> =>
     apiClient.get('/references/languages').then(res => res.data),
-  
-  createLanguage: (data: Partial<Language>): Promise<Language> => 
+
+  createLanguage: (data: Partial<Language>): Promise<Language> =>
     apiClient.post('/references/languages', data).then(res => res.data),
-  
+
   // Departments
-  getDepartments: (): Promise<Department[]> => 
+  getDepartments: (): Promise<Department[]> =>
     apiClient.get('/references/departments').then(res => res.data),
-  
-  createDepartment: (data: Partial<Department>): Promise<Department> => 
+
+  createDepartment: (data: Partial<Department>): Promise<Department> =>
     apiClient.post('/references/departments', data).then(res => res.data),
-  
+
   // Companies
-  getCompanies: (): Promise<Company[]> => 
+  getCompanies: (): Promise<Company[]> =>
     apiClient.get('/references/companies').then(res => res.data),
-  
-  createCompany: (data: Partial<Company>): Promise<Company> => 
+
+  createCompany: (data: Partial<Company>): Promise<Company> =>
     apiClient.post('/references/companies', data).then(res => res.data),
-  
+
   // User Roles
-  getUserRoles: (): Promise<UserRole[]> => 
+  getUserRoles: (): Promise<UserRole[]> =>
     apiClient.get('/references/user-roles').then(res => res.data),
-  
-  createUserRole: (data: Partial<UserRole>): Promise<UserRole> => 
+
+  createUserRole: (data: Partial<UserRole>): Promise<UserRole> =>
     apiClient.post('/references/user-roles', data).then(res => res.data),
-  
+
   // Workflow Statuses
-  getWorkflowStatuses: (): Promise<WorkflowStatus[]> => 
+  getWorkflowStatuses: (): Promise<WorkflowStatus[]> =>
     apiClient.get('/references/workflow-statuses').then(res => res.data),
-  
-  createWorkflowStatus: (data: Partial<WorkflowStatus>): Promise<WorkflowStatus> => 
+
+  createWorkflowStatus: (data: Partial<WorkflowStatus>): Promise<WorkflowStatus> =>
     apiClient.post('/references/workflow-statuses', data).then(res => res.data)
 };
 
 // Workflow Presets API
 export const workflowPresetsApi = {
-  getAll: (): Promise<any[]> => 
+  getAll: (): Promise<any[]> =>
     apiClient.get('/workflow-presets/').then(res => res.data),
-  
-  getById: (id: number): Promise<any> => 
+
+  getById: (id: number): Promise<any> =>
     apiClient.get(`/workflow-presets/${id}`).then(res => res.data),
-  
-  create: (data: any): Promise<any> => 
+
+  create: (data: any): Promise<any> =>
     apiClient.post('/workflow-presets/', data).then(res => res.data),
-  
-  update: (id: number, data: any): Promise<any> => 
+
+  update: (id: number, data: any): Promise<any> =>
     apiClient.put(`/workflow-presets/${id}`, data).then(res => res.data),
-  
-  delete: (id: number): Promise<void> => 
+
+  delete: (id: number): Promise<void> =>
     apiClient.delete(`/workflow-presets/${id}`).then(res => res.data)
 };
 
@@ -1770,7 +1771,7 @@ export const workflowPresetsApi = {
 
 // Companies API
 export const companiesApi = {
-  getAll: (): Promise<Company[]> => 
+  getAll: (): Promise<Company[]> =>
     apiClient.get('/companies').then(res => res.data)
 };
 
@@ -1877,47 +1878,47 @@ export const rolesApi = {
     const response = await apiClient.get('/roles/user-roles/');
     return response.data;
   },
-  
+
   getUserRole: async (roleId: number): Promise<ApiUserRole> => {
     const response = await apiClient.get(`/roles/user-roles/${roleId}`);
     return response.data;
   },
-  
+
   createUserRole: async (role: Omit<ApiUserRole, 'id' | 'created_at'>): Promise<ApiUserRole> => {
     const response = await apiClient.post('/roles/user-roles/', role);
     return response.data;
   },
-  
+
   updateUserRole: async (roleId: number, role: Partial<ApiUserRole>): Promise<ApiUserRole> => {
     const response = await apiClient.put(`/roles/user-roles/${roleId}`, role);
     return response.data;
   },
-  
+
   deleteUserRole: async (roleId: number): Promise<void> => {
     await apiClient.delete(`/roles/user-roles/${roleId}`);
   },
-  
+
   // Project Roles
   getProjectRoles: async (): Promise<ApiProjectRole[]> => {
     const response = await apiClient.get('/roles/project-roles/');
     return response.data;
   },
-  
+
   getProjectRole: async (roleId: number): Promise<ApiProjectRole> => {
     const response = await apiClient.get(`/roles/project-roles/${roleId}`);
     return response.data;
   },
-  
+
   createProjectRole: async (role: Omit<ApiProjectRole, 'id' | 'created_at'>): Promise<ApiProjectRole> => {
     const response = await apiClient.post('/roles/project-roles/', role);
     return response.data;
   },
-  
+
   updateProjectRole: async (roleId: number, role: Partial<ApiProjectRole>): Promise<ApiProjectRole> => {
     const response = await apiClient.put(`/roles/project-roles/${roleId}`, role);
     return response.data;
   },
-  
+
   deleteProjectRole: async (roleId: number): Promise<void> => {
     await apiClient.delete(`/roles/project-roles/${roleId}`);
   }
@@ -1986,8 +1987,8 @@ export const auditLogsApi = {
 export const notificationsApi = {
   // Получить уведомления пользователя
   getNotifications: async (unreadOnly: boolean = false, limit: number = 50): Promise<any[]> => {
-    const response = await apiClient.get('/notifications/', { 
-      params: { unread_only: unreadOnly, limit } 
+    const response = await apiClient.get('/notifications/', {
+      params: { unread_only: unreadOnly, limit }
     });
     return response.data;
   },

@@ -31,6 +31,7 @@ import RevisionsTableSkeleton from './RevisionsTableSkeleton';
 import ConfirmDialog from '../../ConfirmDialog';
 import DocumentReleaseModal from './DocumentReleaseModal';
 import AutodeskViewerDialog from './AutodeskViewerDialog';
+import { userStore } from '../../../stores/UserStore';
 
 interface DocumentRevisionsTableProps {
   documentId: number | null;
@@ -290,7 +291,9 @@ const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer((
           <Table stickyHeader size="small">
             <TableHead>
               <TableRow>
-                <TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>ID</TableCell>
+                {userStore.currentUser?.role === 'admin' && (
+                  <TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>ID</TableCell>
+                )}
                 <TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>{t('document.revision')}</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>{t('document.revision_description')}</TableCell>
                 <TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>{t('document.step')}</TableCell>
@@ -442,7 +445,9 @@ const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer((
                       }
                     }}
                   >
-                    <TableCell>{revision.id}</TableCell>
+                    {userStore.currentUser?.role === 'admin' && (
+                      <TableCell>{revision.id}</TableCell>
+                    )}
                     <TableCell>
                       <Chip label={referencesStore.getFullRevisionNumber(revision)} size="small" />
                     </TableCell>

@@ -30,6 +30,7 @@ class Project(Base):
     name = Column(String(200), nullable=False)
     description = Column(Text)
     project_code = Column(String(50), unique=True, index=True, nullable=False)
+    spn = Column(String(100), nullable=True)  # Supplier Package Number
     status = Column(Enum(ProjectStatusEnum), default=ProjectStatusEnum.ACTIVE)
     start_date = Column(Date)
     end_date = Column(Date)

@@ -69,7 +69,11 @@ export interface TransmittalDialogProps {
   // Просмотр (readOnly)
   readOnly?: boolean;
   revisions?: any[];
-  initialData?: Partial<TransmittalData> & { status?: string };
+  initialData?: Partial<TransmittalData> & {
+    status?: string;
+    created_at?: string;
+    created_by?: number;
+  };
   titleOverride?: string;
   // Редактирование
   isEditing?: boolean;
@@ -386,8 +390,8 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
 
   // Обработчик для переключения CCS статуса (только для incoming)
   const handleToggleCcsStatus = async (revision: any) => {
-    if (!readOnly || !initialData?.direction || initialData.direction !== 'in') {
-      return; // CCS статус доступен только для incoming трансмитталов в режиме просмотра
+    if (!initialData?.direction || initialData.direction !== 'in') {
+      return; // CCS статус доступен только для incoming трансмитталов
     }
 
     try {
@@ -902,14 +906,15 @@ const TransmittalDialog: React.FC<TransmittalDialogProps> = observer(({
                                 gap: 1
                               }}
                             >
-                              {/* Кнопка для изменения CCS статуса (только для incoming, только в режиме просмотра, и только для финальных статусов) */}
-                              {readOnly && !isEditing && initialData?.direction === 'in' && ['Approved', 'Approved with Comments', 'Not Reviewed'].includes(revision.workflow_status) && (
+                              {/* Кнопка для изменения CCS статуса (только для incoming и только для финальных статусов) */}
+                              {initialData?.direction === 'in' && ['Approved', 'Approved with Comments', 'Not Reviewed'].includes(revision.workflow_status) && (
                                 <Button
                                   variant={revision.ccs_status === 'closed' ? 'contained' : 'outlined'}
                                   color={revision.ccs_status === 'closed' ? 'success' : 'primary'}
                                   size="small"
                                   startIcon={<CheckCircleIcon />}
                                   onClick={() => handleToggleCcsStatus(revision)}
+                                  disabled={readOnly && !isEditing}
                                   sx={{
                                     minWidth: '90px',
                                     fontSize: '0.75rem',

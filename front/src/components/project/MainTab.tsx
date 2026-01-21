@@ -21,6 +21,7 @@ interface MainTabProps {
   formData: {
     name: string;
     project_code: string;
+    spn?: string;
     description: string;
     status: string;
     start_date: Date | null;
@@ -50,10 +51,10 @@ interface MainTabProps {
   onAreaIdsChange?: (areaIds: number[]) => void;
 }
 
-const MainTab: React.FC<MainTabProps> = ({ 
-  formData, 
-  setFormData, 
-  codeValidation, 
+const MainTab: React.FC<MainTabProps> = ({
+  formData,
+  setFormData,
+  codeValidation,
   setCodeValidation,
   mode = 'create',
   selectedAreaIds = [],
@@ -67,7 +68,7 @@ const MainTab: React.FC<MainTabProps> = ({
       ...prev,
       [field]: value
     }));
-    
+
     // Очищаем валидацию кода только если поле полностью очищено
     if (field === 'project_code' && (!value || value.trim() === '')) {
       setCodeValidation({
@@ -202,6 +203,15 @@ const MainTab: React.FC<MainTabProps> = ({
               <MenuItem value="CANCELLED">{t('status.cancelled')}</MenuItem>
             </Select>
           </FormControl>
+        </Grid>
+        <Grid item xs={12} md={4}>
+          <TextField
+            fullWidth
+            label={t('createProject.fields.spn') || 'Номер пакета поставщика'}
+            value={formData.spn || ''}
+            onChange={(e) => handleInputChange('spn', e.target.value)}
+            variant="standard"
+          />
         </Grid>
 
         <Grid item xs={12}>

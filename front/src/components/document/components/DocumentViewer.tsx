@@ -7,10 +7,11 @@ import {
   Button,
   Box,
   Typography,
+  CircularProgress,
 } from '@mui/material';
-import { 
-  UploadFile as UploadFileIcon, 
-  Comment as CommentIcon, 
+import {
+  UploadFile as UploadFileIcon,
+  Comment as CommentIcon,
 } from '@mui/icons-material';
 import { observer } from 'mobx-react-lite';
 import { useTranslation } from 'react-i18next';
@@ -63,24 +64,24 @@ const DocumentViewer: React.FC<DocumentViewerProps> = observer(({
   onRelease,
 }) => {
   const { t } = useTranslation();
-  
+
   // Локальное состояние для загрузки (как в старом коде)
   const [isUploadingDocument, setIsUploadingDocument] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
   const [uploadComment, setUploadComment] = useState('');
 
   // Используем созданные хуки
-  const documentState = useDocumentViewerState({ 
-    document, 
-    documentId, 
-    isCreating, 
-    onSaveDocument: onSaveDocument 
+  const documentState = useDocumentViewerState({
+    document,
+    documentId,
+    isCreating,
+    onSaveDocument: onSaveDocument
   });
   const fileUpload = useDocumentFileUpload();
   const revisions = useDocumentRevisions({ documentId, open });
   const projectData = useDocumentProjectData({ documentId, document, open, isCreating, isEditing: documentState.isEditing });
   const permissions = useDocumentPermissions({ document });
-  
+
   const validation = useDocumentValidation({
     documentData: documentState.documentData,
     fileMetadata: fileUpload.fileMetadata,
@@ -100,27 +101,27 @@ const DocumentViewer: React.FC<DocumentViewerProps> = observer(({
     // Очищаем все данные при закрытии
     documentState.cancelEditing();
     documentState.hideNotification();
-    
+
     // Очищаем загруженный файл и все связанное состояние
     fileUpload.resetAll();
-    
+
     // Очищаем состояние загрузки (как в старом коде)
     setIsUploadingDocument(false);
     setUploadProgress(0);
-    
+
     // Очищаем ревизии
     if (documentId) {
       revisions.clearRevisions(documentId);
     }
-    
+
     // Очищаем типы документов
     projectData.setProjectDocumentTypes([]);
-    
+
     // Очищаем дисциплины (для создания документа)
     if (isCreating) {
       disciplineStore.clearDisciplines();
     }
-    
+
     onClose();
   };
 
@@ -135,10 +136,10 @@ const DocumentViewer: React.FC<DocumentViewerProps> = observer(({
 
   return (
     <>
-      <Dialog 
-        open={open} 
-        onClose={handleClose} 
-        maxWidth="xl" 
+      <Dialog
+        open={open}
+        onClose={handleClose}
+        maxWidth="xl"
         fullWidth
         PaperProps={{
           sx: { height: '95vh', maxHeight: '95vh', width: '95vw', maxWidth: '95vw' }
@@ -155,10 +156,10 @@ const DocumentViewer: React.FC<DocumentViewerProps> = observer(({
             </span>
           )}
         </DialogTitle>
-        
+
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
           {/* Метаданные документа */}
-          <DocumentMetadata 
+          <DocumentMetadata
             document={document}
             documentCreator={projectData.documentCreator}
             isCreating={isCreating}
@@ -221,7 +222,7 @@ const DocumentViewer: React.FC<DocumentViewerProps> = observer(({
                 </Typography>
               )}
             </Box>
-          
+
             {/* Таблица ревизий */}
             <DocumentRevisionsTable
               documentId={documentId || null}
@@ -242,7 +243,7 @@ const DocumentViewer: React.FC<DocumentViewerProps> = observer(({
             />
           </Box>
         </DialogContent>
-        
+
         <DialogActions>
           {isCreating ? (
             <>
@@ -252,32 +253,20 @@ const DocumentViewer: React.FC<DocumentViewerProps> = observer(({
                 // Ждем загрузки данных проекта
                 if (projectData.loadingProjectData) {
                   return (
-                    <Button 
-                      variant="contained" 
+                    <Button
+                      variant="contained"
                       disabled={true}
                     >
                       {t('common.loading')}
                     </Button>
                   );
                 }
-                
-                const firstSequence = projectData.workflowPresetSequence.length > 0 ? projectData.workflowPresetSequence[0] : null;
-                const requiresTransmittal = firstSequence && firstSequence.requires_transmittal;
-                
-                if (requiresTransmittal) {
-                  return (
-                    <Button 
-                      variant="contained" 
-                      disabled={true}
-                      title={t('document.requires_transmittal')}
-                    >
-                      {t('document.requires_transmittal')}
-                    </Button>
-                  );
-                }
-                
+
+                // Удаляем блокировку кнопки для requires_transmittal, так как создание документа должно быть доступно всегда
+                // Трансмиттал требуется для ОТПРАВКИ, а не для СОЗДАНИЯ черновика
+
                 return (
-                  <Button 
+                  <Button
                     onClick={async () => {
                       if (validation.validate()) {
                         setIsUploadingDocument(true);
@@ -298,14 +287,13 @@ const DocumentViewer: React.FC<DocumentViewerProps> = observer(({
                           console.error('Error creating document:', error);
                         } finally {
                           setIsUploadingDocument(false);
-                          setUploadProgress(0);
                         }
                       }
                     }}
-                    variant="contained" 
+                    variant="contained"
                     disabled={isUploadingDocument}
                   >
-                    {isUploadingDocument ? t('document.creating') : t('document.create_document')}
+                    {isUploadingDocument ? <CircularProgress size={24} /> : t('common.create')}
                   </Button>
                 );
               })()}
@@ -316,12 +304,12 @@ const DocumentViewer: React.FC<DocumentViewerProps> = observer(({
               {documentState.isEditing ? (
                 <>
                   <Button onClick={handleCancel}>{t('common.cancel')}</Button>
-                  <Button 
+                  <Button
                     onClick={() => {
                       if (validation.validate()) {
                         documentState.saveEditing();
                       }
-                    }} 
+                    }}
                     variant="contained"
                   >
                     {t('common.save')}
@@ -337,10 +325,10 @@ const DocumentViewer: React.FC<DocumentViewerProps> = observer(({
             </>
           )}
         </DialogActions>
-      </Dialog>
+      </Dialog >
 
       {/* Диалог подтверждения отмены ревизии */}
-      <ConfirmDialog
+      < ConfirmDialog
         open={revisions.cancelRevisionDialog.isOpen}
         title={t('documents.cancel_revision')}
         content={t('documents.cancel_revision_confirm_content')}
@@ -350,7 +338,7 @@ const DocumentViewer: React.FC<DocumentViewerProps> = observer(({
       />
 
       {/* Уведомления */}
-      <NotificationSnackbar
+      < NotificationSnackbar
         open={documentState.notificationOpen}
         message={documentState.notificationMessage}
         severity={documentState.notificationSeverity}

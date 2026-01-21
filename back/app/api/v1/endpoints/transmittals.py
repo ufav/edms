@@ -13,7 +13,7 @@ from app.models.user import User
 from app.models.transmittal import Transmittal, TransmittalRevision
 from app.models.document import Document, DocumentRevision
 from app.models.document import File as FileModel
-from app.models.references import RevisionStatus
+from app.models.references import RevisionStatus, TransmittalStatus
 from app.services.auth import get_current_active_user
 from app.services.audit_service import log_action
 
@@ -589,10 +589,73 @@ async def update_revision_ccs_status(
         request=request,
     )
     
+    # Проверяем, все ли документы в трансмиттале имеют статус 'closed'
+    all_revisions = db.query(TransmittalRevision).filter(
+        TransmittalRevision.transmittal_id == transmittal_id
+    ).all()
+    
+    all_closed = all(
+        rev.ccs_status == CCSStatus.CLOSED 
+        for rev in all_revisions 
+        if rev.ccs_status is not None
+    )
+    
+    # Если все документы закрыты, меняем статус трансмиттала на Acknowledged
+    if all_closed and len(all_revisions) > 0:
+        acknowledged_status = db.query(TransmittalStatus).filter(
+            TransmittalStatus.name == 'Acknowledged'
+        ).first()
+        
+        if acknowledged_status and transmittal.status_id != acknowledged_status.id:
+            old_transmittal_status_id = transmittal.status_id
+            transmittal.status_id = acknowledged_status.id
+            db.commit()
+            
+            # Логирование изменения статуса трансмиттала
+            log_action(
+                db=db,
+                user_id=current_user.id,
+                action="update",
+                entity_type="transmittal",
+                entity_id=transmittal.id,
+                old_values={"status_id": old_transmittal_status_id},
+                new_values={"status_id": acknowledged_status.id},
+                request=request,
+            )
+    # Если хотя бы один документ открыт (не closed), возвращаем статус Received
+    elif not all_closed and len(all_revisions) > 0:
+        received_status = db.query(TransmittalStatus).filter(
+            TransmittalStatus.name == 'Received'
+        ).first()
+        
+        # Проверяем, что трансмиттал был в статусе Acknowledged
+        acknowledged_status = db.query(TransmittalStatus).filter(
+            TransmittalStatus.name == 'Acknowledged'
+        ).first()
+        
+        if (received_status and acknowledged_status and 
+            transmittal.status_id == acknowledged_status.id):
+            old_transmittal_status_id = transmittal.status_id
+            transmittal.status_id = received_status.id
+            db.commit()
+            
+            # Логирование изменения статуса трансмиттала
+            log_action(
+                db=db,
+                user_id=current_user.id,
+                action="update",
+                entity_type="transmittal",
+                entity_id=transmittal.id,
+                old_values={"status_id": old_transmittal_status_id},
+                new_values={"status_id": received_status.id},
+                request=request,
+            )
+    
     return {
         "message": "CCS статус обновлен",
         "transmittal_revision_id": transmittal_revision.id,
-        "ccs_status": new_status.value
+        "ccs_status": new_status.value,
+        "transmittal_status_updated": all_closed and len(all_revisions) > 0
     }
 
 
@@ -810,20 +873,72 @@ async def send_transmittal(
     base_url = str(request.base_url).rstrip('/')
     download_link_url = f"{base_url}/{download_link.token}"
     
-    # Получаем список документов в трансмиттале
+    # Получаем список документов в трансмиттале с расширенными данными
+    from app.models.discipline import Discipline, DocumentType
+    from app.models.document import File as FileModel
+    from app.models.references import RevisionDescription, RevisionStep
+    
     documents = []
     for tr, revision in transmittal_revisions_data:
         if revision:
             doc = db.query(Document).filter(Document.id == revision.document_id).first()
             if doc:
+                # Получаем код дисциплины
+                discipline_code = None
+                if doc.discipline_id:
+                    discipline = db.query(Discipline).filter(Discipline.id == doc.discipline_id).first()
+                    if discipline:
+                        discipline_code = discipline.code
+                
+                # Получаем код типа документа
+                doc_type_code = None
+                if doc.document_type_id:
+                    doc_type = db.query(DocumentType).filter(DocumentType.id == doc.document_type_id).first()
+                    if doc_type:
+                        doc_type_code = doc_type.code
+                
+                # Получаем полный номер ревизии (код описания + номер)
+                revision_description_code = ""
+                if revision.revision_description_id:
+                    rev_desc = db.query(RevisionDescription).filter(
+                        RevisionDescription.id == revision.revision_description_id
+                    ).first()
+                    if rev_desc:
+                        revision_description_code = rev_desc.code or ""
+                
+                full_revision = f"{revision_description_code}{revision.number or '01'}"
+                
+                # Получаем код шага ревизии
+                revision_step_code = None
+                if revision.revision_step_id:
+                    rev_step = db.query(RevisionStep).filter(
+                        RevisionStep.id == revision.revision_step_id
+                    ).first()
+                    if rev_step:
+                        revision_step_code = rev_step.code
+                
+                # Получаем тип файла
+                file_type = None
+                first_file = db.query(FileModel).filter(
+                    FileModel.revision_id == revision.id,
+                    FileModel.is_deleted == 0
+                ).first()
+                if first_file and first_file.file_name:
+                    file_type = first_file.file_name.split('.')[-1].upper() if '.' in first_file.file_name else None
+                
                 documents.append({
                     "number": doc.number,
-                    "title": doc.title or doc.number
+                    "title": doc.title or doc.number,
+                    "revision": full_revision,  # Полный номер ревизии (например K01)
+                    "revision_step": revision_step_code,  # Код шага ревизии
+                    "discipline_code": discipline_code,
+                    "doc_type_code": doc_type_code,
+                    "file_type": file_type
                 })
     
     # Получаем информацию об отправителе
     sender_name = current_user.full_name or current_user.username
-    sender_company = "EDMS"
+    sender_company = ""  # Убран "EDMS"
     project = db.query(Project).filter(Project.id == transmittal.project_id).first()
     project_name = project.name if project else "Проект"
     

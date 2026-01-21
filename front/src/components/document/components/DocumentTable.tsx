@@ -192,8 +192,9 @@ export const DocumentTable: React.FC<DocumentTableProps> = observer(({
     }
 
     // Получаем все видимые колонки (только известные колонки)
+    // id исключаем из общего списка — он всегда первый
     const knownColumns = [
-      'id', 'number', 'title', 'file', 'size', 'revision', 'status', 'review_status',
+      'number', 'title', 'file', 'size', 'revision', 'status', 'review_status',
       'language', 'discipline', 'document_type', 'area', 'drs',
       'date', 'updated_at', 'created_by'
     ];
@@ -202,9 +203,9 @@ export const DocumentTable: React.FC<DocumentTableProps> = observer(({
       visibleCols[key as keyof typeof visibleCols] && key !== 'actions'
     );
 
-    // Сортируем колонки по порядку из columnOrder
+    // Сортируем колонки по порядку из columnOrder (исключая id — он фиксирован)
     const orderedColumns = columnOrder
-      .filter(col => col.column !== 'actions' && visibleCols[col.column as keyof typeof visibleCols])
+      .filter(col => col.column !== 'actions' && col.column !== 'id' && visibleCols[col.column as keyof typeof visibleCols])
       .sort((a, b) => a.order - b.order)
       .map(col => col.column);
 
@@ -213,7 +214,12 @@ export const DocumentTable: React.FC<DocumentTableProps> = observer(({
       !columnOrder.some(orderedCol => orderedCol.column === col)
     );
 
-    return [...orderedColumns, ...unorderedColumns];
+    // ID всегда первый (только если видима)
+    const result = [...orderedColumns, ...unorderedColumns];
+    if (visibleCols.id) {
+      return ['id', ...result];
+    }
+    return result;
   };
 
   // Функция для получения ширины колонки

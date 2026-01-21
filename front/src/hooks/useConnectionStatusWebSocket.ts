@@ -10,22 +10,17 @@ interface UseConnectionStatusWebSocketOptions {
 
 // Получаем базовый URL для WebSocket
 const getWebSocketUrl = (): string => {
-  // Если мы в браузере, используем текущий хост и протокол
-  if (typeof window !== 'undefined') {
-    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
-    const host = window.location.host;
-    return `${protocol}://${host}/api/v1/ws/health`;
-  }
-  
-  // Fallback для SSR или если window недоступен
+  // Получаем API URL из env или используем default
   const apiUrl = (import.meta as any)?.env?.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
-  const baseUrl = apiUrl.replace(/\/api\/v1$/, '') || apiUrl.replace(/\/api\/v1\/?$/, '');
-  
+
+  // Извлекаем базовый URL (без /api/v1)
+  const baseUrl = apiUrl.replace(/\/api\/v1\/?$/, '');
+
   // Преобразуем http/https в ws/wss
   const wsProtocol = baseUrl.startsWith('https') ? 'wss' : 'ws';
-  const wsUrl = baseUrl.replace(/^https?:\/\//, '');
-  
-  return `${wsProtocol}://${wsUrl}/api/v1/ws/health`;
+  const wsHost = baseUrl.replace(/^https?:\/\//, '');
+
+  return `${wsProtocol}://${wsHost}/api/v1/ws/health`;
 };
 
 const getToken = (): string | null => {
@@ -53,19 +48,19 @@ export const useConnectionStatusWebSocket = (options: UseConnectionStatusWebSock
 
   const connect = useCallback(() => {
     if (!shouldReconnectRef.current || !isMountedRef.current) return;
-    
+
     // Очищаем предыдущее соединение
     if (wsRef.current) {
       wsRef.current.close();
       wsRef.current = null;
     }
-    
+
     // Очищаем предыдущие таймеры
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
       reconnectTimeoutRef.current = null;
     }
-    
+
     if (pingIntervalRef.current) {
       clearInterval(pingIntervalRef.current);
       pingIntervalRef.current = null;
@@ -73,7 +68,7 @@ export const useConnectionStatusWebSocket = (options: UseConnectionStatusWebSock
 
     const token = getToken();
     const wsUrl = getWebSocketUrl() + (token ? `?token=${encodeURIComponent(token)}` : '');
-    
+
     try {
       const ws = new WebSocket(wsUrl);
       wsRef.current = ws;
@@ -83,7 +78,7 @@ export const useConnectionStatusWebSocket = (options: UseConnectionStatusWebSock
           ws.close();
           return;
         }
-        
+
         reconnectAttemptsRef.current = 0;
         setStatus('online');
 
@@ -97,7 +92,7 @@ export const useConnectionStatusWebSocket = (options: UseConnectionStatusWebSock
 
       ws.onmessage = (event) => {
         if (!isMountedRef.current) return;
-        
+
         try {
           // Обрабатываем pong
           if (event.data === 'pong') {
@@ -105,9 +100,9 @@ export const useConnectionStatusWebSocket = (options: UseConnectionStatusWebSock
             reconnectAttemptsRef.current = 0;
             return;
           }
-          
+
           const data = JSON.parse(event.data);
-          
+
           if (data.type === 'pong' || data.type === 'connected') {
             setStatus('online');
             reconnectAttemptsRef.current = 0;
@@ -119,7 +114,7 @@ export const useConnectionStatusWebSocket = (options: UseConnectionStatusWebSock
 
       ws.onerror = (error) => {
         if (!isMountedRef.current) return;
-        
+
         // При ошибке переходим в состояние переподключения
         if (status !== 'reconnecting') {
           setStatus('reconnecting');
@@ -128,21 +123,21 @@ export const useConnectionStatusWebSocket = (options: UseConnectionStatusWebSock
 
       ws.onclose = () => {
         if (!isMountedRef.current) return;
-        
+
         // Очищаем ping интервал
         if (pingIntervalRef.current) {
           clearInterval(pingIntervalRef.current);
           pingIntervalRef.current = null;
         }
-        
+
         wsRef.current = null;
-        
+
         // Если соединение закрыто не по нашей инициативе и мы должны переподключаться
         if (shouldReconnectRef.current && reconnectAttemptsRef.current < reconnectAttempts) {
           reconnectAttemptsRef.current += 1;
-          
+
           setStatus('reconnecting');
-          
+
           // Пытаемся переподключиться через reconnectInterval
           reconnectTimeoutRef.current = setTimeout(() => {
             connect();
@@ -153,9 +148,9 @@ export const useConnectionStatusWebSocket = (options: UseConnectionStatusWebSock
       };
     } catch (error) {
       if (!isMountedRef.current) return;
-      
+
       setStatus('reconnecting');
-      
+
       // Пытаемся переподключиться
       reconnectTimeoutRef.current = setTimeout(() => {
         connect();
@@ -166,10 +161,10 @@ export const useConnectionStatusWebSocket = (options: UseConnectionStatusWebSock
   useEffect(() => {
     isMountedRef.current = true;
     shouldReconnectRef.current = true;
-    
+
     // Подключаемся сразу
     connect();
-    
+
     // Также слушаем события браузера для онлайн/оффлайн
     const handleOnline = () => {
       if (!isMountedRef.current) return;
@@ -177,7 +172,7 @@ export const useConnectionStatusWebSocket = (options: UseConnectionStatusWebSock
       setStatus('online');
       connect();
     };
-    
+
     const handleOffline = () => {
       if (!isMountedRef.current) return;
       setStatus('offline');
@@ -186,14 +181,14 @@ export const useConnectionStatusWebSocket = (options: UseConnectionStatusWebSock
         wsRef.current.close();
       }
     };
-    
+
     window.addEventListener('online', handleOnline);
     window.addEventListener('offline', handleOffline);
-    
+
     return () => {
       isMountedRef.current = false;
       shouldReconnectRef.current = false;
-      
+
       // Очищаем все таймеры и соединения
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
@@ -204,7 +199,7 @@ export const useConnectionStatusWebSocket = (options: UseConnectionStatusWebSock
       if (wsRef.current) {
         wsRef.current.close();
       }
-      
+
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
     };
