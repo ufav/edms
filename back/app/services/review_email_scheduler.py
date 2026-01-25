@@ -397,6 +397,14 @@ def process_single_schedule(schedule: Dict[str, Any], current_time: datetime):
         # Generate filename
         filename = f"reviews_{project_name}_{current_time.strftime('%Y-%m-%d')}.xlsx"
         
+        # Проверяем, настроен ли email сервис
+        if not email_service.is_configured():
+            logger.error(
+                f"Email service is not configured. Cannot send email for schedule {schedule.get('id')}. "
+                f"Please check SMTP_HOST, SMTP_USER, and SMTP_PASSWORD environment variables."
+            )
+            return
+        
         # Send email
         success = email_service.send_review_excel_report(
             to_emails=[recipient_email],

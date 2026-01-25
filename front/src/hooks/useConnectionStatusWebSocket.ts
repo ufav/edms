@@ -10,14 +10,25 @@ interface UseConnectionStatusWebSocketOptions {
 
 // Получаем базовый URL для WebSocket
 const getWebSocketUrl = (): string => {
+  // Проверяем, использует ли текущая страница HTTPS
+  const isHttps = typeof window !== 'undefined' && window.location.protocol === 'https:';
+  
   // Получаем API URL из env или используем default
   const apiUrl = (import.meta as any)?.env?.VITE_API_BASE_URL || 'http://localhost:8000/api/v1';
+
+  // Если API URL относительный (начинается с / или без протокола), используем текущий хост
+  if (apiUrl.startsWith('/') || !apiUrl.match(/^https?:\/\//)) {
+    const protocol = isHttps ? 'wss' : 'ws';
+    const host = typeof window !== 'undefined' ? window.location.host : 'localhost:8000';
+    return `${protocol}://${host}/api/v1/ws/health`;
+  }
 
   // Извлекаем базовый URL (без /api/v1)
   const baseUrl = apiUrl.replace(/\/api\/v1\/?$/, '');
 
   // Преобразуем http/https в ws/wss
-  const wsProtocol = baseUrl.startsWith('https') ? 'wss' : 'ws';
+  // Если страница загружена по HTTPS, всегда используем wss
+  const wsProtocol = (isHttps || baseUrl.startsWith('https')) ? 'wss' : 'ws';
   const wsHost = baseUrl.replace(/^https?:\/\//, '');
 
   return `${wsProtocol}://${wsHost}/api/v1/ws/health`;

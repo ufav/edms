@@ -41,7 +41,17 @@ class EmailService:
     
     def is_configured(self) -> bool:
         """Check if email is properly configured"""
-        return bool(self.host and self.user and self.password)
+        is_ok = bool(self.host and self.user and self.password)
+        if not is_ok:
+            missing = []
+            if not self.host:
+                missing.append('SMTP_HOST')
+            if not self.user:
+                missing.append('SMTP_USER')
+            if not self.password:
+                missing.append('SMTP_PASSWORD')
+            logger.warning(f"Email service not configured. Missing: {', '.join(missing)}")
+        return is_ok
     
     def send_email(
         self,
