@@ -67,8 +67,11 @@ const NotificationsDialog: React.FC<NotificationsDialogProps> = ({
       if (onUnreadCountChange) {
         onUnreadCountChange(count);
       }
-    } catch (error) {
-      // Ошибка загрузки счетчика непрочитанных
+    } catch (error: any) {
+      // Игнорируем ошибки 401 (не авторизован) - это нормально при истечении токена
+      if (error?.response?.status !== 401) {
+        console.error('Error loading unread count:', error);
+      }
     }
   }, [onUnreadCountChange]);
 
@@ -79,11 +82,14 @@ const NotificationsDialog: React.FC<NotificationsDialogProps> = ({
       // Если showAll=true, показываем все (до 50)
       const unreadOnly = !showAll; // true = только непрочитанные, false = все
       const limit = showAll ? 50 : 20;
-      
+
       const data = await notificationsApi.getNotifications(unreadOnly, limit);
       setNotifications(data);
-    } catch (error) {
-      // Ошибка загрузки уведомлений
+    } catch (error: any) {
+      // Игнорируем ошибки 401 (не авторизован) - это нормально при истечении токена
+      if (error?.response?.status !== 401) {
+        console.error('Error loading notifications:', error);
+      }
     } finally {
       setLoading(false);
     }
@@ -159,7 +165,7 @@ const NotificationsDialog: React.FC<NotificationsDialogProps> = ({
     // Парсим дату - isoformat() возвращает строку в формате ISO 8601 с timezone
     const date = new Date(dateString);
     const now = new Date();
-    
+
     const diff = now.getTime() - date.getTime();
     const totalMinutes = Math.floor(diff / 60000);
     const totalHours = Math.floor(diff / 3600000);
@@ -184,7 +190,7 @@ const NotificationsDialog: React.FC<NotificationsDialogProps> = ({
       // Показываем часы и минуты
       const hours = totalHours;
       const minutes = totalMinutes % 60;
-      
+
       let hourWord = 'часов';
       const lastHourDigit = hours % 10;
       const lastHourTwoDigits = hours % 100;
@@ -195,7 +201,7 @@ const NotificationsDialog: React.FC<NotificationsDialogProps> = ({
       } else if (lastHourDigit >= 2 && lastHourDigit <= 4) {
         hourWord = 'часа';
       }
-      
+
       if (minutes === 0) {
         return `${hours} ${hourWord} назад`;
       } else {
@@ -261,10 +267,10 @@ const NotificationsDialog: React.FC<NotificationsDialogProps> = ({
       }}
     >
       {/* Заголовок - фиксированный */}
-      <Box sx={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: 'center', 
+      <Box sx={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
         p: 2,
         pb: 1,
         flexShrink: 0,
@@ -287,11 +293,11 @@ const NotificationsDialog: React.FC<NotificationsDialogProps> = ({
 
       {/* Кнопки управления - фиксированные */}
       {!loading && (
-        <Box sx={{ 
+        <Box sx={{
           px: 2,
           pb: 1,
-          display: 'flex', 
-          justifyContent: 'space-between', 
+          display: 'flex',
+          justifyContent: 'space-between',
           alignItems: 'center',
           flexShrink: 0,
         }}>
@@ -309,7 +315,7 @@ const NotificationsDialog: React.FC<NotificationsDialogProps> = ({
             onClick={() => setShowAll(!showAll)}
             sx={{ ml: 'auto' }}
           >
-            {showAll 
+            {showAll
               ? (t('notifications.show_unread_only') || 'Только непрочитанные')
               : (t('notifications.show_all') || 'Показать все')}
           </Button>
@@ -317,8 +323,8 @@ const NotificationsDialog: React.FC<NotificationsDialogProps> = ({
       )}
 
       {/* Список уведомлений - прокручиваемый */}
-      <Box sx={{ 
-        overflow: 'auto', 
+      <Box sx={{
+        overflow: 'auto',
         flex: 1,
         minHeight: 0,
         px: 2,
@@ -345,7 +351,7 @@ const NotificationsDialog: React.FC<NotificationsDialogProps> = ({
           </Box>
         ) : notifications.length === 0 ? (
           <Alert severity="info" sx={{ mt: 2 }}>
-            {showAll 
+            {showAll
               ? (t('notifications.no_notifications') || 'Нет уведомлений')
               : (t('notifications.no_unread') || 'Нет непрочитанных уведомлений')}
           </Alert>

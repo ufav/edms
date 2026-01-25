@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { settingsStore } from '../../../stores/SettingsStore';
 import { userStore } from '../../../stores/UserStore';
+import { usePermissions } from '../../../hooks/usePermissions';
 
 export interface ColumnVisibility {
   id: boolean;
@@ -91,18 +92,24 @@ const defaultColumnOrder: ColumnOrder[] = [
 
 export const useDocumentSettings = (): UseDocumentSettingsReturn => {
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const { canViewSystemIds } = usePermissions();
 
-  // Проверяем, является ли пользователь админом
-  const isAdmin = userStore.currentUser?.role === 'admin';
-
-  // Колонка ID видна только админу
+  // Колонка ID видна только если есть соответствующее разрешение
   const getDefaultVisibility = (): ColumnVisibility => ({
     ...defaultColumnVisibility,
-    id: isAdmin ?? false,
+    id: canViewSystemIds,
   });
 
   const [visibleCols, setVisibleCols] = useState<ColumnVisibility>(getDefaultVisibility());
   const [columnOrder, setColumnOrder] = useState<ColumnOrder[]>(defaultColumnOrder);
+
+  // Обновляем видимость по умолчанию при изменении прав
+  useEffect(() => {
+    setVisibleCols(prev => ({
+      ...prev,
+      id: canViewSystemIds
+    }));
+  }, [canViewSystemIds]);
 
   // Загружаем настройки пользователя
   useEffect(() => {
@@ -119,20 +126,18 @@ export const useDocumentSettings = (): UseDocumentSettingsReturn => {
         // Для id колонки всегда применяем логику на основе роли
         // Даже если в сохранённых настройках нет id, для админа показываем
         const savedVisibility = settings.column_visibility;
-        const currentIsAdmin = userStore.currentUser?.role === 'admin';
 
         setVisibleCols(prev => ({
           ...prev,
           ...savedVisibility,
-          // id: если в настройках явно указано false — скрываем, иначе для админа показываем
-          id: savedVisibility.id !== undefined ? savedVisibility.id : (currentIsAdmin ?? false),
+          // id: если в настройках явно указано false — скрываем, иначе используем системное право
+          id: savedVisibility.id !== undefined ? savedVisibility.id : canViewSystemIds,
         }));
       } else {
-        // Если настроек нет, применяем дефолтные с учётом роли
-        const currentIsAdmin = userStore.currentUser?.role === 'admin';
+        // Если настроек нет, применяем дефолтные с учётом прав
         setVisibleCols(prev => ({
           ...prev,
-          id: currentIsAdmin ?? false,
+          id: canViewSystemIds,
         }));
       }
 
@@ -148,7 +153,7 @@ export const useDocumentSettings = (): UseDocumentSettingsReturn => {
     };
 
     loadSettings();
-  }, [userStore.currentUser?.id]); // Перезагружаем настройки при смене пользователя
+  }, [userStore.currentUser?.id, canViewSystemIds]); // Перезагружаем настройки при смене пользователя или прав
 
   // Сохраняем настройки при изменении
   const saveSettings = async (newVisibleCols?: ColumnVisibility, newColumnOrder?: ColumnOrder[]) => {

@@ -26,13 +26,21 @@ import {
   useMediaQuery,
   InputAdornment,
   alpha,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  FormControlLabel,
+  Checkbox,
 } from '@mui/material';
 import {
   Check as ApproveIcon,
   Close as RejectIcon,
   Visibility as ViewIcon,
   Download as DownloadIcon,
-  Search as SearchIcon
+  Search as SearchIcon,
+  FileDownload as FileDownloadIcon,
+  Settings as SettingsIcon
 } from '@mui/icons-material';
 import { useTranslation } from 'react-i18next';
 import { observer } from 'mobx-react-lite';
@@ -47,6 +55,8 @@ import ReviewsTableSkeleton from './ReviewsTableSkeleton';
 import NotificationSnackbar from '../NotificationSnackbar';
 import { DocumentViewer } from '../document';
 import type { Document as ApiDocument } from '../../api/client';
+import { useReviewExport } from './hooks/useReviewExport';
+import { ReviewSettingsDialog } from './components/ReviewSettingsDialog';
 
 interface PendingApproval {
   document_id: number;
@@ -68,19 +78,24 @@ interface PendingApproval {
     description: string;
     description_native: string;
   } | null;
-  current_description: {
+  current_description?: {
     id: number;
     code: string;
     description: string;
     description_native: string;
   } | null;
-  sequence_order: number | null;
-  is_final: boolean | null;
-  requires_transmittal: boolean | null;
-  release_date: string | null;
-  due_date: string | null;
-  due_days: number | null;
-  is_overdue: boolean;
+  sequence_order?: number | null;
+  is_final?: boolean | null;
+  requires_transmittal?: boolean | null;
+  release_date?: string | null;
+  due_date?: string | null;
+  due_days?: number | null;
+  is_overdue?: boolean;
+  awaiting_company?: {
+    id: number;
+    name: string;
+    name_native?: string;
+  } | null;
 }
 
 // Диалог подтверждения действия
@@ -141,9 +156,9 @@ const ApprovalDialog: React.FC<ApprovalDialogProps> = ({
         <Button onClick={handleClose} disabled={loading}>
           {t('common.cancel')}
         </Button>
-        <Button 
-          onClick={handleSubmit} 
-          variant="contained" 
+        <Button
+          onClick={handleSubmit}
+          variant="contained"
           color={action === 'approve' ? 'success' : 'error'}
           disabled={loading}
         >
@@ -158,21 +173,34 @@ const ApprovalDialog: React.FC<ApprovalDialogProps> = ({
 interface ReviewFiltersProps {
   searchTerm: string;
   onSearchChange: (value: string) => void;
+  selectedCompany: string | null;
+  onCompanyChange: (value: string | null) => void;
+  companies: string[];
+  onlyOverdue: boolean;
+  onOnlyOverdueChange: (value: boolean) => void;
+  onExportToExcel?: () => void;
 }
 
 const ReviewFilters: React.FC<ReviewFiltersProps> = ({
   searchTerm,
   onSearchChange,
+  selectedCompany,
+  onCompanyChange,
+  companies,
+  onlyOverdue,
+  onOnlyOverdueChange,
+  onExportToExcel,
+  onSettingsClick,
 }) => {
   const { t } = useTranslation();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
 
   return (
-    <Box sx={{ 
-      display: 'flex', 
-      gap: 2, 
-      alignItems: 'center', 
+    <Box sx={{
+      display: 'flex',
+      gap: 2,
+      alignItems: 'center',
       flexWrap: 'wrap',
       flexDirection: isMobile ? 'column' : 'row',
       mb: 3
@@ -190,6 +218,52 @@ const ReviewFilters: React.FC<ReviewFiltersProps> = ({
         }}
         sx={{ minWidth: isMobile ? '100%' : 300 }}
       />
+
+      <FormControl sx={{ minWidth: isMobile ? '100%' : 250 }}>
+        <InputLabel id="company-filter-label">{t('reviews.awaiting_company')}</InputLabel>
+        <Select
+          labelId="company-filter-label"
+          value={selectedCompany || ''}
+          label={t('reviews.awaiting_company')}
+          onChange={(e) => onCompanyChange(e.target.value || null)}
+        >
+          <MenuItem value="">
+            <em>{t('filter.all')}</em>
+          </MenuItem>
+          {companies.map((company) => (
+            <MenuItem key={company} value={company}>
+              {company === '__internal__' ? t('reviews.internal_review') : company}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+
+      <FormControlLabel
+        control={
+          <Checkbox
+            checked={onlyOverdue}
+            onChange={(e) => onOnlyOverdueChange(e.target.checked)}
+          />
+        }
+        label={t('reviews.only_overdue')}
+      />
+
+      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', ml: 'auto' }}>
+        {onExportToExcel && (
+          <Tooltip title={t('reviews.export_to_excel') || t('documents.export_to_excel') || 'Экспорт в Excel'}>
+            <IconButton onClick={onExportToExcel}>
+              <FileDownloadIcon />
+            </IconButton>
+          </Tooltip>
+        )}
+        {onSettingsClick && (
+          <Tooltip title={t('reviews.settings') || t('documents.settings') || 'Настройки'}>
+            <IconButton onClick={onSettingsClick}>
+              <SettingsIcon />
+            </IconButton>
+          </Tooltip>
+        )}
+      </Box>
     </Box>
   );
 };
@@ -249,7 +323,7 @@ const ReviewTable: React.FC<ReviewTableProps> = ({
     if (i18n.language === 'ru') {
       const lastDigit = days % 10;
       const lastTwoDigits = days % 100;
-      
+
       if (lastTwoDigits >= 11 && lastTwoDigits <= 14) {
         return t('reviews.days_plural');
       }
@@ -279,22 +353,22 @@ const ReviewTable: React.FC<ReviewTableProps> = ({
 
   if (approvals.length === 0) {
     return (
-      <Box sx={{ 
-        display: 'flex', 
-        flexDirection: 'column', 
+      <Box sx={{
+        display: 'flex',
+        flexDirection: 'column',
         height: '100%',
         minHeight: 0,
         marginBottom: 0,
         paddingBottom: 0
       }}>
-        <TableContainer component={Paper} sx={{ 
-          boxShadow: 2, 
-          width: '100%', 
-          minWidth: '100%', 
+        <TableContainer component={Paper} sx={{
+          boxShadow: 2,
+          width: '100%',
+          minWidth: '100%',
           flex: 1,
           minHeight: 0,
-          display: 'flex', 
-          alignItems: 'center', 
+          display: 'flex',
+          alignItems: 'center',
           justifyContent: 'center',
           borderRadius: 0,
         }}>
@@ -312,86 +386,15 @@ const ReviewTable: React.FC<ReviewTableProps> = ({
   }
 
   return (
-    <Box sx={{ 
-      display: 'flex', 
-      flexDirection: 'column', 
+    <Box sx={{
+      display: 'flex',
+      flexDirection: 'column',
       height: '100%',
       minHeight: 0,
       marginBottom: 0,
       paddingBottom: 0,
     }}>
-      {/* Заголовок таблицы - зафиксирован */}
-      <Box sx={{ 
-        borderBottom: '1px solid #f0f0f0',
-        backgroundColor: '#f5f5f5',
-        boxShadow: 2,
-      }}>
-        <Table sx={{ tableLayout: 'fixed', width: '100%', minWidth: '100%' }}>
-          <TableHead>
-            <TableRow sx={{ backgroundColor: '#f5f5f5', '& .MuiTableCell-root': { padding: '8px 16px' } }}>
-              <TableCell sx={{ 
-                fontWeight: 'bold',
-                fontSize: '0.875rem',
-                whiteSpace: 'nowrap',
-                width: '15%',
-                minWidth: '150px'
-              }}>{t('reviews.document')}</TableCell>
-              <TableCell sx={{ 
-                fontWeight: 'bold',
-                fontSize: '0.875rem',
-                whiteSpace: 'nowrap',
-                width: '8%',
-                minWidth: '80px'
-              }}>{t('reviews.revision')}</TableCell>
-              <TableCell sx={{ 
-                fontWeight: 'bold',
-                fontSize: '0.875rem',
-                whiteSpace: 'nowrap',
-                width: '12%',
-                minWidth: '120px'
-              }}>{t('reviews.current_step')}</TableCell>
-              <TableCell sx={{ 
-                fontWeight: 'bold',
-                fontSize: '0.875rem',
-                whiteSpace: 'nowrap',
-                width: '15%',
-                minWidth: '150px'
-              }}>{t('reviews.file_info')}</TableCell>
-              <TableCell sx={{ 
-                fontWeight: 'bold',
-                fontSize: '0.875rem',
-                whiteSpace: 'nowrap',
-                width: '12%',
-                minWidth: '120px'
-              }}>{t('reviews.release_date')}</TableCell>
-              <TableCell sx={{ 
-                fontWeight: 'bold',
-                fontSize: '0.875rem',
-                whiteSpace: 'nowrap',
-                width: '10%',
-                minWidth: '100px'
-              }}>{t('reviews.due_days')}</TableCell>
-              <TableCell sx={{ 
-                fontWeight: 'bold',
-                fontSize: '0.875rem',
-                whiteSpace: 'nowrap',
-                width: '12%',
-                minWidth: '120px'
-              }}>{t('reviews.due_date')}</TableCell>
-              <TableCell sx={{ 
-                fontWeight: 'bold',
-                fontSize: '0.875rem',
-                whiteSpace: 'nowrap',
-                width: '8%',
-                minWidth: '100px'
-              }} align="center">{t('common.actions')}</TableCell>
-            </TableRow>
-          </TableHead>
-        </Table>
-      </Box>
-      
-      {/* Тело таблицы - скроллируемое */}
-      <TableContainer component={Paper} sx={{ 
+      <TableContainer component={Paper} sx={{
         flex: 1,
         minHeight: 0,
         maxHeight: 'calc(48px + 13 * 48px)', // Ограничиваем высоту 13 строками (заголовок + 13 строк)
@@ -412,26 +415,81 @@ const ReviewTable: React.FC<ReviewTableProps> = ({
           },
         },
       }}>
-        <Table sx={{ tableLayout: 'fixed', width: '100%', minWidth: '100%' }}>
+        <Table stickyHeader sx={{ width: '100%', minWidth: '100%' }}>
+          <TableHead>
+            <TableRow sx={{
+              backgroundColor: '#f5f5f5',
+              '& .MuiTableCell-root': { padding: '8px 16px', backgroundColor: '#f5f5f5' }
+            }}>
+              <TableCell sx={{
+                fontWeight: 'bold',
+                fontSize: '0.875rem',
+                whiteSpace: 'nowrap',
+                minWidth: '200px'
+              }}>{t('reviews.document')}</TableCell>
+              <TableCell sx={{
+                fontWeight: 'bold',
+                fontSize: '0.875rem',
+                whiteSpace: 'nowrap',
+                minWidth: '100px'
+              }}>{t('reviews.revision')}</TableCell>
+              <TableCell sx={{
+                fontWeight: 'bold',
+                fontSize: '0.875rem',
+                whiteSpace: 'nowrap',
+                minWidth: '150px'
+              }}>{t('reviews.current_step')}</TableCell>
+              <TableCell sx={{
+                fontWeight: 'bold',
+                fontSize: '0.875rem',
+                whiteSpace: 'nowrap',
+                minWidth: '150px'
+              }}>{t('reviews.awaiting_company')}</TableCell>
+              <TableCell sx={{
+                fontWeight: 'bold',
+                fontSize: '0.875rem',
+                whiteSpace: 'nowrap',
+                minWidth: '120px'
+              }}>{t('reviews.release_date')}</TableCell>
+              <TableCell sx={{
+                fontWeight: 'bold',
+                fontSize: '0.875rem',
+                whiteSpace: 'nowrap',
+                minWidth: '100px'
+              }}>{t('reviews.due_days')}</TableCell>
+              <TableCell sx={{
+                fontWeight: 'bold',
+                fontSize: '0.875rem',
+                whiteSpace: 'nowrap',
+                minWidth: '120px'
+              }}>{t('reviews.due_date')}</TableCell>
+              <TableCell sx={{
+                fontWeight: 'bold',
+                fontSize: '0.875rem',
+                whiteSpace: 'nowrap',
+                minWidth: '120px',
+              }} align="center">{t('common.actions')}</TableCell>
+            </TableRow>
+          </TableHead>
           <TableBody>
             {approvals.map((approval) => (
-              <TableRow 
+              <TableRow
                 key={approval.document_id}
-                sx={{ 
+                sx={{
                   '& .MuiTableCell-root': { padding: '8px 16px' },
                   '&:hover': {
                     backgroundColor: '#f5f5f5',
                   },
                 }}
               >
-                <TableCell sx={{ width: '15%', minWidth: '150px' }}>
+                <TableCell sx={{ minWidth: '200px' }}>
                   <Box sx={{ maxWidth: '100%', overflow: 'hidden' }}>
-                    <Typography 
-                      variant="body2" 
-                      fontWeight="medium" 
+                    <Typography
+                      variant="body2"
+                      fontWeight="medium"
                       noWrap
                       onClick={() => onShowDocument(approval.document_id)}
-                      sx={{ 
+                      sx={{
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
                         maxWidth: '100%',
@@ -441,11 +499,11 @@ const ReviewTable: React.FC<ReviewTableProps> = ({
                     >
                       {approval.document_number || t('common.no_number')}
                     </Typography>
-                    <Typography 
-                      variant="caption" 
-                      color="text.secondary" 
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
                       noWrap
-                      sx={{ 
+                      sx={{
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
                         maxWidth: '100%',
@@ -456,20 +514,20 @@ const ReviewTable: React.FC<ReviewTableProps> = ({
                     </Typography>
                   </Box>
                 </TableCell>
-                <TableCell sx={{ width: '8%', minWidth: '80px' }}>
-                  <Chip 
-                    label={approval.current_description?.code 
-                      ? `${approval.current_description.code}${approval.revision_number || ''}` 
-                      : (approval.revision_number || '-')} 
+                <TableCell sx={{ minWidth: '100px' }}>
+                  <Chip
+                    label={approval.current_description?.code
+                      ? `${approval.current_description.code}${approval.revision_number || ''}`
+                      : (approval.revision_number || '-')}
                     variant="outlined"
-                    size="small" 
+                    size="small"
                     color="primary"
                     sx={{
                       backgroundColor: (theme) => alpha(theme.palette.primary.main, 0.12)
                     }}
                   />
                 </TableCell>
-                <TableCell sx={{ width: '12%', minWidth: '120px' }}>
+                <TableCell sx={{ minWidth: '150px' }}>
                   {approval.current_step ? (
                     <Box>
                       <Typography variant="body2" fontWeight="medium" noWrap>
@@ -483,26 +541,27 @@ const ReviewTable: React.FC<ReviewTableProps> = ({
                     '-'
                   )}
                 </TableCell>
-                <TableCell sx={{ width: '15%', minWidth: '150px' }}>
-                  {approval.file_name ? (
-                    <Box>
-                      <Typography variant="body2" noWrap>
-                        {approval.file_name}
-                      </Typography>
-                      <Typography variant="caption" color="text.secondary" noWrap>
-                        {formatFileSize(approval.file_size || 0)}
-                      </Typography>
-                    </Box>
+                <TableCell sx={{ minWidth: '150px' }}>
+                  {approval.awaiting_company ? (
+                    <Typography variant="body2" noWrap>
+                      {approval.awaiting_company.name}
+                    </Typography>
                   ) : (
-                    '-'
+                    approval.requires_transmittal === false ? (
+                      <Typography variant="body2" noWrap color="text.secondary" sx={{ fontStyle: 'italic' }}>
+                        {t('reviews.internal_review')}
+                      </Typography>
+                    ) : (
+                      '-'
+                    )
                   )}
                 </TableCell>
-                <TableCell sx={{ width: '12%', minWidth: '120px' }}>
+                <TableCell sx={{ minWidth: '120px' }}>
                   <Typography variant="body2" noWrap>
                     {approval.release_date ? formatDate(approval.release_date) : '-'}
                   </Typography>
                 </TableCell>
-                <TableCell sx={{ width: '10%', minWidth: '100px' }}>
+                <TableCell sx={{ minWidth: '100px' }}>
                   {approval.due_days ? (
                     <Typography variant="body2" noWrap>
                       {approval.due_days} {t('reviews.days')}
@@ -511,11 +570,11 @@ const ReviewTable: React.FC<ReviewTableProps> = ({
                     '-'
                   )}
                 </TableCell>
-                <TableCell sx={{ width: '12%', minWidth: '120px' }}>
+                <TableCell sx={{ minWidth: '120px' }}>
                   {approval.due_date ? (
                     <Box>
-                      <Typography 
-                        variant="body2" 
+                      <Typography
+                        variant="body2"
                         noWrap
                         sx={{
                           color: approval.is_overdue ? 'error.main' : 'text.primary',
@@ -541,9 +600,9 @@ const ReviewTable: React.FC<ReviewTableProps> = ({
                     '-'
                   )}
                 </TableCell>
-                <TableCell sx={{ width: '8%', minWidth: '100px' }} align="center">
-                  <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center' }}>
-                    {approval.requires_transmittal === false && (
+                <TableCell sx={{ minWidth: '120px' }} align="center">
+                  <Box sx={{ display: 'flex', gap: 1, justifyContent: 'center', alignItems: 'center' }}>
+                    {approval.requires_transmittal === false ? (
                       <>
                         <Tooltip title={t('reviews.approve')}>
                           <IconButton
@@ -564,6 +623,10 @@ const ReviewTable: React.FC<ReviewTableProps> = ({
                           </IconButton>
                         </Tooltip>
                       </>
+                    ) : (
+                      <Typography variant="caption" color="text.secondary" sx={{ fontStyle: 'italic', lineHeight: 1.2 }}>
+                        {t('reviews.transmittal_required_hint')}
+                      </Typography>
                     )}
                   </Box>
                 </TableCell>
@@ -580,15 +643,19 @@ const ReviewsPage: React.FC = observer(() => {
   const { t, i18n } = useTranslation();
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-  
-  
+
+  // Хук для экспорта в Excel
+  const { exportToExcel } = useReviewExport();
+
   // Пагинация
   const [page, setPage] = useState(1);
   const [rowsPerPage] = useState(10);
-  
+
   // Фильтры
   const [searchTerm, setSearchTerm] = useState<string>('');
-  
+  const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
+  const [onlyOverdue, setOnlyOverdue] = useState<boolean>(false);
+
   const [approvalDialog, setApprovalDialog] = useState<{
     open: boolean;
     document: PendingApproval | null;
@@ -598,20 +665,23 @@ const ReviewsPage: React.FC = observer(() => {
     document: null,
     action: 'approve'
   });
-  
+
   const [actionLoading, setActionLoading] = useState(false);
-  
+
   // Состояние для открытия документа
   const [documentDetailsOpen, setDocumentDetailsOpen] = useState(false);
   const [selectedDocument, setSelectedDocument] = useState<ApiDocument | null>(null);
   const [selectedDocumentId, setSelectedDocumentId] = useState<number | null>(null);
-  
+
   // Состояние для уведомлений
   const [notification, setNotification] = useState({
     open: false,
     message: '',
     severity: 'success' as 'success' | 'error' | 'warning' | 'info'
   });
+
+  // Состояние для диалога настроек
+  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
 
   // Загрузка данных
   const loadPendingApprovals = async () => {
@@ -627,20 +697,48 @@ const ReviewsPage: React.FC = observer(() => {
     }
   }, [projectStore.selectedProject]);
 
+  // Получение списка компаний для фильтра
+  const companies = React.useMemo(() => {
+    const uniqueCompanies = new Set<string>();
+
+    reviewStore.reviews.forEach(review => {
+      if (review.awaiting_company) {
+        uniqueCompanies.add(review.awaiting_company.name);
+      } else if (review.requires_transmittal === false) {
+        uniqueCompanies.add('__internal__');
+      }
+    });
+
+    return Array.from(uniqueCompanies).sort();
+  }, [reviewStore.reviews]);
+
   // Фильтрация документов
   const filteredApprovals = reviewStore.reviews.filter(approval => {
-    const searchMatch = searchTerm === '' || 
+    const searchMatch = searchTerm === '' ||
       approval.document_title.toLowerCase().includes(searchTerm.toLowerCase()) ||
       approval.document_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
       approval.project_name.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    return searchMatch;
+
+    if (!searchMatch) return false;
+
+    if (onlyOverdue && !approval.is_overdue) {
+      return false;
+    }
+
+    if (selectedCompany) {
+      if (selectedCompany === '__internal__') {
+        return approval.requires_transmittal === false;
+      }
+      return approval.awaiting_company?.name === selectedCompany;
+    }
+
+    return true;
   });
 
   // Сбрасываем на первую страницу при изменении фильтров
   useEffect(() => {
     setPage(1);
-  }, [searchTerm]);
+  }, [searchTerm, selectedCompany, onlyOverdue]);
 
   const totalPages = Math.max(1, Math.ceil(filteredApprovals.length / rowsPerPage));
   const startIndex = (page - 1) * rowsPerPage;
@@ -673,7 +771,7 @@ const ReviewsPage: React.FC = observer(() => {
 
     try {
       setActionLoading(true);
-      
+
       if (approvalDialog.action === 'approve') {
         await reviewsApi.approveDocument(approvalDialog.document.document_id, comments);
         setNotification({
@@ -681,7 +779,7 @@ const ReviewsPage: React.FC = observer(() => {
           message: t('reviews.approved_successfully'),
           severity: 'success'
         });
-        
+
         // Обновляем проект после утверждения документа
         if (approvalDialog.document.project_id) {
           await projectStore.updateProject(approvalDialog.document.project_id);
@@ -697,13 +795,12 @@ const ReviewsPage: React.FC = observer(() => {
 
       // Обновляем список с принудительной перезагрузкой
       await reviewStore.loadReviews(projectStore.selectedProject?.id, true);
-      
+
       // Отправляем событие для обновления таблицы документов
       window.dispatchEvent(new CustomEvent('documents:refresh'));
-      
+
       setApprovalDialog({ open: false, document: null, action: 'approve' });
     } catch (err: any) {
-      setError(err.message || t('reviews.action_error'));
       setNotification({
         open: true,
         message: err.message || t('reviews.action_error'),
@@ -721,7 +818,7 @@ const ReviewsPage: React.FC = observer(() => {
       setSelectedDocument(document);
       setSelectedDocumentId(documentId);
       setDocumentDetailsOpen(true);
-      
+
       try {
         await documentRevisionStore.loadRevisions(documentId);
       } catch (error: any) {
@@ -749,91 +846,155 @@ const ReviewsPage: React.FC = observer(() => {
 
   return (
     <ProjectRequired>
-      <Box sx={{ 
-        width: '100%', 
-        minWidth: 0, 
+      <Box sx={{
+        width: '100%',
+        minWidth: 0,
         pt: 3, // padding только сверху
         px: 3, // padding только по бокам
         pb: 0, // убираем padding снизу
         height: !isMobile ? 'calc(100vh - 117px)' : '100vh', // Всегда вычитаем высоту пагинации для десктопа
-        display: 'flex', 
+        display: 'flex',
         flexDirection: 'column',
         overflow: 'hidden', // Убираем прокрутку страницы
       }}>
-      <Box sx={{ 
-        display: 'flex', 
-        justifyContent: 'space-between', 
-        alignItems: isMobile ? 'flex-start' : 'center', 
-        mb: 3,
-        flexDirection: isMobile ? 'column' : 'row',
-        gap: isMobile ? 2 : 0,
-      }}>
-        <Typography variant={isMobile ? "h5" : "h4"} component="h1">
-          {t('reviews.title')}
-        </Typography>
-      </Box>
+        <Box sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: isMobile ? 'flex-start' : 'center',
+          mb: 3,
+          flexDirection: isMobile ? 'column' : 'row',
+          gap: isMobile ? 2 : 0,
+        }}>
+          <Typography variant={isMobile ? "h5" : "h4"} component="h1">
+            {t('reviews.title')}
+          </Typography>
+          {/* Временная кнопка для экспорта через бэкенд */}
+          <Tooltip title="Экспорт в Excel (бэкенд)">
+            <Button
+              variant="outlined"
+              startIcon={<FileDownloadIcon />}
+              onClick={async () => {
+                try {
+                  await reviewsApi.exportToExcel({
+                    projectId: projectStore.selectedProject?.id,
+                    search: searchTerm,
+                    selectedCompany: selectedCompany,
+                    onlyOverdue: onlyOverdue,
+                    language: i18n.language,
+                  });
+                } catch (error: any) {
+                  console.error('Ошибка при экспорте в Excel через бэкенд:', error);
+                  setNotification({
+                    open: true,
+                    message: 'Ошибка при экспорте в Excel',
+                    severity: 'error'
+                  });
+                }
+              }}
+              sx={{ 
+                border: '1px dashed red', // Временная визуальная метка
+                backgroundColor: 'rgba(255, 0, 0, 0.1)'
+              }}
+            >
+              Excel (бэкенд)
+            </Button>
+          </Tooltip>
+        </Box>
 
-      <ReviewFilters
-        searchTerm={searchTerm}
-        onSearchChange={setSearchTerm}
-      />
-
-      {/* Контейнер таблицы */}
-      <Box sx={{ 
-        flex: 1, 
-        minHeight: 0,
-      }}>
-        <ReviewTable
-          approvals={displayedApprovals}
-          totalCount={filteredApprovals.length}
-          isLoading={reviewStore.isLoading}
-          error={reviewStore.error}
-          onApprove={handleApprove}
-          onReject={handleReject}
-          onShowDocument={handleShowDocument}
+        <ReviewFilters
+          searchTerm={searchTerm}
+          onSearchChange={setSearchTerm}
+          selectedCompany={selectedCompany}
+          onCompanyChange={setSelectedCompany}
+          companies={companies}
+          onlyOverdue={onlyOverdue}
+          onOnlyOverdueChange={setOnlyOverdue}
+          onSettingsClick={() => {
+            setSettingsDialogOpen(true);
+          }}
+          onExportToExcel={async () => {
+            try {
+              await exportToExcel({
+                projectId: projectStore.selectedProject?.id,
+                search: searchTerm,
+                selectedCompany: selectedCompany,
+                onlyOverdue: onlyOverdue,
+                language: i18n.language,
+              });
+            } catch (error: any) {
+              console.error('Ошибка при экспорте в Excel:', error);
+              setNotification({
+                open: true,
+                message: t('reviews.export_error') || t('documents.export_error') || 'Ошибка при экспорте в Excel',
+                severity: 'error'
+              });
+            }
+          }}
         />
-      </Box>
 
-      {/* Фиксированная пагинация без выбора кол-ва строк */}
-      {!reviewStore.isLoading && (
-        <AppPagination
-          count={filteredApprovals.length}
-          page={Math.min(page, totalPages)}
-          onPageChange={(_, value) => setPage(value)}
-          rowsPerPage={rowsPerPage}
-          insetLeft={isMobile ? 0 : 240}
-          align="right"
-          leftInfo={`${t('common.total_reviews', { count: filteredApprovals.length }).replace('{count}', filteredApprovals.length.toLocaleString(i18n.language === 'ru' ? 'ru-RU' : 'en-US'))}`}
+        {/* Контейнер таблицы */}
+        <Box sx={{
+          flex: 1,
+          minHeight: 0,
+        }}>
+          <ReviewTable
+            approvals={displayedApprovals}
+            totalCount={filteredApprovals.length}
+            isLoading={reviewStore.isLoading}
+            error={reviewStore.error}
+            onApprove={handleApprove}
+            onReject={handleReject}
+            onShowDocument={handleShowDocument}
+          />
+        </Box>
+
+        {/* Фиксированная пагинация без выбора кол-ва строк */}
+        {!reviewStore.isLoading && (
+          <AppPagination
+            count={filteredApprovals.length}
+            page={Math.min(page, totalPages)}
+            onPageChange={(_, value) => setPage(value)}
+            rowsPerPage={rowsPerPage}
+            insetLeft={isMobile ? 0 : 240}
+            align="right"
+            leftInfo={`${t('common.total_reviews', { count: filteredApprovals.length }).replace('{count}', filteredApprovals.length.toLocaleString(i18n.language === 'ru' ? 'ru-RU' : 'en-US'))}`}
+          />
+        )}
+
+        <ApprovalDialog
+          open={approvalDialog.open}
+          document={approvalDialog.document}
+          action={approvalDialog.action}
+          loading={actionLoading}
+          onClose={() => setApprovalDialog({ open: false, document: null, action: 'approve' })}
+          onConfirm={handleConfirmAction}
         />
-      )}
 
-      <ApprovalDialog
-        open={approvalDialog.open}
-        document={approvalDialog.document}
-        action={approvalDialog.action}
-        loading={actionLoading}
-        onClose={() => setApprovalDialog({ open: false, document: null, action: 'approve' })}
-        onConfirm={handleConfirmAction}
-      />
-      
-      {/* Уведомления */}
-      <NotificationSnackbar
-        open={notification.open}
-        message={notification.message}
-        severity={notification.severity}
-        onClose={handleCloseNotification}
-      />
+        {/* Уведомления */}
+        <NotificationSnackbar
+          open={notification.open}
+          message={notification.message}
+          severity={notification.severity}
+          onClose={handleCloseNotification}
+        />
 
-      {/* Просмотр документа */}
-      <DocumentViewer
-        open={documentDetailsOpen}
-        document={selectedDocument}
-        documentId={selectedDocumentId}
-        isCreating={false}
-        onClose={handleCloseDocumentDetails}
-        onNewRevision={() => {}}
-        onCompareRevisions={() => {}}
-      />
+        {/* Просмотр документа */}
+        <DocumentViewer
+          open={documentDetailsOpen}
+          document={selectedDocument}
+          documentId={selectedDocumentId}
+          isCreating={false}
+          onClose={handleCloseDocumentDetails}
+          onNewRevision={() => { }}
+          onCompareRevisions={() => { }}
+        />
+
+        {/* Диалог настроек автоматической отправки */}
+        <ReviewSettingsDialog
+          open={settingsDialogOpen}
+          onClose={() => setSettingsDialogOpen(false)}
+          language={i18n.language}
+        />
       </Box>
     </ProjectRequired>
   );

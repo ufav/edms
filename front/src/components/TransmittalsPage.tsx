@@ -180,26 +180,17 @@ const TransmittalsPage: React.FC = observer(() => {
   };
 
   const handleSend = async (transmittal: any) => {
-    try {
-      await transmittalsApi.send(transmittal.id);
+    await transmittalsApi.send(transmittal.id);
 
-      setNotification({
-        open: true,
-        message: t('transmittals.send_success'),
-        severity: 'success'
-      });
+    setNotification({
+      open: true,
+      message: t('transmittals.send_success'),
+      severity: 'success'
+    });
 
-      // Перезагружаем список трансмитталов
-      if (projectStore.selectedProject) {
-        transmittalStore.loadTransmittals(projectStore.selectedProject.id, true);
-      }
-    } catch (error: any) {
-      console.error('Error sending transmittal:', error);
-      setNotification({
-        open: true,
-        message: error.response?.data?.detail || error.message || t('transmittals.send_error'),
-        severity: 'error'
-      });
+    // Перезагружаем список трансмитталов
+    if (projectStore.selectedProject) {
+      transmittalStore.loadTransmittals(projectStore.selectedProject.id, true);
     }
   };
 
@@ -437,7 +428,18 @@ const TransmittalsPage: React.FC = observer(() => {
         confirmText={t('transmittals.send_confirm') || 'Отправить'}
         cancelText={t('common.cancel')}
         onConfirm={() => sendDialog.confirmDelete(async (transmittal) => {
-          await handleSend(transmittal);
+          try {
+            await handleSend(transmittal);
+          } catch (error: any) {
+            console.error('Error sending transmittal:', error);
+            setNotification({
+              open: true,
+              message: error.response?.data?.detail || error.message || t('transmittals.send_error'),
+              severity: 'error'
+            });
+            // Пробрасываем ошибку, чтобы useDeleteDialog не закрыл диалог
+            throw error;
+          }
         })}
         onClose={sendDialog.closeDeleteDialog}
         loading={sendDialog.isLoading}

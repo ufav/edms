@@ -10,12 +10,16 @@ from fastapi.responses import RedirectResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request as StarletteRequest
 import os
+import logging
 from pathlib import Path
 
 from app.core.config import settings
 from fastapi_pagination import add_pagination
 from app.api.v1.api import api_router
 from app.admin import init_admin
+import asyncio
+import threading
+from contextlib import asynccontextmanager
 
 # Создание директории для загрузок
 upload_dir = Path(settings.UPLOAD_DIR)
@@ -32,11 +36,68 @@ class ProxyHeadersMiddleware(BaseHTTPMiddleware):
         return response
 
 
+def run_scheduler():
+    """Запускает планировщик отправки писем в отдельном потоке"""
+    import time
+    from app.services.review_email_scheduler import process_scheduled_emails
+    from app.core.database import SessionLocal
+    
+    logger = logging.getLogger(__name__)
+    logger.setLevel(logging.INFO)
+    logger.info("Review email scheduler started")
+    print("Review email scheduler started")  # Дублируем в stdout для отладки
+    
+    while True:
+        try:
+            # Создаем новую сессию БД для каждого запуска
+            db = SessionLocal()
+            try:
+                logger.info("Running scheduled email check...")
+                print("Running scheduled email check...")
+                process_scheduled_emails(db)
+            except Exception as e:
+                logger.error(f"Error in scheduled email processing: {e}", exc_info=True)
+                print(f"Error in scheduled email processing: {e}")
+            finally:
+                db.close()
+            
+            # Ждем 60 секунд перед следующей проверкой
+            time.sleep(60)
+        except Exception as e:
+            logger.error(f"Fatal error in scheduler thread: {e}", exc_info=True)
+            print(f"Fatal error in scheduler thread: {e}")
+            time.sleep(60)  # Ждем перед повторной попыткой
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Управление жизненным циклом приложения"""
+    # Startup
+    logger = logging.getLogger(__name__)
+    # Настраиваем уровень логирования для этого модуля
+    logger.setLevel(logging.INFO)
+    logger.info("Starting application...")
+    print("Starting application...")  # Дублируем в stdout для отладки
+    
+    # Запускаем планировщик в отдельном потоке
+    scheduler_thread = threading.Thread(target=run_scheduler, daemon=True)
+    scheduler_thread.start()
+    logger.info("Review email scheduler thread started")
+    print("Review email scheduler thread started")  # Дублируем в stdout для отладки
+    
+    yield
+    
+    # Shutdown
+    logger.info("Shutting down application...")
+    print("Shutting down application...")  # Дублируем в stdout для отладки
+
+
 app = FastAPI(
     title=settings.APP_NAME,
     version=settings.APP_VERSION,
     description="Electronic Document Management System like Aconex",
-    openapi_url=f"{settings.API_V1_STR}/openapi.json"
+    openapi_url=f"{settings.API_V1_STR}/openapi.json",
+    lifespan=lifespan
 )
 
 app.router.redirect_slashes = False

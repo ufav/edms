@@ -60,7 +60,7 @@ class Settings(BaseSettings):
     SMTP_USER: str = os.getenv('SMTP_USER', '')
     SMTP_PASSWORD: str = os.getenv('SMTP_PASSWORD', '')
     SMTP_FROM_EMAIL: str = os.getenv('SMTP_FROM_EMAIL', '')
-    SMTP_FROM_NAME: str = os.getenv('SMTP_FROM_NAME', 'EDMS System')
+    SMTP_FROM_NAME: str = os.getenv('SMTP_FROM_NAME', 'Docste')
     SMTP_USE_TLS: bool = os.getenv('SMTP_USE_TLS', 'true').lower() == 'true'
     
     # CORS

@@ -61,6 +61,56 @@ async def delete_transmittal(
         "is_deleted": transmittal.is_deleted,
     }
 
+    # Получаем статус Draft
+    from app.models.references import WorkflowStatus
+    draft_status = db.query(WorkflowStatus).filter(WorkflowStatus.name == "Draft").first()
+    
+    # Обрабатываем связанные ревизии
+    from app.models.transmittal import TransmittalRevision, CCSStatus
+    from app.models.document import DocumentRevision
+    from app.models.document_workflow_history import DocumentWorkflowHistory
+    
+    transmittal_revisions = db.query(TransmittalRevision).filter(
+        TransmittalRevision.transmittal_id == transmittal_id
+    ).all()
+    
+    if not transmittal_revisions:
+        return
+    
+    # Загружаем все ревизии одним запросом (устранение N+1)
+    revision_ids = [tr.revision_id for tr in transmittal_revisions]
+    revisions_dict = {
+        rev.id: rev 
+        for rev in db.query(DocumentRevision).filter(
+            DocumentRevision.id.in_(revision_ids)
+        ).all()
+    }
+    
+    for tr in transmittal_revisions:
+        # Получаем ревизию из заранее загруженного словаря
+        revision = revisions_dict.get(tr.revision_id)
+        
+        if revision and draft_status:
+            old_status_id = revision.workflow_status_id
+            
+            # Возвращаем ревизию в Draft
+            revision.workflow_status_id = draft_status.id
+            
+            # Добавляем запись в workflow history
+            workflow_history = DocumentWorkflowHistory(
+                revision_id=revision.id,
+                from_status_id=old_status_id,
+                to_status_id=draft_status.id,
+                user_id=current_user.id,
+                action_type="transmittal_deleted",
+                comments=f"Трансмиттал {transmittal.transmittal_number} был удалён"
+            )
+            db.add(workflow_history)
+        
+        # Меняем CCS статус на OPEN, если был CLOSED
+        if tr.ccs_status == CCSStatus.CLOSED:
+            tr.ccs_status = CCSStatus.OPEN
+
     transmittal.is_deleted = 1
     db.commit()
 
@@ -162,10 +212,18 @@ async def create_transmittal(
                 detail="Ошибка при создании трансмиттала"
             )
     
+    # Загружаем все ревизии одним запросом (устранение N+1)
+    revisions_dict = {
+        rev.id: rev 
+        for rev in db.query(DocumentRevision).filter(
+            DocumentRevision.id.in_(transmittal_data.revision_ids)
+        ).all()
+    }
+    
     # Добавляем ревизии в трансмиттал
     for revision_id in transmittal_data.revision_ids:
         # Проверяем, что ревизия существует
-        revision = db.query(DocumentRevision).filter(DocumentRevision.id == revision_id).first()
+        revision = revisions_dict.get(revision_id)
         if not revision:
             raise HTTPException(status_code=400, detail=f"Ревизия с ID {revision_id} не найдена")
         
@@ -478,18 +536,32 @@ async def add_revisions_to_transmittal(
     if not transmittal:
         raise HTTPException(status_code=404, detail="Трансмиттал не найден")
     
+    # Загружаем все ревизии одним запросом (устранение N+1)
+    revisions_dict = {
+        rev.id: rev 
+        for rev in db.query(DocumentRevision).filter(
+            DocumentRevision.id.in_(revision_data.revision_ids)
+        ).all()
+    }
+    
+    # Загружаем все существующие связи одним запросом (устранение N+1)
+    existing_revisions = {
+        tr.revision_id: tr
+        for tr in db.query(TransmittalRevision).filter(
+            TransmittalRevision.transmittal_id == transmittal_id,
+            TransmittalRevision.revision_id.in_(revision_data.revision_ids)
+        ).all()
+    }
+    
     added_revisions = []
     for revision_id in revision_data.revision_ids:
         # Проверяем, что ревизия существует
-        revision = db.query(DocumentRevision).filter(DocumentRevision.id == revision_id).first()
+        revision = revisions_dict.get(revision_id)
         if not revision:
             raise HTTPException(status_code=400, detail=f"Ревизия с ID {revision_id} не найдена")
         
         # Проверяем, что ревизия еще не добавлена в этот трансмиттал
-        existing = db.query(TransmittalRevision).filter(
-            TransmittalRevision.transmittal_id == transmittal_id,
-            TransmittalRevision.revision_id == revision_id
-        ).first()
+        existing = existing_revisions.get(revision_id)
         
         if not existing:
             transmittal_revision = TransmittalRevision(
@@ -832,11 +904,25 @@ async def send_transmittal(
     
     # Валидируем переходы статусов (до любых изменений)
     from app.utils.workflow_status_validator import WorkflowStatusValidator
+    
+    # Загружаем все статусы одним запросом (устранение N+1)
+    old_status_ids = [
+        revision.workflow_status_id 
+        for _, revision in transmittal_revisions_data 
+        if revision and revision.workflow_status_id
+    ]
+    statuses_dict = {
+        status.id: status
+        for status in db.query(WorkflowStatus).filter(
+            WorkflowStatus.id.in_(old_status_ids)
+        ).all()
+    } if old_status_ids else {}
+    
     for transmittal_revision, revision in transmittal_revisions_data:
         if revision:
             old_status_id = revision.workflow_status_id
             if not WorkflowStatusValidator.validate_transition(db, old_status_id, in_review_status.id):
-                from_status = db.query(WorkflowStatus).filter(WorkflowStatus.id == old_status_id).first() if old_status_id else None
+                from_status = statuses_dict.get(old_status_id) if old_status_id else None
                 from_status_name = from_status.name if from_status else "Draft"
                 error_msg = WorkflowStatusValidator.get_transition_error_message(from_status_name, "In Review")
                 raise HTTPException(status_code=400, detail=error_msg)
@@ -878,31 +964,75 @@ async def send_transmittal(
     from app.models.document import File as FileModel
     from app.models.references import RevisionDescription, RevisionStep
     
+    # Загружаем все документы одним запросом (устранение N+1)
+    document_ids = [
+        revision.document_id 
+        for _, revision in transmittal_revisions_data 
+        if revision and revision.document_id
+    ]
+    documents_dict = {
+        doc.id: doc
+        for doc in db.query(Document).filter(Document.id.in_(document_ids)).all()
+    } if document_ids else {}
+    
+    # Загружаем все дисциплины одним запросом
+    discipline_ids = [
+        doc.discipline_id 
+        for doc in documents_dict.values() 
+        if doc.discipline_id
+    ]
+    disciplines_dict = {
+        disc.id: disc
+        for disc in db.query(Discipline).filter(Discipline.id.in_(discipline_ids)).all()
+    } if discipline_ids else {}
+    
+    # Загружаем все типы документов одним запросом
+    doc_type_ids = [
+        doc.document_type_id 
+        for doc in documents_dict.values() 
+        if doc.document_type_id
+    ]
+    doc_types_dict = {
+        dt.id: dt
+        for dt in db.query(DocumentType).filter(DocumentType.id.in_(doc_type_ids)).all()
+    } if doc_type_ids else {}
+    
+    # Загружаем все описания ревизий одним запросом
+    revision_description_ids = [
+        revision.revision_description_id 
+        for _, revision in transmittal_revisions_data 
+        if revision and revision.revision_description_id
+    ]
+    revision_descriptions_dict = {
+        rd.id: rd
+        for rd in db.query(RevisionDescription).filter(
+            RevisionDescription.id.in_(revision_description_ids)
+        ).all()
+    } if revision_description_ids else {}
+    
     documents = []
     for tr, revision in transmittal_revisions_data:
         if revision:
-            doc = db.query(Document).filter(Document.id == revision.document_id).first()
+            doc = documents_dict.get(revision.document_id)
             if doc:
-                # Получаем код дисциплины
+                # Получаем код дисциплины из заранее загруженного словаря
                 discipline_code = None
                 if doc.discipline_id:
-                    discipline = db.query(Discipline).filter(Discipline.id == doc.discipline_id).first()
+                    discipline = disciplines_dict.get(doc.discipline_id)
                     if discipline:
                         discipline_code = discipline.code
                 
-                # Получаем код типа документа
+                # Получаем код типа документа из заранее загруженного словаря
                 doc_type_code = None
                 if doc.document_type_id:
-                    doc_type = db.query(DocumentType).filter(DocumentType.id == doc.document_type_id).first()
+                    doc_type = doc_types_dict.get(doc.document_type_id)
                     if doc_type:
                         doc_type_code = doc_type.code
                 
-                # Получаем полный номер ревизии (код описания + номер)
+                # Получаем полный номер ревизии (код описания + номер) из заранее загруженного словаря
                 revision_description_code = ""
                 if revision.revision_description_id:
-                    rev_desc = db.query(RevisionDescription).filter(
-                        RevisionDescription.id == revision.revision_description_id
-                    ).first()
+                    rev_desc = revision_descriptions_dict.get(revision.revision_description_id)
                     if rev_desc:
                         revision_description_code = rev_desc.code or ""
                 
@@ -983,22 +1113,59 @@ async def send_transmittal(
     transmittal.transmittal_date = datetime.utcnow()
     transmittal.sender_id = current_user.id
     
+    # Загружаем все WorkflowPresetSequence одним запросом (устранение N+1)
+    # Получаем уникальные комбинации (document_id, revision_description_id, revision_step_id)
+    sequence_keys = [
+        (revision.document_id, revision.revision_description_id, revision.revision_step_id)
+        for _, revision in transmittal_revisions_data
+        if revision and revision.document_id and revision.revision_description_id and revision.revision_step_id
+    ]
+    
+    # Получаем project_id для каждого document_id
+    unique_doc_ids = list(set(doc_id for doc_id, _, _ in sequence_keys))
+    docs_with_projects = db.query(Document.id, Document.project_id).filter(
+        Document.id.in_(unique_doc_ids)
+    ).all()
+    doc_to_project = {doc_id: project_id for doc_id, project_id in docs_with_projects}
+    
+    # Получаем workflow_preset_id для каждого project_id
+    unique_project_ids = list(set(doc_to_project.values()))
+    projects_with_presets = db.query(Project.id, Project.workflow_preset_id).filter(
+        Project.id.in_(unique_project_ids)
+    ).all()
+    project_to_preset = {proj_id: preset_id for proj_id, preset_id in projects_with_presets}
+    
+    # Загружаем все WorkflowPresetSequence одним запросом
+    unique_preset_ids = list(set(project_to_preset.values()))
+    all_sequences = db.query(WorkflowPresetSequence).filter(
+        WorkflowPresetSequence.preset_id.in_(unique_preset_ids)
+    ).all()
+    
+    # Создаем словарь для быстрого поиска
+    sequences_dict = {}
+    for doc_id, rev_desc_id, rev_step_id in sequence_keys:
+        project_id = doc_to_project.get(doc_id)
+        preset_id = project_to_preset.get(project_id) if project_id else None
+        if preset_id:
+            for seq in all_sequences:
+                if (seq.preset_id == preset_id and 
+                    seq.revision_description_id == rev_desc_id and 
+                    seq.revision_step_id == rev_step_id):
+                    sequences_dict[(doc_id, rev_desc_id, rev_step_id)] = seq
+                    break
+    
     # Обновляем workflow_status_id для каждой ревизии и создаем записи в истории
     for transmittal_revision, revision in transmittal_revisions_data:
         if revision:
             old_status_id = revision.workflow_status_id
             revision.workflow_status_id = in_review_status.id
             
-            # Проверяем, требует ли эта ревизия трансмиттал
-            workflow_sequence = db.query(WorkflowPresetSequence).join(
-                Project, Project.workflow_preset_id == WorkflowPresetSequence.preset_id
-            ).join(
-                Document, Document.project_id == Project.id
-            ).filter(
-                Document.id == revision.document_id,
-                WorkflowPresetSequence.revision_description_id == revision.revision_description_id,
-                WorkflowPresetSequence.revision_step_id == revision.revision_step_id
-            ).first()
+            # Получаем workflow_sequence из заранее загруженного словаря
+            workflow_sequence = sequences_dict.get((
+                revision.document_id,
+                revision.revision_description_id,
+                revision.revision_step_id
+            )) if revision.document_id and revision.revision_description_id and revision.revision_step_id else None
             
             if workflow_sequence and workflow_sequence.requires_transmittal:
                 workflow_history = DocumentWorkflowHistory(

@@ -11,7 +11,6 @@ import {
 import {
   Add as AddIcon,
   UploadFile as UploadFileIcon,
-  Send as SendIcon,
 } from '@mui/icons-material';
 import { observer } from 'mobx-react-lite';
 import { projectStore } from '../stores/ProjectStore';
@@ -41,9 +40,10 @@ import { DocumentTable } from './document/components/DocumentTable';
 import { DocumentBatchUploadDialog } from './document/components/DocumentBatchUploadDialog';
 import { DocumentSettingsDialog } from './document/components/DocumentSettingsDialog';
 import { DocumentWorkflowDialog } from './document/components/DocumentWorkflowDialog';
-import { TransmittalCartModal, useActiveRevisions } from './transmittal';
+import { useActiveRevisions } from './transmittal';
 import { transmittalCartStore } from '../stores/TransmittalCartStore';
 import { activeRevisionsStore } from '../stores/ActiveRevisionsStore';
+import { reviewStore } from '../stores/ReviewStore';
 import { useDocumentExport } from './document/hooks/useDocumentExport';
 
 const DocumentsPage: React.FC = observer(() => {
@@ -52,16 +52,15 @@ const DocumentsPage: React.FC = observer(() => {
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const { refreshDocuments } = useRefreshStore();
   const { isViewer } = useCurrentUser();
-  
+
   // Состояние для выбранных документов в трансмиттал
   const [selectedDocuments, setSelectedDocuments] = useState<number[]>([]);
   const [showSelectColumn, setShowSelectColumn] = useState(!isViewer); // Не показываем галочки для viewer
-  const [cartModalOpen, setCartModalOpen] = useState(false); // Состояние модалки трансмитталов
-  
+
   // Состояние для сортировки
   const [orderBy, setOrderBy] = useState<string>('updated_at');
   const [order, setOrder] = useState<'asc' | 'desc'>('desc');
-  
+
   // Состояние для уведомлений трансмиттала
   const [transmittalNotification, setTransmittalNotification] = useState<{
     open: boolean;
@@ -72,12 +71,12 @@ const DocumentsPage: React.FC = observer(() => {
     message: '',
     severity: 'success'
   });
-  
+
   // Хуки для работы с трансмитталами
   const { activeRevisions, refreshActiveRevisions } = useActiveRevisions();
-  
+
   // Активные ревизии автоматически загружаются в useActiveRevisions хуке
-  
+
 
   useEffect(() => {
     // Дополнительная загрузка при изменении проекта
@@ -85,14 +84,14 @@ const DocumentsPage: React.FC = observer(() => {
       refreshActiveRevisions();
     }
   }, [projectStore.selectedProject?.id, refreshActiveRevisions]);
-  
+
   // Обновляем showSelectColumn при изменении роли пользователя
   useEffect(() => {
-    
+
     setShowSelectColumn(!isViewer);
   }, [isViewer]);
 
-  
+
   // Обработчик выбора документа
   const handleDocumentSelect = (documentId: number, selected: boolean) => {
     if (selected) {
@@ -101,7 +100,7 @@ const DocumentsPage: React.FC = observer(() => {
       setSelectedDocuments(prev => prev.filter(id => id !== documentId));
     }
   };
-  
+
   // Обработчик добавления выбранных документов в трансмиттал
   const handleAddToTransmittal = () => {
     (activeRevisions || []).forEach(activeRevision => {
@@ -111,8 +110,6 @@ const DocumentsPage: React.FC = observer(() => {
     });
     // Очищаем выбор после добавления в трансмиттал
     setSelectedDocuments([]);
-    // Открываем модалку трансмитталов
-    setCartModalOpen(true);
   };
 
   // Функция для показа уведомлений трансмиттала
@@ -128,7 +125,7 @@ const DocumentsPage: React.FC = observer(() => {
   const handleCloseTransmittalNotification = () => {
     setTransmittalNotification(prev => ({ ...prev, open: false }));
   };
-  
+
   const {
     filterStatus,
     searchTerm,
@@ -193,7 +190,7 @@ const DocumentsPage: React.FC = observer(() => {
       window.removeEventListener('documents:refresh', handleDocumentsRefresh);
     };
   }, [refreshDocumentsData]);
-  
+
   // Обработчик сортировки
   const handleRequestSort = (event: React.MouseEvent<unknown>, property: string) => {
     const isAsc = orderBy === property && order === 'asc';
@@ -250,8 +247,8 @@ const DocumentsPage: React.FC = observer(() => {
     handleCloseNotification,
     errorNotification,
     handleCloseErrorNotification,
-  } = useDocumentActions({ 
-    t, 
+  } = useDocumentActions({
+    t,
     onCloseDialog: handleCloseDocumentDetails,
     onRefreshActiveRevisions: () => {
       refreshActiveRevisions();
@@ -296,18 +293,23 @@ const DocumentsPage: React.FC = observer(() => {
   const handleReleaseDocument = async (revisionId: number, comment?: string) => {
     try {
       await documentsApi.releaseRevision(revisionId, comment);
-      
+
       // Обновляем данные документов
       await refreshDocuments();
-      
+
       // Обновляем данные ревизий для текущего документа
       if (selectedDocumentId) {
         await documentRevisionStore.reloadRevisions(selectedDocumentId);
       }
-      
+
       // Обновляем активные ревизии для трансмитталов
       refreshActiveRevisions();
-      
+
+      // Обновляем список ревью, так как released ревизия могла попасть туда (внутреннее согласование)
+      if (projectStore.selectedProject?.id) {
+        reviewStore.refreshReviews(projectStore.selectedProject.id);
+      }
+
       setSuccessNotification({
         open: true,
         message: t('documents.release_success')
@@ -320,7 +322,7 @@ const DocumentsPage: React.FC = observer(() => {
       });
     }
   };
-  
+
 
 
   const handleStartWorkflowWithTemplate = async (templateId: number) => {
@@ -330,7 +332,7 @@ const DocumentsPage: React.FC = observer(() => {
       await workflowApi.startWorkflow(selectedDocumentForWorkflow.id, templateId);
       alert(t('documents.workflow_started'));
       handleCloseWorkflow();
-      
+
       documentStore.loadDocuments(projectStore.selectedProject!.id, false, 'all');
     } catch (error) {
       alert(t('documents.workflow_error'));
@@ -364,21 +366,21 @@ const DocumentsPage: React.FC = observer(() => {
 
   return (
     <ProjectRequired>
-    <Box sx={{ 
-      width: '100%', 
-      minWidth: 0, 
-      pt: 3, // padding только сверху
-      px: 3, // padding только по бокам
-      pb: 0, // убираем padding снизу
-      height: !isMobile ? 'calc(100vh - 117px)' : '100vh', // Всегда вычитаем высоту пагинации для десктопа
-      display: 'flex', 
-      flexDirection: 'column',
-      overflow: 'hidden', // Убираем прокрутку страницы
-    }}>
-        <Box sx={{ 
-          display: 'flex', 
-          justifyContent: 'space-between', 
-          alignItems: isMobile ? 'flex-start' : 'center', 
+      <Box sx={{
+        width: '100%',
+        minWidth: 0,
+        pt: 3, // padding только сверху
+        px: 3, // padding только по бокам
+        pb: 0, // убираем padding снизу
+        height: !isMobile ? 'calc(100vh - 117px)' : '100vh', // Всегда вычитаем высоту пагинации для десктопа
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden', // Убираем прокрутку страницы
+      }}>
+        <Box sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: isMobile ? 'flex-start' : 'center',
           mb: 3, // Возвращаем отступ снизу
           flexDirection: isMobile ? 'column' : 'row',
           gap: isMobile ? 2 : 0,
@@ -387,61 +389,41 @@ const DocumentsPage: React.FC = observer(() => {
             <Typography variant={isMobile ? "h5" : "h4"} component="h1">
               {t('menu.documents')} {projectStore.selectedProject && `- ${projectStore.selectedProject.name}`}
             </Typography>
-            
+
           </Box>
           {!isViewer && (
-          <Box sx={{ display: 'flex', gap: 1, width: isMobile ? '100%' : 'auto' }}>
-            <Button
-              variant="contained"
-              startIcon={<AddIcon />}
-              onClick={() => {
-                setIsCreatingDocument(true);
-                setSelectedDocument(null);
-                handleOpenDocumentDetails();
-              }}
-              sx={{ backgroundColor: '#1976d2', flex: isMobile ? 1 : 'none' }}
-            >
-              {t('documents.upload')}
-            </Button>
-            <Button
-              variant="outlined"
-              startIcon={<UploadFileIcon />}
-              onClick={handleOpenBatchUpload}
-              sx={{ flex: isMobile ? 1 : 'none' }}
-            >
-              {t('documents.import_by_paths') || 'Импорт по путям (Excel)'}
-            </Button>
-            {selectedDocuments.length > 0 && !isViewer && (
+            <Box sx={{ display: 'flex', gap: 1, width: isMobile ? '100%' : 'auto' }}>
               <Button
                 variant="contained"
-                onClick={handleAddToTransmittal}
+                startIcon={<AddIcon />}
+                onClick={() => {
+                  setIsCreatingDocument(true);
+                  setSelectedDocument(null);
+                  handleOpenDocumentDetails();
+                }}
                 sx={{ backgroundColor: '#1976d2', flex: isMobile ? 1 : 'none' }}
               >
-{t('transmittals.add_to_transmittal')} ({selectedDocuments.length})
+                {t('documents.upload')}
               </Button>
-            )}
-            
-            {/* Кнопка корзины для мобильной версии */}
-            {isMobile && transmittalCartStore.selectedCount > 0 && !isViewer && (
-              <Badge badgeContent={transmittalCartStore.selectedCount} color="primary">
-                <IconButton
-                  onClick={() => setCartModalOpen(true)}
-                  sx={{ 
-                    color: 'primary.main',
-                    border: '1px solid',
-                    borderColor: 'primary.main',
-                    '&:hover': {
-                      backgroundColor: 'primary.light',
-                      color: 'white'
-                    }
-                  }}
-                  title={t('documents.open_transmittal_cart')}
+              <Button
+                variant="outlined"
+                startIcon={<UploadFileIcon />}
+                onClick={handleOpenBatchUpload}
+                sx={{ flex: isMobile ? 1 : 'none' }}
+              >
+                {t('documents.import_by_paths') || 'Импорт по путям (Excel)'}
+              </Button>
+              {selectedDocuments.length > 0 && !isViewer && (
+                <Button
+                  variant="contained"
+                  onClick={handleAddToTransmittal}
+                  sx={{ backgroundColor: '#1976d2', flex: isMobile ? 1 : 'none' }}
                 >
-                  <SendIcon />
-                </IconButton>
-              </Badge>
-            )}
-          </Box>
+                  {t('transmittals.add_to_transmittal')} ({selectedDocuments.length})
+                </Button>
+              )}
+
+            </Box>
           )}
         </Box>
 
@@ -493,9 +475,9 @@ const DocumentsPage: React.FC = observer(() => {
           }}
         />
 
-        <Box sx={{ 
-          width: '100%', 
-          minWidth: 0, 
+        <Box sx={{
+          width: '100%',
+          minWidth: 0,
           display: 'flex',
           flexDirection: 'column',
           flex: 1, // Занимаем оставшееся место
@@ -506,38 +488,38 @@ const DocumentsPage: React.FC = observer(() => {
         }}>
 
           {isMobile ? (
-            <Box sx={{ 
-              width: '100%', 
-              minWidth: 0, 
+            <Box sx={{
+              width: '100%',
+              minWidth: 0,
               flex: 1,
             }}>
               <DocumentCards
-              documents={paginatedDocuments}
-              totalCount={total}
-              isLoading={documentsLoading}
-              error={documentsError}
-                        page={page}
-              rowsPerPage={size}
-              rowsPerPageOptions={[10, 13, 25, 50]}
-                        onPageChange={handleChangePage}
-                        onRowsPerPageChange={handleChangeSize}
-              onShowDetails={(documentId) => {
-                handleShowDocumentDetails(documentId);
-                handleOpenDocumentDetails();
-              }}
-              onDownload={handleDownload}
-              onDelete={(document) => {
-                deleteDialog.openDeleteDialog(document);
-              }}
-              formatFileSize={formatFileSize}
-              formatDate={formatDate}
-              language={i18n.language}
+                documents={paginatedDocuments}
+                totalCount={total}
+                isLoading={documentsLoading}
+                error={documentsError}
+                page={page}
+                rowsPerPage={size}
+                rowsPerPageOptions={[10, 13, 25, 50]}
+                onPageChange={handleChangePage}
+                onRowsPerPageChange={handleChangeSize}
+                onShowDetails={(documentId) => {
+                  handleShowDocumentDetails(documentId);
+                  handleOpenDocumentDetails();
+                }}
+                onDownload={handleDownload}
+                onDelete={(document) => {
+                  deleteDialog.openDeleteDialog(document);
+                }}
+                formatFileSize={formatFileSize}
+                formatDate={formatDate}
+                language={i18n.language}
               />
             </Box>
           ) : (
-            <Box sx={{ 
-              width: '100%', 
-              minWidth: 0, 
+            <Box sx={{
+              width: '100%',
+              minWidth: 0,
               flex: 1, // Занимаем всю высоту зеленого контейнера
               minHeight: 0, // Важно! Позволяет flex-элементу сжиматься
               display: 'flex',
@@ -588,58 +570,6 @@ const DocumentsPage: React.FC = observer(() => {
           />
         )}
 
-        {/* Модалка трансмитталов */}
-        <TransmittalCartModal
-          open={cartModalOpen}
-          selectedRevisionIds={transmittalCartStore.selectedRevisionIds}
-          activeRevisions={activeRevisions || []}
-          isLoading={transmittalCartStore.isLoading}
-          error={transmittalCartStore.error}
-          onClose={() => setCartModalOpen(false)}
-          onRemoveRevision={transmittalCartStore.removeRevision}
-          onClearAll={transmittalCartStore.clearAll}
-          onCreateTransmittal={async (transmittalData) => {
-            if (projectStore.selectedProject) {
-              await transmittalCartStore.createTransmittal(transmittalData, projectStore.selectedProject.id);
-              setCartModalOpen(false);
-            }
-          }}
-          onShowNotification={handleShowTransmittalNotification}
-          formatFileSize={formatFileSize}
-          formatDate={formatDate}
-        />
-
-        {/* Кнопка открытия корзины трансмитталов в правом нижнем углу */}
-        {!cartModalOpen && transmittalCartStore.selectedCount > 0 && !isViewer && (
-          <Box
-            sx={{
-              position: 'fixed',
-              bottom: 130,
-              right: 24,
-              zIndex: 1000,
-            }}
-          >
-            <Badge badgeContent={transmittalCartStore.selectedCount} color="primary">
-              <IconButton
-                onClick={() => setCartModalOpen(true)}
-                sx={{
-                  backgroundColor: 'primary.main',
-                  color: 'white',
-                  width: 56,
-                  height: 56,
-                  boxShadow: 3,
-                  '&:hover': {
-                    backgroundColor: 'primary.dark',
-                    boxShadow: 6,
-                  },
-                }}
-                title={t('documents.open_transmittal_cart')}
-              >
-                <SendIcon />
-              </IconButton>
-            </Badge>
-          </Box>
-        )}
 
         <DocumentSettingsDialog
           open={settingsOpen}
@@ -651,7 +581,7 @@ const DocumentsPage: React.FC = observer(() => {
         />
 
         <DocumentBatchUploadDialog
-          open={batchUploadOpen} 
+          open={batchUploadOpen}
           metadataFile={metadataFile}
           uploading={uploading}
           validating={validating}

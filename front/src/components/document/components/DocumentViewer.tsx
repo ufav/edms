@@ -292,8 +292,9 @@ const DocumentViewer: React.FC<DocumentViewerProps> = observer(({
                     }}
                     variant="contained"
                     disabled={isUploadingDocument}
+                    startIcon={isUploadingDocument ? <CircularProgress size={16} color="inherit" /> : null}
                   >
-                    {isUploadingDocument ? <CircularProgress size={24} /> : t('common.create')}
+                    {t('common.create')}
                   </Button>
                 );
               })()}

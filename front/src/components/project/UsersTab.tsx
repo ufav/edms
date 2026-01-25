@@ -24,12 +24,13 @@ import {
   Chip
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
-import { 
+import {
   Add as AddIcon,
   Delete as DeleteIcon
 } from '@mui/icons-material';
 import { type ProjectRole } from '../../api/client';
 import { userStore } from '../../stores/UserStore';
+import { getAvailableProjectRoles } from '../../hooks/usePermissions';
 
 interface UsersTabProps {
   pendingProjectMembers: any[];
@@ -47,7 +48,7 @@ const UsersTab: React.FC<UsersTabProps> = ({
   onSaveProjectMember,
 }) => {
   const { t } = useTranslation();
-  
+
   const [projectMemberDialogOpen, setProjectMemberDialogOpen] = useState(false);
   const [isEditingProjectMember, setIsEditingProjectMember] = useState(false);
   const [selectedProjectMember, setSelectedProjectMember] = useState<any>(null);
@@ -77,17 +78,11 @@ const UsersTab: React.FC<UsersTabProps> = ({
   // Функция для фильтрации ролей в зависимости от глобальной роли пользователя
   const getAvailableRoles = (userId: number | null) => {
     if (!userId) return projectRoles;
-    
+
     const user = users.find(u => u.id === userId);
     if (!user) return projectRoles;
-    
-    // Если пользователь имеет глобальную роль Viewer, показываем только роль viewer
-    if (user.role === 'Viewer') {
-      return projectRoles.filter(role => role.code === 'viewer');
-    }
-    
-    // Для остальных ролей показываем все роли
-    return projectRoles;
+
+    return getAvailableProjectRoles(user.role, projectRoles);
   };
 
   const handleAddProjectMember = () => {
@@ -102,23 +97,23 @@ const UsersTab: React.FC<UsersTabProps> = ({
 
   const handleSaveProjectMember = () => {
     if (!projectMemberFormData.user_id || !projectMemberFormData.project_role_id) return;
-    
+
     // Проверяем, не добавлен ли уже этот пользователь
-    const isUserAlreadyAdded = pendingProjectMembers.some(member => 
+    const isUserAlreadyAdded = pendingProjectMembers.some(member =>
       member.user_id === projectMemberFormData.user_id && member.id !== selectedProjectMember?.id
     );
-    
+
     if (isUserAlreadyAdded) {
       alert('Этот пользователь уже добавлен в проект');
       return;
     }
 
-    
+
     const memberData = {
       ...projectMemberFormData,
       id: selectedProjectMember?.id || Date.now()
     };
-    
+
     onSaveProjectMember(memberData);
     setProjectMemberDialogOpen(false);
   };
@@ -127,7 +122,7 @@ const UsersTab: React.FC<UsersTabProps> = ({
   const handleUserChange = (userId: number | null) => {
     const availableRoles = getAvailableRoles(userId);
     const currentRoleId = projectMemberFormData.project_role_id;
-    
+
     // Если текущая выбранная роль недоступна для нового пользователя, сбрасываем её
     if (currentRoleId && !availableRoles.some(role => role.id === currentRoleId)) {
       setProjectMemberFormData(prev => ({
@@ -212,7 +207,7 @@ const UsersTab: React.FC<UsersTabProps> = ({
                       {(() => {
                         const currentUserId = userStore.currentUser?.id;
                         const isCurrentUser = currentUserId && member.user_id === currentUserId;
-                        
+
                         return (
                           <IconButton
                             size="small"
@@ -278,7 +273,7 @@ const UsersTab: React.FC<UsersTabProps> = ({
         <DialogContent sx={{ maxHeight: '60vh', overflow: 'auto' }}>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
             <Autocomplete
-              options={users.filter(user => 
+              options={users.filter(user =>
                 !pendingProjectMembers.some(member => member.user_id === user.id)
               )}
               getOptionLabel={(user) => `${user.full_name} (${user.email})`}

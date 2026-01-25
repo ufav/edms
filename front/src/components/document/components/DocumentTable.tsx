@@ -305,7 +305,11 @@ export const DocumentTable: React.FC<DocumentTableProps> = observer(({
           maxWidth: '320px',
           fontWeight: 'bold',
           fontSize: '0.875rem',
-          whiteSpace: 'nowrap'
+          whiteSpace: 'nowrap',
+          position: 'sticky',
+          top: 0,
+          backgroundColor: '#f5f5f5',
+          zIndex: 1
         }}
         sortDirection={sortDirection}
       >
@@ -600,54 +604,64 @@ export const DocumentTable: React.FC<DocumentTableProps> = observer(({
     if (!fileType) return { icon: FolderIcon, label: 'N/A', color: 'default' };
 
     const type = fileType.toLowerCase();
+    const lowerFileName = fileName?.toLowerCase() || '';
 
     // PDF файлы
-    if (type.includes('pdf')) {
+    if (type.includes('pdf') || lowerFileName.endsWith('.pdf')) {
       return { icon: PdfIcon, label: 'PDF', color: 'error' };
     }
 
     // Excel файлы (проверяем раньше Word, так как Excel MIME содержит "document")
-    if (type.includes('excel') || type.includes('sheet') || type.includes('xls') || type.includes('spreadsheet')) {
+    if (type.includes('excel') || type.includes('sheet') || type.includes('xls') || type.includes('spreadsheet') ||
+        lowerFileName.endsWith('.xls') || lowerFileName.endsWith('.xlsx')) {
       return { icon: ExcelIcon, label: 'XLSX', color: 'success' };
     }
 
     // Word документы
-    if (type.includes('word') || type.includes('doc') || type.includes('wordprocessing')) {
+    if (type.includes('word') || type.includes('doc') || type.includes('wordprocessing') ||
+        lowerFileName.endsWith('.doc') || lowerFileName.endsWith('.docx')) {
       return { icon: DocIcon, label: 'DOCX', color: 'primary' };
     }
 
     // PowerPoint файлы
-    if (type.includes('powerpoint') || type.includes('presentation') || type.includes('ppt')) {
+    if (type.includes('powerpoint') || type.includes('presentation') || type.includes('ppt') ||
+        lowerFileName.endsWith('.ppt') || lowerFileName.endsWith('.pptx')) {
       return { icon: PptIcon, label: 'PPTX', color: 'warning' };
     }
 
     // Изображения
-    if (type.includes('image') || type.includes('jpeg') || type.includes('jpg') || type.includes('png') || type.includes('gif') || type.includes('bmp')) {
+    if (type.includes('image') || type.includes('jpeg') || type.includes('jpg') || type.includes('png') || type.includes('gif') || type.includes('bmp') ||
+        lowerFileName.match(/\.(jpg|jpeg|png|gif|bmp|svg)$/)) {
       return { icon: ImageIcon, label: 'IMG', color: 'info' };
     }
 
     // Видео файлы
-    if (type.includes('video') || type.includes('mp4') || type.includes('avi') || type.includes('mov')) {
+    if (type.includes('video') || type.includes('mp4') || type.includes('avi') || type.includes('mov') ||
+        lowerFileName.match(/\.(mp4|avi|mov|wmv|flv|webm)$/)) {
       return { icon: VideoIcon, label: 'VID', color: 'secondary' };
     }
 
     // Аудио файлы
-    if (type.includes('audio') || type.includes('mp3') || type.includes('wav')) {
+    if (type.includes('audio') || type.includes('mp3') || type.includes('wav') ||
+        lowerFileName.match(/\.(mp3|wav|flac|aac|ogg)$/)) {
       return { icon: AudioIcon, label: 'AUD', color: 'secondary' };
     }
 
-    // CAD файлы
-    if (type.includes('dwg') || type.includes('dxf') || type.includes('cad')) {
+    // CAD файлы - проверяем и MIME тип и расширение файла
+    if (type.includes('dwg') || type.includes('dxf') || type.includes('cad') ||
+        lowerFileName.endsWith('.dwg') || lowerFileName.endsWith('.dxf')) {
       return { icon: DwgIcon, label: 'CAD', color: 'primary' };
     }
 
     // Текстовые файлы
-    if (type.includes('text') || type.includes('txt')) {
+    if (type.includes('text') || type.includes('txt') ||
+        lowerFileName.match(/\.(txt|rtf|md)$/)) {
       return { icon: TextIcon, label: 'TXT', color: 'default' };
     }
 
     // Код файлы
-    if (type.includes('code') || type.includes('js') || type.includes('html') || type.includes('css')) {
+    if (type.includes('code') || type.includes('js') || type.includes('html') || type.includes('css') ||
+        lowerFileName.match(/\.(js|ts|jsx|tsx|py|java|cpp|c|cs|php|rb|go|rs)$/)) {
       return { icon: CodeIcon, label: 'CODE', color: 'default' };
     }
 
@@ -717,58 +731,33 @@ export const DocumentTable: React.FC<DocumentTableProps> = observer(({
       marginBottom: 0, // Убираем отступ снизу
       paddingBottom: 0 // Убираем padding снизу
     }}>
-      {/* Заголовок таблицы - зафиксирован */}
-      <Box sx={{
-        borderBottom: '1px solid #f0f0f0',
-        backgroundColor: '#f5f5f5',
-        boxShadow: 2, // Добавляем тень как у основной рабочей области
-      }}>
-        <Table sx={{ tableLayout: 'fixed', width: '100%', minWidth: '100%' }}>
-          <TableHead>
-            <TableRow sx={{ backgroundColor: '#f5f5f5', '& .MuiTableCell-root': { padding: '8px 16px' } }}>
-              {showSelectColumn && (<TableCell sx={{
-                width: '50px',
-                minWidth: '50px',
-                maxWidth: '50px',
-                fontWeight: 'bold',
-                fontSize: '0.875rem',
-                whiteSpace: 'nowrap',
-                textAlign: 'center',
-                position: 'sticky',
-                left: 0,
-                backgroundColor: '#f5f5f5',
-                zIndex: 3
-              }}></TableCell>)}
-              {/* Рендерим колонки в порядке из настроек */}
-              {getSortedColumns().map(columnKey =>
-                visibleCols[columnKey as keyof typeof visibleCols] && renderColumnHeader(columnKey)
-              )}
-              {visibleCols.actions && (<TableCell sx={{
-                width: '110px',
-                minWidth: '110px',
-                maxWidth: '110px',
-                fontWeight: 'bold',
-                fontSize: '0.875rem',
-                whiteSpace: 'nowrap',
-                position: 'sticky',
-                right: 0,
-                backgroundColor: '#f5f5f5',
-                zIndex: 3
-              }}>{t('common.actions')}</TableCell>)}
-            </TableRow>
-          </TableHead>
-        </Table>
-      </Box>
-
-      {/* Тело таблицы - с прокруткой */}
-      <TableContainer component={Paper} sx={{
-        boxShadow: 2,
-        width: '100%',
-        minWidth: '100%',
-        flex: 1, // Занимаем оставшуюся высоту
-        minHeight: 0, // Важно для flex
-        overflow: 'auto',
-        borderRadius: 0, // Убираем скругленные углы
+      {/* Единый TableContainer для заголовка и тела таблицы */}
+      <TableContainer 
+        component={Paper} 
+        sx={{
+          boxShadow: 2,
+          width: '100%',
+          minWidth: '100%',
+          flex: 1, // Занимаем оставшуюся высоту
+          minHeight: 0, // Важно для flex
+          overflow: 'auto',
+          borderRadius: 0, // Убираем скругленные углы
+          padding: '0 !important', // Убираем padding
+          margin: 0,
+          boxSizing: 'border-box',
+          '& .MuiPaper-root': {
+            padding: '0 !important',
+            margin: '0 !important',
+            width: '100%',
+            maxWidth: '100%',
+            boxSizing: 'border-box',
+          },
+          '& .MuiTable-root': {
+            width: '100%',
+            maxWidth: '100%',
+            margin: 0,
+            padding: 0,
+          },
         '&::-webkit-scrollbar': {
           width: '8px',
           height: '8px',
@@ -785,7 +774,53 @@ export const DocumentTable: React.FC<DocumentTableProps> = observer(({
           },
         },
       }}>
-        <Table sx={{ tableLayout: 'fixed', width: '100%', minWidth: '100%' }}>
+        <Table sx={{ 
+          tableLayout: 'fixed', 
+          width: '100%', 
+          minWidth: '100%', 
+          maxWidth: '100%',
+          margin: 0, 
+          padding: 0,
+          boxSizing: 'border-box'
+        }}>
+          <TableHead>
+            <TableRow sx={{ 
+              backgroundColor: '#f5f5f5', 
+              '& .MuiTableCell-root': { padding: '8px 16px' }
+            }}>
+              {showSelectColumn && (<TableCell sx={{
+                width: '50px',
+                minWidth: '50px',
+                maxWidth: '50px',
+                fontWeight: 'bold',
+                fontSize: '0.875rem',
+                whiteSpace: 'nowrap',
+                textAlign: 'center',
+                position: 'sticky',
+                left: 0,
+                top: 0,
+                backgroundColor: '#f5f5f5',
+                zIndex: 3
+              }}></TableCell>)}
+              {/* Рендерим колонки в порядке из настроек */}
+              {getSortedColumns().map(columnKey =>
+                visibleCols[columnKey as keyof typeof visibleCols] && renderColumnHeader(columnKey)
+              )}
+              {visibleCols.actions && (<TableCell sx={{
+                width: '110px',
+                minWidth: '110px',
+                maxWidth: '110px',
+                fontWeight: 'bold',
+                fontSize: '0.875rem',
+                whiteSpace: 'nowrap',
+                position: 'sticky',
+                right: 0,
+                top: 0,
+                backgroundColor: '#f5f5f5',
+                zIndex: 3
+              }}>{t('common.actions')}</TableCell>)}
+            </TableRow>
+          </TableHead>
           <TableBody>
             {documents.map((document) => (
               <TableRow
@@ -796,11 +831,17 @@ export const DocumentTable: React.FC<DocumentTableProps> = observer(({
                     backgroundColor: 'rgba(0, 0, 0, 0.04) !important',
                     '& .MuiTableCell-root': {
                       backgroundColor: 'rgba(0, 0, 0, 0.04) !important'
+                    },
+                    '& [data-sticky="right"]': {
+                      backgroundColor: 'background.paper !important'
+                    },
+                    '& [data-sticky="left"]': {
+                      backgroundColor: 'background.paper !important'
                     }
                   }
                 }}
               >
-                {showSelectColumn && (
+                {showSelectColumn && isDocumentSelectable(document.id) && (
                   <TableCell
                     data-sticky="left"
                     sx={{
@@ -810,17 +851,32 @@ export const DocumentTable: React.FC<DocumentTableProps> = observer(({
                       textAlign: 'center',
                       position: 'sticky',
                       left: 0,
-                      zIndex: 2
+                      zIndex: 2,
+                      backgroundColor: 'background.paper'
                     }}
                   >
                     <Checkbox
                       checked={selectedDocuments.includes(document.id)}
                       onChange={(e) => onDocumentSelect?.(document.id, e.target.checked)}
-                      disabled={!isDocumentSelectable(document.id)}
                       size="small"
                       sx={{ padding: 0 }}
                     />
                   </TableCell>
+                )}
+                {showSelectColumn && !isDocumentSelectable(document.id) && (
+                  <TableCell
+                    data-sticky="left"
+                    sx={{
+                      width: '50px',
+                      minWidth: '50px',
+                      maxWidth: '50px',
+                      textAlign: 'center',
+                      position: 'sticky',
+                      left: 0,
+                      zIndex: 2,
+                      backgroundColor: 'background.paper'
+                    }}
+                  />
                 )}
                 {/* Рендерим колонки в порядке из настроек */}
                 {getSortedColumns().map(columnKey =>
@@ -834,7 +890,8 @@ export const DocumentTable: React.FC<DocumentTableProps> = observer(({
                     maxWidth: '110px',
                     position: 'sticky',
                     right: 0,
-                    zIndex: 2
+                    zIndex: 2,
+                    backgroundColor: 'background.paper'
                   }}
                 >
                   <Box sx={{ display: 'flex', gap: 1 }}>

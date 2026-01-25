@@ -45,9 +45,22 @@ export const useConnectionStatusWebSocket = (options: UseConnectionStatusWebSock
   const reconnectAttemptsRef = useRef(0);
   const isMountedRef = useRef(true);
   const shouldReconnectRef = useRef(true);
+  const isConnectingRef = useRef(false);
+
+  // Используем useRef для хранения конфигурации, чтобы избежать пересоздания connect
+  const configRef = useRef({ pingInterval, reconnectInterval, reconnectAttempts });
+  configRef.current = { pingInterval, reconnectInterval, reconnectAttempts };
 
   const connect = useCallback(() => {
     if (!shouldReconnectRef.current || !isMountedRef.current) return;
+
+    // Предотвращаем множественные одновременные подключения
+    if (isConnectingRef.current) return;
+    if (wsRef.current && (wsRef.current.readyState === WebSocket.CONNECTING || wsRef.current.readyState === WebSocket.OPEN)) {
+      return;
+    }
+
+    isConnectingRef.current = true;
 
     // Очищаем предыдущее соединение
     if (wsRef.current) {
@@ -74,6 +87,8 @@ export const useConnectionStatusWebSocket = (options: UseConnectionStatusWebSock
       wsRef.current = ws;
 
       ws.onopen = () => {
+        isConnectingRef.current = false;
+
         if (!isMountedRef.current) {
           ws.close();
           return;
@@ -87,7 +102,7 @@ export const useConnectionStatusWebSocket = (options: UseConnectionStatusWebSock
           if (ws.readyState === WebSocket.OPEN && wsRef.current === ws) {
             ws.send(JSON.stringify({ type: 'ping' }));
           }
-        }, pingInterval);
+        }, configRef.current.pingInterval);
       };
 
       ws.onmessage = (event) => {
@@ -112,16 +127,16 @@ export const useConnectionStatusWebSocket = (options: UseConnectionStatusWebSock
         }
       };
 
-      ws.onerror = (error) => {
+      ws.onerror = () => {
         if (!isMountedRef.current) return;
 
         // При ошибке переходим в состояние переподключения
-        if (status !== 'reconnecting') {
-          setStatus('reconnecting');
-        }
+        setStatus('reconnecting');
       };
 
       ws.onclose = () => {
+        isConnectingRef.current = false;
+
         if (!isMountedRef.current) return;
 
         // Очищаем ping интервал
@@ -133,7 +148,7 @@ export const useConnectionStatusWebSocket = (options: UseConnectionStatusWebSock
         wsRef.current = null;
 
         // Если соединение закрыто не по нашей инициативе и мы должны переподключаться
-        if (shouldReconnectRef.current && reconnectAttemptsRef.current < reconnectAttempts) {
+        if (shouldReconnectRef.current && reconnectAttemptsRef.current < configRef.current.reconnectAttempts) {
           reconnectAttemptsRef.current += 1;
 
           setStatus('reconnecting');
@@ -141,12 +156,14 @@ export const useConnectionStatusWebSocket = (options: UseConnectionStatusWebSock
           // Пытаемся переподключиться через reconnectInterval
           reconnectTimeoutRef.current = setTimeout(() => {
             connect();
-          }, reconnectInterval);
-        } else if (reconnectAttemptsRef.current >= reconnectAttempts) {
+          }, configRef.current.reconnectInterval);
+        } else if (reconnectAttemptsRef.current >= configRef.current.reconnectAttempts) {
           setStatus('offline');
         }
       };
     } catch (error) {
+      isConnectingRef.current = false;
+
       if (!isMountedRef.current) return;
 
       setStatus('reconnecting');
@@ -154,9 +171,9 @@ export const useConnectionStatusWebSocket = (options: UseConnectionStatusWebSock
       // Пытаемся переподключиться
       reconnectTimeoutRef.current = setTimeout(() => {
         connect();
-      }, reconnectInterval);
+      }, configRef.current.reconnectInterval);
     }
-  }, [pingInterval, reconnectInterval, reconnectAttempts, status]);
+  }, []); // Пустой массив зависимостей - connect никогда не пересоздаётся
 
   useEffect(() => {
     isMountedRef.current = true;

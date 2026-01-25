@@ -45,6 +45,10 @@ import { projectStore } from '../stores/ProjectStore';
 import { userStore } from '../stores/UserStore';
 import { reviewStore } from '../stores/ReviewStore';
 import { usePermissions } from '../hooks/usePermissions';
+import { useCurrentUser } from '../hooks/useCurrentUser';
+import { TransmittalCartModal, useActiveRevisions } from './transmittal';
+import { transmittalCartStore } from '../stores/TransmittalCartStore';
+import { transmittalStore } from '../stores/TransmittalStore';
 import type { Project } from '../stores/ProjectStore';
 
 interface LayoutProps {
@@ -56,11 +60,11 @@ interface LayoutProps {
   onProjectSelect: (project: Project) => void;
 }
 
-const Layout: React.FC<LayoutProps> = observer(({ 
-  children, 
-  currentPage, 
-  onPageChange, 
-  onLogout, 
+const Layout: React.FC<LayoutProps> = observer(({
+  children,
+  currentPage,
+  onPageChange,
+  onLogout,
   user,
   onProjectSelect
 }) => {
@@ -74,12 +78,15 @@ const Layout: React.FC<LayoutProps> = observer(({
   const [unreadNotificationsCount, setUnreadNotificationsCount] = useState(0);
   const [selectedTicketId, setSelectedTicketId] = useState<number | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
+  const [cartModalOpen, setCartModalOpen] = useState(false);
   const [indicatorStyle, setIndicatorStyle] = useState({ left: 0, width: 0 });
   const menuRef = useRef<HTMLDivElement>(null);
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const { t, i18n } = useTranslation();
   const permissions = usePermissions();
+  const { isViewer } = useCurrentUser();
+  const { activeRevisions } = useActiveRevisions();
 
   const handleMenu = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -89,18 +96,20 @@ const Layout: React.FC<LayoutProps> = observer(({
     setNotificationsAnchorEl(event.currentTarget);
     setNotificationsOpen(true);
     // Обновляем счетчик при открытии диалога
-    notificationsApi.getUnreadCount().then(setUnreadNotificationsCount).catch(console.error);
+    notificationsApi.getUnreadCount().then(setUnreadNotificationsCount).catch((error: any) => {
+      if (error?.response?.status !== 401) console.error(error);
+    });
   };
 
   // Функция для обновления позиции индикатора
   const updateIndicator = () => {
     if (!menuRef.current) return;
-    
+
     const activeButton = menuRef.current.querySelector(`[data-page="${currentPage}"]`) as HTMLElement;
     if (activeButton) {
       const menuRect = menuRef.current.getBoundingClientRect();
       const buttonRect = activeButton.getBoundingClientRect();
-      
+
       setIndicatorStyle({
         left: buttonRect.left - menuRect.left,
         width: buttonRect.width,
@@ -136,8 +145,11 @@ const Layout: React.FC<LayoutProps> = observer(({
       try {
         const count = await notificationsApi.getUnreadCount();
         setUnreadNotificationsCount(count);
-      } catch (error) {
-        console.error('Error loading unread notifications count:', error);
+      } catch (error: any) {
+        // Если ошибка 401 (не авторизован), не логируем - это нормальная ситуация при истечении токена
+        if (error?.response?.status !== 401) {
+          console.error('Error loading unread notifications count:', error);
+        }
       }
     };
 
@@ -150,7 +162,9 @@ const Layout: React.FC<LayoutProps> = observer(({
   // Обновляем счетчик при открытии диалога уведомлений
   useEffect(() => {
     if (notificationsOpen) {
-      notificationsApi.getUnreadCount().then(setUnreadNotificationsCount).catch(console.error);
+      notificationsApi.getUnreadCount().then(setUnreadNotificationsCount).catch((error: any) => {
+        if (error?.response?.status !== 401) console.error(error);
+      });
     }
   }, [notificationsOpen]);
 
@@ -176,9 +190,9 @@ const Layout: React.FC<LayoutProps> = observer(({
       { id: 'projects', label: t('menu.projects'), icon: <ProjectIcon /> },
       { id: 'documents', label: t('menu.documents'), icon: <DocumentIcon /> },
       { id: 'transmittals', label: t('menu.transmittals'), icon: <TransmittalIcon /> },
-      { 
-        id: 'reviews', 
-        label: t('menu.reviews'), 
+      {
+        id: 'reviews',
+        label: t('menu.reviews'),
         icon: (
           <Badge badgeContent={pendingReviewsCount > 0 ? pendingReviewsCount : undefined} color="error">
             <ReviewIcon />
@@ -242,8 +256,8 @@ const Layout: React.FC<LayoutProps> = observer(({
   );
 
   return (
-    <Box sx={{ 
-      display: 'flex', 
+    <Box sx={{
+      display: 'flex',
       height: '100vh',
       width: '100%',
       minWidth: 0
@@ -268,7 +282,7 @@ const Layout: React.FC<LayoutProps> = observer(({
               <MenuIcon />
             </IconButton>
           )}
-          
+
           <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
             {t('app.title')}
           </Typography>
@@ -280,11 +294,11 @@ const Layout: React.FC<LayoutProps> = observer(({
 
           {/* Desktop Navigation */}
           {!isMobile && (
-            <Box 
+            <Box
               ref={menuRef}
-              sx={{ 
-                display: 'flex', 
-                gap: 1, 
+              sx={{
+                display: 'flex',
+                gap: 1,
                 position: 'relative',
                 '&::after': {
                   content: '""',
@@ -300,30 +314,30 @@ const Layout: React.FC<LayoutProps> = observer(({
                 }
               }}
             >
-                {menuItems.map((item) => (
-                  <Button
-                    key={item.id}
-                    data-page={item.id}
-                    color="inherit"
-                    onClick={() => {
-                      onPageChange(item.id);
-                    }}
-                    sx={{
-                      backgroundColor: currentPage === item.id ? 'rgba(255,255,255,0.2)' : 'transparent',
-                      borderRadius: '4px 4px 0 0',
-                      fontWeight: currentPage === item.id ? 600 : 400,
-                      position: 'relative',
-                      zIndex: 2,
-                      '&:hover': {
-                        backgroundColor: currentPage === item.id ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.1)',
-                      },
-                    }}
-                  >
-                    {item.icon}
-                    <Typography sx={{ ml: 1 }}>{item.label}</Typography>
-                  </Button>
-                ))}
-              </Box>
+              {menuItems.map((item) => (
+                <Button
+                  key={item.id}
+                  data-page={item.id}
+                  color="inherit"
+                  onClick={() => {
+                    onPageChange(item.id);
+                  }}
+                  sx={{
+                    backgroundColor: currentPage === item.id ? 'rgba(255,255,255,0.2)' : 'transparent',
+                    borderRadius: '4px 4px 0 0',
+                    fontWeight: currentPage === item.id ? 600 : 400,
+                    position: 'relative',
+                    zIndex: 2,
+                    '&:hover': {
+                      backgroundColor: currentPage === item.id ? 'rgba(255,255,255,0.25)' : 'rgba(255,255,255,0.1)',
+                    },
+                  }}
+                >
+                  {item.icon}
+                  <Typography sx={{ ml: 1 }}>{item.label}</Typography>
+                </Button>
+              ))}
+            </Box>
           )}
 
           {/* User Menu */}
@@ -339,7 +353,7 @@ const Layout: React.FC<LayoutProps> = observer(({
                 <NotificationsIcon />
               </Badge>
             </IconButton>
-            
+
             {/* Profile Button */}
             <IconButton
               size="large"
@@ -375,9 +389,9 @@ const Layout: React.FC<LayoutProps> = observer(({
                     {user?.username || 'Гость'}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
-                    {userStore.currentUser?.role === 'admin' ? 'Администратор' : 
-                     userStore.currentUser?.role === 'operator' ? 'Оператор' : 
-                     userStore.currentUser?.role === 'viewer' ? 'Читатель' : 'Пользователь'}
+                    {userStore.currentUser?.role === 'admin' ? 'Администратор' :
+                      userStore.currentUser?.role === 'operator' ? 'Оператор' :
+                        userStore.currentUser?.role === 'viewer' ? 'Читатель' : 'Пользователь'}
                   </Typography>
                 </Box>
               </MenuItem>
@@ -409,7 +423,7 @@ const Layout: React.FC<LayoutProps> = observer(({
                 handleClose();
                 const next = i18n.language === 'ru' ? 'en' : 'ru';
                 i18n.changeLanguage(next);
-                try { localStorage.setItem('lang', next); } catch {}
+                try { localStorage.setItem('lang', next); } catch { }
               }}>
                 <ListItemIcon>
                   <DashboardIcon fontSize="small" />
@@ -448,25 +462,25 @@ const Layout: React.FC<LayoutProps> = observer(({
       )}
 
       {/* Main Content */}
-        <Box
-          component="main"
-          sx={{
-            flexGrow: 1,
-            width: '100%',
-            minWidth: 0,
-            mt: '64px',
-            backgroundColor: '#ffffff',
-            minHeight: 'calc(100vh - 64px)',
-            display: 'flex',
-            flexDirection: 'column'
-          }}
-        >
+      <Box
+        component="main"
+        sx={{
+          flexGrow: 1,
+          width: '100%',
+          minWidth: 0,
+          mt: '64px',
+          backgroundColor: '#ffffff',
+          minHeight: 'calc(100vh - 64px)',
+          display: 'flex',
+          flexDirection: 'column'
+        }}
+      >
         {children}
       </Box>
 
       {/* Profile Dialog */}
       <ProfileDialog open={profileOpen} onClose={() => setProfileOpen(false)} username={user?.username || undefined} />
-      
+
       {/* Notifications Popover */}
       <NotificationsDialog
         open={notificationsOpen}
@@ -475,7 +489,9 @@ const Layout: React.FC<LayoutProps> = observer(({
           setNotificationsOpen(false);
           setNotificationsAnchorEl(null);
           // Обновляем счетчик при закрытии
-          notificationsApi.getUnreadCount().then(setUnreadNotificationsCount).catch(console.error);
+          notificationsApi.getUnreadCount().then(setUnreadNotificationsCount).catch((error: any) => {
+            if (error?.response?.status !== 401) console.error(error);
+          });
         }}
         onNotificationClick={(notification) => {
           // Если уведомление связано с тикетом, открываем чат с этим тикетом
@@ -490,7 +506,7 @@ const Layout: React.FC<LayoutProps> = observer(({
           setUnreadNotificationsCount(count);
         }}
       />
-      
+
       {/* Support Tickets Dialog */}
       <SupportTicketsListDialog
         open={supportTicketsOpen}
@@ -500,7 +516,7 @@ const Layout: React.FC<LayoutProps> = observer(({
           setCreateTicketOpen(true);
         }}
       />
-      
+
       {/* Support Ticket Create Dialog */}
       <SupportTicketDialog
         open={createTicketOpen}
@@ -513,7 +529,7 @@ const Layout: React.FC<LayoutProps> = observer(({
           }
         }}
       />
-      
+
       {/* Support Chat Dialog - для открытия конкретного тикета */}
       {selectedTicketId !== null && (
         <SupportChatDialog
@@ -525,9 +541,63 @@ const Layout: React.FC<LayoutProps> = observer(({
           }}
         />
       )}
-      
+
       {/* Support FAB - только для создания нового тикета */}
       <SupportFab />
+
+      {/* Кнопка открытия корзины трансмитталов в правом нижнем углу */}
+      {!cartModalOpen && transmittalCartStore.selectedCount > 0 && !isViewer && (
+        <Box
+          sx={{
+            position: 'fixed',
+            bottom: 130, // Выше SupportFab (который на bottom: 60)
+            right: 24,
+            zIndex: 1000,
+          }}
+        >
+          <Badge badgeContent={transmittalCartStore.selectedCount} color="primary">
+            <IconButton
+              onClick={() => setCartModalOpen(true)}
+              sx={{
+                backgroundColor: 'primary.main',
+                color: 'white',
+                width: 56,
+                height: 56,
+                boxShadow: 3,
+                '&:hover': {
+                  backgroundColor: 'primary.dark',
+                  boxShadow: 6,
+                },
+              }}
+              title={t('documents.open_transmittal_cart')}
+            >
+              <TransmittalIcon />
+            </IconButton>
+          </Badge>
+        </Box>
+      )}
+
+      {/* Модалка корзины трансмитталов */}
+      <TransmittalCartModal
+        open={cartModalOpen}
+        selectedRevisionIds={transmittalCartStore.selectedRevisionIds}
+        activeRevisions={activeRevisions || []}
+        isLoading={transmittalCartStore.isLoading}
+        error={transmittalCartStore.error}
+        onClose={() => setCartModalOpen(false)}
+        onRemoveRevision={transmittalCartStore.removeRevision}
+        onClearAll={transmittalCartStore.clearAll}
+        onCreateTransmittal={async (transmittalData) => {
+          if (projectStore.selectedProject) {
+            await transmittalCartStore.createTransmittal(transmittalData, projectStore.selectedProject.id);
+            setCartModalOpen(false);
+            // Обновляем список трансмитталов
+            await transmittalStore.loadTransmittals(projectStore.selectedProject.id, true);
+          }
+        }}
+        formatFileSize={(bytes: number) => `${(bytes / 1024 / 1024).toFixed(2)} MB`}
+        formatDate={(date: string) => new Date(date).toLocaleDateString()}
+      />
     </Box>
   );
 });

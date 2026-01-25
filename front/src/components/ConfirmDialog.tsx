@@ -1,5 +1,5 @@
 import React from 'react';
-import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Typography } from '@mui/material';
+import { Dialog, DialogTitle, DialogContent, DialogActions, Button, Typography, CircularProgress } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 
 interface ConfirmDialogProps {
@@ -41,7 +41,13 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
         <Button onClick={onClose} disabled={loading}>
           {cancelText || t('common.cancel')}
         </Button>
-        <Button onClick={onConfirm} color="error" variant="contained" disabled={loading}>
+        <Button 
+          onClick={onConfirm} 
+          color="error" 
+          variant="contained" 
+          disabled={loading}
+          startIcon={loading ? <CircularProgress size={16} color="inherit" /> : null}
+        >
           {confirmText || t('common.confirm')}
         </Button>
       </DialogActions>

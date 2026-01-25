@@ -2,12 +2,18 @@
 API endpoints for document reviews and approvals
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, Query
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 from sqlalchemy import func, and_, or_
 from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime, timedelta, timezone
+import io
+from openpyxl import Workbook
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+from openpyxl.utils import get_column_letter
+from urllib.parse import quote
 
 class ApproveRequest(BaseModel):
     comments: Optional[str] = None
@@ -65,17 +71,34 @@ def _check_and_update_project_status_on_approval(project_id: int, db: Session):
     if not project_documents:
         return
     
-    # Для каждого документа проверяем последнюю ревизию
-    has_approved_document = False
-    for doc in project_documents:
-        latest_revision = db.query(DocumentRevision).filter(
-            DocumentRevision.document_id == doc.id,
+    # Получаем последние ревизии для всех документов одним запросом (устранение N+1)
+    document_ids = [doc.id for doc in project_documents]
+    
+    # Создаем подзапрос для получения последней ревизии каждого документа
+    from sqlalchemy import func
+    latest_revision_subquery = db.query(
+        DocumentRevision.document_id,
+        func.max(DocumentRevision.created_at).label('max_created_at')
+    ).filter(
+        DocumentRevision.document_id.in_(document_ids),
+        DocumentRevision.is_deleted == 0
+    ).group_by(DocumentRevision.document_id).subquery()
+    
+    # Получаем все последние ревизии одним запросом
+    latest_revisions = db.query(DocumentRevision).join(
+        latest_revision_subquery,
+        and_(
+            DocumentRevision.document_id == latest_revision_subquery.c.document_id,
+            DocumentRevision.created_at == latest_revision_subquery.c.max_created_at,
             DocumentRevision.is_deleted == 0
-        ).order_by(DocumentRevision.created_at.desc()).first()
-        
-        if latest_revision and latest_revision.workflow_status_id in approved_like_ids:
-            has_approved_document = True
-            break
+        )
+    ).all()
+    
+    # Проверяем, есть ли хотя бы одна ревизия в утвержденном статусе
+    has_approved_document = any(
+        rev.workflow_status_id in approved_like_ids 
+        for rev in latest_revisions
+    )
     
     # Если есть утвержденный документ и статус проекта PLANNING, обновляем на ACTIVE
     if has_approved_document and project.status == ProjectStatusEnum.PLANNING:
@@ -186,6 +209,42 @@ async def get_pending_approvals(
         ).all()
         for f in all_files:
             files_by_revision_id[f.revision_id].append(f)
+    
+    # Загружаем информацию о компаниях-получателях из исходящих трансмитталов (ожидаем ответ)
+    from app.models.transmittal import Transmittal, TransmittalRevision
+    from app.models.references import Company, TransmittalStatus
+    
+    awaiting_company_by_revision_id = {}
+    if revision_ids:
+        # Получаем статус "Sent" (отправлен, но ещё не получен ответ)
+        sent_status = db.query(TransmittalStatus).filter(
+            TransmittalStatus.name == "Sent"
+        ).first()
+        
+        if sent_status:
+            # Ищем исходящие трансмитталы (direction='out') в статусе "Sent" для ревизий
+            transmittal_data = db.query(
+                TransmittalRevision.revision_id,
+                Company.id,
+                Company.name,
+                Company.name_native
+            ).join(
+                Transmittal, Transmittal.id == TransmittalRevision.transmittal_id
+            ).join(
+                Company, Company.id == Transmittal.counterparty_id
+            ).filter(
+                TransmittalRevision.revision_id.in_(revision_ids),
+                Transmittal.direction == 'out',
+                Transmittal.status_id == sent_status.id,
+                Transmittal.is_deleted == 0
+            ).all()
+            
+            for rev_id, company_id, company_name, company_name_native in transmittal_data:
+                awaiting_company_by_revision_id[rev_id] = {
+                    "id": company_id,
+                    "name": company_name,
+                    "name_native": company_name_native
+                }
 
     # Формируем результат
     result = []
@@ -262,7 +321,9 @@ async def get_pending_approvals(
             # Количество дней на выполнение
             "due_days": sequence.due_days if sequence and sequence.due_days else None,
             # Флаг просроченности
-            "is_overdue": is_overdue
+            "is_overdue": is_overdue,
+            # Компания, от которой ожидается ответ (из входящего трансмиттала)
+            "awaiting_company": awaiting_company_by_revision_id.get(revision.id) if revision else None
         })
     
     return result
@@ -641,3 +702,438 @@ async def get_reviews_stats(
         "transmittal": transmittal,
         "overdue": overdue
     }
+
+
+@router.get("/export-excel")
+async def export_reviews_to_excel(
+    project_id: Optional[int] = Query(None),
+    search: Optional[str] = Query(None),
+    selected_company: Optional[str] = Query(None),
+    only_overdue: Optional[bool] = Query(False),
+    language: Optional[str] = Query("ru"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Экспорт ревью в Excel файл
+    """
+    # Получаем данные ревью (используем ту же логику, что и в get_pending_approvals)
+    in_review_status = db.query(WorkflowStatus).filter(
+        WorkflowStatus.name == "In Review"
+    ).first()
+    
+    if not in_review_status:
+        raise HTTPException(status_code=404, detail="Статус 'In Review' не найден")
+    
+    # Создаем подзапрос для получения последней ревизии каждого документа
+    latest_revision_subquery = db.query(
+        DocumentRevision.document_id,
+        func.max(DocumentRevision.created_at).label('max_created_at')
+    ).group_by(DocumentRevision.document_id).subquery()
+    
+    # Запрос с информацией о последовательности
+    query = db.query(
+        Document,
+        DocumentRevision,
+        Project,
+        WorkflowPresetSequence
+    ).outerjoin(
+        latest_revision_subquery,
+        Document.id == latest_revision_subquery.c.document_id
+    ).outerjoin(
+        DocumentRevision,
+        and_(
+            DocumentRevision.document_id == Document.id,
+            DocumentRevision.created_at == latest_revision_subquery.c.max_created_at
+        )
+    ).join(
+        Project,
+        Project.id == Document.project_id
+    ).outerjoin(
+        WorkflowPresetSequence,
+        and_(
+            WorkflowPresetSequence.preset_id == Project.workflow_preset_id,
+            WorkflowPresetSequence.revision_step_id == DocumentRevision.revision_step_id,
+            WorkflowPresetSequence.revision_description_id == DocumentRevision.revision_description_id
+        )
+    ).filter(
+        Document.is_deleted == 0,
+        DocumentRevision.workflow_status_id == in_review_status.id
+    )
+    
+    if project_id:
+        query = query.filter(Project.id == project_id)
+    
+    # Получаем все результаты (без пагинации для экспорта)
+    results = query.order_by(Document.updated_at.desc()).all()
+    
+    # Загружаем все нужные данные (аналогично get_pending_approvals)
+    revision_step_ids = []
+    revision_description_ids = []
+    
+    for row in results:
+        doc, revision, project, sequence = row
+        if revision and revision.revision_step_id:
+            revision_step_ids.append(revision.revision_step_id)
+        if revision and revision.revision_description_id:
+            revision_description_ids.append(revision.revision_description_id)
+    
+    revision_steps = {}
+    if revision_step_ids:
+        for rs in db.query(RevisionStep).filter(RevisionStep.id.in_(revision_step_ids)).all():
+            revision_steps[rs.id] = rs
+    
+    revision_descriptions = {}
+    if revision_description_ids:
+        for rd in db.query(RevisionDescription).filter(RevisionDescription.id.in_(revision_description_ids)).all():
+            revision_descriptions[rd.id] = rd
+    
+    from collections import defaultdict
+    revision_ids = [row[1].id for row in results if row[1] is not None]
+    files_by_revision_id = defaultdict(list)
+    if revision_ids:
+        all_files = db.query(FileModel).filter(
+            FileModel.revision_id.in_(revision_ids),
+            FileModel.is_deleted == 0
+        ).all()
+        for f in all_files:
+            files_by_revision_id[f.revision_id].append(f)
+    
+    # Загружаем информацию о компаниях-получателях
+    from app.models.transmittal import Transmittal, TransmittalRevision
+    from app.models.references import Company, TransmittalStatus
+    
+    awaiting_company_by_revision_id = {}
+    if revision_ids:
+        sent_status = db.query(TransmittalStatus).filter(
+            TransmittalStatus.name == "Sent"
+        ).first()
+        
+        if sent_status:
+            transmittal_data = db.query(
+                TransmittalRevision.revision_id,
+                Company.id,
+                Company.name,
+                Company.name_native
+            ).join(
+                Transmittal, Transmittal.id == TransmittalRevision.transmittal_id
+            ).join(
+                Company, Company.id == Transmittal.counterparty_id
+            ).filter(
+                TransmittalRevision.revision_id.in_(revision_ids),
+                Transmittal.direction == 'out',
+                Transmittal.status_id == sent_status.id,
+                Transmittal.is_deleted == 0
+            ).all()
+            
+            for rev_id, company_id, company_name, company_name_native in transmittal_data:
+                awaiting_company_by_revision_id[rev_id] = {
+                    "id": company_id,
+                    "name": company_name,
+                    "name_native": company_name_native
+                }
+    
+    # Формируем данные для Excel
+    excel_rows = []
+    now = datetime.now(timezone.utc)
+    
+    # Вспомогательные функции для форматирования
+    def format_date(date_obj):
+        if not date_obj:
+            return ''
+        if isinstance(date_obj, str):
+            try:
+                date_obj = datetime.fromisoformat(date_obj.replace('Z', '+00:00'))
+            except:
+                return ''
+        return date_obj.strftime('%d.%m.%Y %H:%M')
+    
+    def format_file_size(bytes_size):
+        if not bytes_size:
+            return '0 B'
+        k = 1024
+        sizes = ['B', 'KB', 'MB', 'GB']
+        i = 0
+        size = float(bytes_size)
+        while size >= k and i < len(sizes) - 1:
+            size /= k
+            i += 1
+        return f"{round(size * 100) / 100} {sizes[i]}"
+    
+    # Локализация заголовков
+    headers_ru = {
+        "document": "Документ",
+        "title": "Название",
+        "project": "Проект",
+        "revision": "Ревизия",
+        "current_step": "Текущий шаг",
+        "awaiting_company": "Ожидается от",
+        "release_date": "Дата выпуска",
+        "due_days": "Срок (дней)",
+        "due_date": "Срок выполнения",
+        "overdue": "Просрочено",
+        "file": "Файл",
+        "size": "Размер"
+    }
+    
+    headers_en = {
+        "document": "Document",
+        "title": "Title",
+        "project": "Project",
+        "revision": "Revision",
+        "current_step": "Current Step",
+        "awaiting_company": "Awaiting Company",
+        "release_date": "Release Date",
+        "due_days": "Due Days",
+        "due_date": "Due Date",
+        "overdue": "Overdue",
+        "file": "File",
+        "size": "Size"
+    }
+    
+    headers = headers_ru if language == "ru" else headers_en
+    
+    for row in results:
+        doc, revision, project, sequence = row
+        
+        # Применяем фильтры
+        if search:
+            search_lower = search.lower()
+            if not (search_lower in (doc.title or "").lower() or 
+                   search_lower in (doc.number or "").lower() or
+                   search_lower in (project.name or "").lower()):
+                continue
+        
+        if only_overdue:
+            if revision and revision.created_at and sequence and sequence.due_days:
+                due_date = revision.created_at + timedelta(days=sequence.due_days)
+                if due_date >= now:
+                    continue
+            else:
+                continue
+        
+        if selected_company:
+            if selected_company == '__internal__':
+                if sequence and sequence.requires_transmittal != False:
+                    continue
+            else:
+                awaiting_company = awaiting_company_by_revision_id.get(revision.id if revision else None)
+                if not awaiting_company or awaiting_company.get("name") != selected_company:
+                    continue
+        
+        # Получаем информацию о шаге и описании
+        step_info = None
+        description_info = None
+        
+        if revision:
+            step = revision_steps.get(revision.revision_step_id)
+            description = revision_descriptions.get(revision.revision_description_id)
+            
+            step_info = {
+                "id": step.id if step else None,
+                "code": step.code if step else None,
+                "description": step.description if step else None,
+                "description_native": step.description_native if step else None
+            } if step else None
+            
+            description_info = {
+                "id": description.id if description else None,
+                "code": description.code if description else None,
+                "description": description.description if description else None,
+                "description_native": description.description_native if description else None
+            } if description else None
+        
+        files_info = files_by_revision_id.get(revision.id, []) if revision else []
+        
+        # Вычисляем due_date и is_overdue
+        due_date = None
+        is_overdue = False
+        
+        if revision and revision.created_at and sequence and sequence.due_days:
+            due_date = revision.created_at + timedelta(days=sequence.due_days)
+            is_overdue = due_date < now
+        
+        # Формируем поле просрочено
+        overdue_value = ''
+        if is_overdue and due_date:
+            overdue_days = (now - due_date).days
+            if overdue_days > 0:
+                if language == "ru":
+                    # Склонение для русского
+                    last_digit = overdue_days % 10
+                    last_two = overdue_days % 100
+                    if 11 <= last_two <= 14:
+                        days_word = "дней"
+                    elif last_digit == 1:
+                        days_word = "день"
+                    elif 2 <= last_digit <= 4:
+                        days_word = "дня"
+                    else:
+                        days_word = "дней"
+                    overdue_value = f"Просрочено на {overdue_days} {days_word}"
+                else:
+                    days_word = "day" if overdue_days == 1 else "days"
+                    overdue_value = f"Overdue by {overdue_days} {days_word}"
+            else:
+                overdue_value = "Просрочено" if language == "ru" else "Overdue"
+        
+        # Формируем поле текущего шага
+        current_step_value = ''
+        if step_info:
+            step_desc = (step_info.get("description_native") if language == "ru" else step_info.get("description")) or step_info.get("description") or ''
+            if step_desc and step_desc.strip():
+                current_step_value = f"{step_info.get('code')} - {step_desc}"
+            else:
+                current_step_value = step_info.get('code') or ''
+        
+        # Формируем поле ревизии
+        revision_value = ''
+        if description_info:
+            revision_value = f"{description_info.get('code')}{revision.number if revision else ''}"
+        elif revision:
+            revision_value = revision.number or ''
+        
+        # Формируем поле ожидается от
+        awaiting_company_value = ''
+        awaiting_company = awaiting_company_by_revision_id.get(revision.id if revision else None)
+        if awaiting_company:
+            awaiting_company_value = awaiting_company.get("name") or ''
+        elif sequence and sequence.requires_transmittal == False:
+            awaiting_company_value = "Внутреннее ревью" if language == "ru" else "Internal Review"
+        
+        excel_rows.append([
+            doc.number or '',
+            doc.title or '',
+            project.name if project else '',
+            revision_value,
+            current_step_value,
+            awaiting_company_value,
+            format_date(revision.created_at if revision else None),
+            sequence.due_days if sequence else '',
+            format_date(due_date) if due_date else '',
+            overdue_value,
+            files_info[0].file_name if files_info and len(files_info) > 0 else '',
+            format_file_size(files_info[0].file_size if files_info and len(files_info) > 0 else None)
+        ])
+    
+    # Создаем Excel файл
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Reviews" if language == "en" else "Ревью"
+    
+    # Добавляем заголовки
+    header_row = [
+        headers["document"],
+        headers["title"],
+        headers["project"],
+        headers["revision"],
+        headers["current_step"],
+        headers["awaiting_company"],
+        headers["release_date"],
+        headers["due_days"],
+        headers["due_date"],
+        headers["overdue"],
+        headers["file"],
+        headers["size"]
+    ]
+    ws.append(header_row)
+    
+    # Применяем стили к заголовкам
+    # Используем цвет хедера приложения #1976d2
+    header_fill = PatternFill(start_color="1976D2", end_color="1976D2", fill_type="solid")
+    header_font = Font(bold=True, color="FFFFFF", size=11)
+    header_alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
+    thin_border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+    
+    for cell in ws[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = header_alignment
+        cell.border = thin_border
+    
+    # Добавляем данные
+    data_alignment = Alignment(vertical="center", wrap_text=True)
+    data_border = Border(
+        left=Side(style='thin', color='D0D0D0'),
+        right=Side(style='thin', color='D0D0D0'),
+        top=Side(style='thin', color='D0D0D0'),
+        bottom=Side(style='thin', color='D0D0D0')
+    )
+    
+    # Создаем стиль для просроченных записей (красный текст)
+    overdue_font = Font(color="FF0000", bold=False)  # Красный цвет
+    
+    # Определяем индекс колонки "Overdue" из заголовков
+    overdue_col_index = None
+    for idx, header in enumerate(header_row, start=1):
+        if language == "ru":
+            if header == headers["overdue"]:  # "Просрочено"
+                overdue_col_index = idx
+                break
+        else:
+            if header == headers["overdue"]:  # "Overdue"
+                overdue_col_index = idx
+                break
+    
+    for row_data in excel_rows:
+        ws.append(row_data)
+        for col_idx, cell in enumerate(ws[ws.max_row], start=1):
+            cell.alignment = data_alignment
+            cell.border = data_border
+            
+            # Применяем красный цвет к колонке "Overdue", если значение не пустое
+            if overdue_col_index and col_idx == overdue_col_index:
+                cell_value = str(cell.value) if cell.value else ''
+                if cell_value and (cell_value != ''):
+                    cell.font = overdue_font
+    
+    # Настраиваем ширину колонок
+    column_widths = [15, 30, 20, 12, 25, 20, 20, 12, 20, 20, 25, 12]
+    for idx, width in enumerate(column_widths, start=1):
+        ws.column_dimensions[get_column_letter(idx)].width = width
+    
+    # Устанавливаем высоту строки для заголовков
+    ws.row_dimensions[1].height = 25
+    
+    # Замораживаем первую строку
+    ws.freeze_panes = 'A2'
+    
+    # Добавляем автофильтр для заголовков
+    if excel_rows:
+        # Определяем диапазон для автофильтра (заголовки + данные)
+        last_col = get_column_letter(len(header_row))
+        ws.auto_filter.ref = f"A1:{last_col}{len(excel_rows) + 1}"
+    
+    # Сохраняем в BytesIO
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+    
+    # Генерируем имя файла
+    project_name = "all_projects"
+    if project_id:
+        project_obj = db.query(Project).filter(Project.id == project_id).first()
+        if project_obj:
+            project_name = project_obj.name or "all_projects"
+    filename = f"reviews_{project_name}_{datetime.now().strftime('%Y-%m-%d')}.xlsx"
+    
+    # Правильно кодируем имя файла для заголовка Content-Disposition
+    # Используем percent-encoding для UTF-8 (RFC 5987)
+    # Сначала кодируем в UTF-8 байты, затем применяем percent-encoding
+    import urllib.parse
+    # Правильный способ: кодируем строку в UTF-8, затем применяем quote
+    encoded_filename = urllib.parse.quote(filename, safe='', encoding='utf-8')
+    
+    # Возвращаем файл
+    return Response(
+        content=output.read(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={
+            "Content-Disposition": f"attachment; filename*=UTF-8''{encoded_filename}"
+        }
+    )

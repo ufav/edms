@@ -34,6 +34,11 @@ export interface Review {
   due_date?: string | null;
   due_days?: number | null;
   is_overdue?: boolean;
+  awaiting_company?: {
+    id: number;
+    name: string;
+    name_native?: string;
+  } | null;
 }
 
 class ReviewStore {
@@ -53,12 +58,12 @@ class ReviewStore {
     // Проверяем TTL кеша
     const now = Date.now();
     const isCacheExpired = this.lastLoadedAt && (now - this.lastLoadedAt) > this.cacheTTL;
-    
+
     // Если данные уже загружены для этого проекта и кеш не истек, не загружаем повторно
     if (projectId && this.loadedProjectId === projectId && this.reviews.length > 0 && !forceReload && !isCacheExpired) {
       return;
     }
-    
+
     // Если проект изменился, сбрасываем данные
     if (projectId && this.loadedProjectId !== projectId) {
       runInAction(() => {
@@ -71,7 +76,7 @@ class ReviewStore {
       this.isLoading = true;
       this.error = null;
     });
-    
+
     try {
       const apiReviews = await reviewsApi.getPendingApprovals(0, 100, projectId);
       runInAction(() => {
@@ -97,14 +102,14 @@ class ReviewStore {
     await this.loadReviews(projectId, true);
   }
 
-  // Получение ревью по ID
-  getReviewById(id: number): Review | undefined {
-    return this.reviews.find(review => review.id === id);
+  // Получение ревью по ID документа
+  getReviewById(documentId: number): Review | undefined {
+    return this.reviews.find(review => review.document_id === documentId);
   }
 
   // Получение ревью по проекту
   getReviewsByProject(projectId: number): Review[] {
-    return this.reviews.filter(review => review.document_id === projectId);
+    return this.reviews.filter(review => review.project_id === projectId);
   }
 
   // Получение статуса ревью

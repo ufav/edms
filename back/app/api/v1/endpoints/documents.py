@@ -151,7 +151,19 @@ def _get_next_revision_from_sequence(
     ).order_by(DocumentRevision.created_at.desc()).first()
     
     if not latest_revision:
-        return None, None, "01"  # Первая ревизия
+        # Если нет активных ревизий (все отменены), создаём как первую ревизию
+        # Берём первую последовательность из workflow preset проекта
+        project = db.query(Project).filter(Project.id == document.project_id).first()
+        if project and project.workflow_preset_id:
+            first_sequence = db.query(WorkflowPresetSequence).filter(
+                WorkflowPresetSequence.preset_id == project.workflow_preset_id
+            ).order_by(WorkflowPresetSequence.sequence_order).first()
+            
+            if first_sequence:
+                return first_sequence.revision_description_id, first_sequence.revision_step_id, "01"
+        
+        # Если нет workflow preset, возвращаем None
+        return None, None, "01"
     
     # Проверяем статус последней ревизии
     # Раньше учитывался только статус "Approved", теперь к нему добавлены
@@ -732,10 +744,11 @@ async def create_document_with_revision(
                 # Генерация ключа MinIO с учетом кода описания ревизии
                 document_number = number or f"DOC-{db_document.id:04d}"
                 from app.models.references import RevisionDescription
-                rev_desc = None
+                rev_code = ""
                 if revision_description_id:
+                    # Загружаем RevisionDescription один раз (не в цикле, так как revision_description_id одинаковый для всех файлов)
                     rev_desc = db.query(RevisionDescription).filter(RevisionDescription.id == revision_description_id).first()
-                rev_code = (rev_desc.code if rev_desc and getattr(rev_desc, 'code', None) else "")
+                    rev_code = (rev_desc.code if rev_desc and getattr(rev_desc, 'code', None) else "")
                 revision_key_prefix = f"{project.project_code}/{document_number}/{rev_code}{revision_row.number}_{revision_description_id or 1}_{revision_row.id}"
                 file_key = f"{revision_key_prefix}/{f.filename}"
 
@@ -1128,6 +1141,21 @@ async def import_documents_by_paths(
         noext = os.path.splitext(base_name)[0].lower()
         uploaded_files_noext[noext] = f
 
+    # Загружаем все языки одним запросом (устранение N+1)
+    # Собираем все уникальные коды языков из DataFrame
+    all_language_codes = set()
+    if 'content_language' in df.columns:
+        all_language_codes = set(
+            str(row.get('content_language', '')).strip() 
+            for _, row in df.iterrows() 
+            if row.get('content_language') and pd.notna(row.get('content_language'))
+        )
+    
+    languages_dict = {
+        lang.code: lang
+        for lang in db.query(Language).filter(Language.code.in_(all_language_codes)).all()
+    } if all_language_codes else {}
+    
     for idx, row in df.iterrows():
         try:
             original_name = None
@@ -1304,11 +1332,11 @@ async def import_documents_by_paths(
             title = get_str('title', original_name)
             description = get_str('description')
 
-            # Получаем language_id по коду языка
+            # Получаем language_id по коду языка из заранее загруженного словаря
             language_id = None
             language_code = get_str('content_language')  # Исправлено: было 'language_code'
             if language_code:
-                language = db.query(Language).filter(Language.code == language_code).first()
+                language = languages_dict.get(language_code)
                 if language:
                     language_id = language.id
                 else:
@@ -1823,6 +1851,14 @@ async def create_document_revision(
     db.commit()
     db.refresh(revision_row)
     
+    # Загружаем RevisionDescription один раз (не в цикле, так как revision_description_id одинаковый для всех файлов)
+    from app.models.references import RevisionDescription
+    rev_desc = None
+    rev_code = ""
+    if revision_row.revision_description_id:
+        rev_desc = db.query(RevisionDescription).filter(RevisionDescription.id == revision_row.revision_description_id).first()
+        rev_code = (rev_desc.code if rev_desc and getattr(rev_desc, 'code', None) else "")
+    
     # Обрабатываем и сохраняем все файлы
     for f in files_to_process:
         # Читаем содержимое файла
@@ -1845,12 +1881,7 @@ async def create_document_revision(
                 import aiobotocore.session
                 session = aiobotocore.session.get_session()
                 document_number = document.number or f"DOC-{document.id:04d}"
-                # Получаем букву кода описания ревизии
-                from app.models.references import RevisionDescription
-                rev_desc = None
-                if revision_row.revision_description_id:
-                    rev_desc = db.query(RevisionDescription).filter(RevisionDescription.id == revision_row.revision_description_id).first()
-                rev_code = (rev_desc.code if rev_desc and getattr(rev_desc, 'code', None) else "")
+                # Используем заранее загруженный rev_code
                 revision_key_prefix = f"{document.project.project_code}/{document_number}/{rev_code}{revision_row.number}_{revision_row.revision_description_id or 1}_{revision_row.id}"
                 file_key = f"{revision_key_prefix}/{f.filename}"
                 async with session.create_client(

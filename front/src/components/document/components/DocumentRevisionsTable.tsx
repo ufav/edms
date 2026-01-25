@@ -32,6 +32,7 @@ import ConfirmDialog from '../../ConfirmDialog';
 import DocumentReleaseModal from './DocumentReleaseModal';
 import AutodeskViewerDialog from './AutodeskViewerDialog';
 import { userStore } from '../../../stores/UserStore';
+import { usePermissions } from '../../../hooks/usePermissions';
 
 interface DocumentRevisionsTableProps {
   documentId: number | null;
@@ -69,6 +70,7 @@ const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer((
   onRelease,
 }) => {
   const { t, i18n } = useTranslation();
+  const permissions = usePermissions();
 
   // Состояние для диалога подтверждения выпуска
   const [releaseConfirmDialog, setReleaseConfirmDialog] = useState({
@@ -291,7 +293,7 @@ const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer((
           <Table stickyHeader size="small">
             <TableHead>
               <TableRow>
-                {userStore.currentUser?.role === 'admin' && (
+                {permissions.canViewSystemIds && (
                   <TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>ID</TableCell>
                 )}
                 <TableCell sx={{ fontWeight: 'bold', fontSize: '0.875rem' }}>{t('document.revision')}</TableCell>
@@ -445,7 +447,7 @@ const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer((
                       }
                     }}
                   >
-                    {userStore.currentUser?.role === 'admin' && (
+                    {permissions.canViewSystemIds && (
                       <TableCell>{revision.id}</TableCell>
                     )}
                     <TableCell>

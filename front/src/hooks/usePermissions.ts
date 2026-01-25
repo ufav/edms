@@ -11,11 +11,12 @@ export interface Permission {
   canManageProjectMembers: boolean;
   canViewAllProjects: boolean;
   canViewWorkflows: boolean;
+  canViewSystemIds: boolean;
 }
 
 export const usePermissions = (): Permission => {
   const user = userStore.currentUser;
-  
+
   return useMemo(() => {
     if (!user) {
       return {
@@ -27,11 +28,12 @@ export const usePermissions = (): Permission => {
         canManageProjectMembers: false,
         canViewAllProjects: false,
         canViewWorkflows: false,
+        canViewSystemIds: false,
       };
     }
 
     const role = user.role;
-    
+
     switch (role) {
       case 'admin':
         return {
@@ -43,8 +45,9 @@ export const usePermissions = (): Permission => {
           canManageProjectMembers: true,
           canViewAllProjects: true,
           canViewWorkflows: true,
+          canViewSystemIds: true,
         };
-      
+
       case 'operator':
         return {
           canViewUsers: false,
@@ -55,8 +58,9 @@ export const usePermissions = (): Permission => {
           canManageProjectMembers: true, // В рамках своих проектов
           canViewAllProjects: false, // Только свои проекты
           canViewWorkflows: true,
+          canViewSystemIds: false,
         };
-      
+
       case 'viewer':
         return {
           canViewUsers: false,
@@ -67,8 +71,9 @@ export const usePermissions = (): Permission => {
           canManageProjectMembers: false,
           canViewAllProjects: false,
           canViewWorkflows: false,
+          canViewSystemIds: false,
         };
-      
+
       default:
         return {
           canViewUsers: false,
@@ -79,6 +84,7 @@ export const usePermissions = (): Permission => {
           canManageProjectMembers: false,
           canViewAllProjects: false,
           canViewWorkflows: false,
+          canViewSystemIds: false,
         };
     }
   }, [user]);
@@ -103,49 +109,67 @@ export const useRole = () => {
 
 
 // Функция для проверки, может ли пользователь удалить конкретный документ
-export const canDeleteDocument = (document: { 
-  created_by?: number; 
+export const canDeleteDocument = (document: {
+  created_by?: number;
   is_deleted?: number;
 }): boolean => {
   const user = userStore.currentUser;
   if (!user) return false;
-  
+
   // Документ уже удален
   if (document.is_deleted === 1) return false;
-  
+
   // Читатель не может удалять документы
   if (user.role === 'viewer') return false;
-  
+
   // Админ может удалять любые документы
   if (user.role === 'admin') return true;
-  
+
   // Создатель документа может удалять свои документы
   if (document.created_by === user.id) return true;
-  
+
   // Создатель проекта может удалять все документы в своих проектах
   if (projectStore.selectedProject?.owner_id === user.id) return true;
-  
+
   return false;
 };
 
 // Функция для проверки, может ли пользователь редактировать конкретный документ
-export const canEditDocument = (document: { 
-  created_by?: number; 
+export const canEditDocument = (document: {
+  created_by?: number;
 }): boolean => {
   const user = userStore.currentUser;
   if (!user) return false;
-  
+
   // Читатель не может редактировать документы
   if (user.role === 'viewer') return false;
-  
+
   // Админ может редактировать любые документы
   if (user.role === 'admin') return true;
-  
+
   // Создатель документа может редактировать свои документы
   if (document.created_by === user.id) return true;
-  
+
   // Создатель проекта может редактировать все документы в своих проектах
   if (projectStore.selectedProject?.owner_id === user.id) return true;
-  
+
   return false;
+};
+
+// Функция для фильтрации доступных проектных ролей на основе глобальной роли пользователя
+// Если у пользователя глобальная роль ограничена (например, Viewer), он не может получить более высокие права в проекте
+export const getAvailableProjectRoles = <T extends { code: string }>(
+  userGlobalRole: string | undefined,
+  allRoles: T[]
+): T[] => {
+  if (!userGlobalRole) return allRoles;
+
+  const normalizedRole = userGlobalRole.toLowerCase();
+
+  // Если пользователь имеет глобальную роль Viewer, он может быть только viewer в проекте
+  if (normalizedRole === 'viewer') {
+    return allRoles.filter(role => role.code === 'viewer');
+  }
+
+  return allRoles;
 };

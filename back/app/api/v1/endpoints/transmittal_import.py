@@ -639,11 +639,17 @@ def process_table_data_for_transmittal_revisions(
                 Document.is_deleted == 0
             ).first()
             
+            if not document:
+                continue
+            
             # Получаем последнюю ревизию документа
             latest_revision = db.query(DocumentRevision).filter(
                 DocumentRevision.document_id == document.id,
                 DocumentRevision.is_deleted == 0
             ).order_by(DocumentRevision.created_at.desc()).first()
+            
+            if not latest_revision:
+                continue
             
             # Проверяем, не добавлена ли уже эта ревизия в трансмиттал
             existing_revision = db.query(TransmittalRevision).filter(

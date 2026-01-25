@@ -188,7 +188,11 @@ export interface ProjectParticipant {
   company_id: number;
   company_name: string;
   contact_id: number | null;
+  contact_name: string | null;
+  contact_email: string | null;
+  contact_phone: string | null;
   company_role_id: number | null;
+  company_role_name: string | null;
   is_primary: boolean;
   notes: string | null;
   created_at: string;
@@ -1146,6 +1150,52 @@ export const reviewsApi = {
     if (projectId) params.project_id = projectId;
     const response = await apiClient.get('/reviews/pending-approvals', { params });
     return response.data;
+  },
+
+  // Экспорт ревью в Excel через бэкенд
+  exportToExcel: async (params: {
+    projectId?: number;
+    search?: string;
+    selectedCompany?: string | null;
+    onlyOverdue?: boolean;
+    language?: string;
+  }): Promise<void> => {
+    const queryParams: any = {};
+    if (params.projectId) queryParams.project_id = params.projectId;
+    if (params.search) queryParams.search = params.search;
+    if (params.selectedCompany) queryParams.selected_company = params.selectedCompany;
+    if (params.onlyOverdue) queryParams.only_overdue = params.onlyOverdue;
+    if (params.language) queryParams.language = params.language;
+
+    const response = await apiClient.get('/reviews/export-excel', {
+      params: queryParams,
+      responseType: 'blob', // Важно для получения файла
+    });
+
+    // Создаем ссылку для скачивания
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    
+    // Получаем имя файла из заголовка Content-Disposition или генерируем
+    const contentDisposition = response.headers['content-disposition'];
+    let filename = `reviews_${new Date().toISOString().split('T')[0]}.xlsx`;
+    if (contentDisposition) {
+      const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+      if (filenameMatch && filenameMatch[1]) {
+        filename = filenameMatch[1].replace(/['"]/g, '');
+        // Декодируем UTF-8 имя файла если есть
+        if (filename.startsWith("UTF-8''")) {
+          filename = decodeURIComponent(filename.substring(7));
+        }
+      }
+    }
+    
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    window.URL.revokeObjectURL(url);
   },
 
   // Утвердить документ

@@ -5,10 +5,15 @@ Email service for sending notifications
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+from email.mime.base import MIMEBase
+from email import encoders
 from email.utils import formataddr
+from email.header import Header
 from typing import List, Optional
 import logging
-from jinja2 import Template
+from jinja2 import Environment, FileSystemLoader
+from pathlib import Path
+import io
 
 from app.core.config import settings
 
@@ -26,6 +31,13 @@ class EmailService:
         self.from_email = settings.SMTP_FROM_EMAIL or settings.SMTP_USER
         self.from_name = settings.SMTP_FROM_NAME
         self.use_tls = settings.SMTP_USE_TLS
+        
+        # Настройка Jinja2 для загрузки шаблонов из директории templates/email
+        template_dir = Path(__file__).parent.parent / "templates" / "email"
+        self.jinja_env = Environment(
+            loader=FileSystemLoader(str(template_dir)),
+            autoescape=True
+        )
     
     def is_configured(self) -> bool:
         """Check if email is properly configured"""
@@ -38,7 +50,8 @@ class EmailService:
         html_content: str,
         plain_content: Optional[str] = None,
         cc_emails: Optional[List[str]] = None,
-        bcc_emails: Optional[List[str]] = None
+        bcc_emails: Optional[List[str]] = None,
+        attachments: Optional[List[dict]] = None
     ) -> bool:
         """
         Send an email to one or more recipients
@@ -50,6 +63,7 @@ class EmailService:
             plain_content: Plain text body (optional, for email clients that don't support HTML)
             cc_emails: List of CC recipients
             bcc_emails: List of BCC recipients
+            attachments: List of dicts with 'filename' and 'content' (bytes) keys
             
         Returns:
             True if email was sent successfully, False otherwise
@@ -63,8 +77,12 @@ class EmailService:
             return False
         
         try:
-            # Create message
-            msg = MIMEMultipart('alternative')
+            # Create message - use 'mixed' if we have attachments, 'alternative' otherwise
+            if attachments:
+                msg = MIMEMultipart('mixed')
+            else:
+                msg = MIMEMultipart('alternative')
+            
             msg['From'] = formataddr((self.from_name, self.from_email))
             msg['To'] = ', '.join(to_emails)
             msg['Subject'] = subject
@@ -72,14 +90,43 @@ class EmailService:
             if cc_emails:
                 msg['Cc'] = ', '.join(cc_emails)
             
+            # Create alternative part for text/html
+            if attachments:
+                alt_part = MIMEMultipart('alternative')
+                msg.attach(alt_part)
+                text_container = alt_part
+            else:
+                text_container = msg
+            
             # Add plain text part
             if plain_content:
                 part1 = MIMEText(plain_content, 'plain', 'utf-8')
-                msg.attach(part1)
+                text_container.attach(part1)
             
             # Add HTML part
             part2 = MIMEText(html_content, 'html', 'utf-8')
-            msg.attach(part2)
+            text_container.attach(part2)
+            
+            # Add attachments
+            if attachments:
+                for attachment in attachments:
+                    filename = attachment.get('filename', 'attachment')
+                    content = attachment.get('content')
+                    if content:
+                        part = MIMEBase('application', 'octet-stream')
+                        part.set_payload(content)
+                        encoders.encode_base64(part)
+                        # Правильное кодирование имени файла для email
+                        # Используем Header для поддержки не-ASCII символов
+                        encoded_filename = Header(filename, 'utf-8').encode()
+                        part.add_header(
+                            'Content-Disposition',
+                            f'attachment; filename="{encoded_filename}"'
+                        )
+                        # Также добавляем Content-Type для Excel файлов
+                        if filename.endswith('.xlsx'):
+                            part.add_header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+                        msg.attach(part)
             
             # Collect all recipients
             all_recipients = to_emails.copy()
@@ -179,123 +226,7 @@ Link valid for {expires_in_days} days.
         expires_in_days: int
     ) -> str:
         """Render the transmittal email HTML template"""
-        
-        template = Template('''
-<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-</head>
-<body style="margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f5f5f5;">
-    <table width="100%" cellpadding="0" cellspacing="0" style="background-color: #f5f5f5; padding: 20px 0;">
-        <tr>
-            <td align="center">
-                <table width="600" cellpadding="0" cellspacing="0" style="background-color: #ffffff; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-                    <!-- Header -->
-                    <tr>
-                        <td style="background: linear-gradient(135deg, #1976d2 0%, #1565c0 100%); padding: 30px; border-radius: 8px 8px 0 0;">
-                            <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 600;">
-                                📄 New Transmittal
-                            </h1>
-                            <p style="margin: 10px 0 0 0; color: rgba(255,255,255,0.9); font-size: 16px;">
-                                {{ transmittal_number }}
-                            </p>
-                        </td>
-                    </tr>
-                    
-                    <!-- Content -->
-                    <tr>
-                        <td style="padding: 30px;">
-                            <!-- Info -->
-                            <table width="100%" style="margin-bottom: 25px;">
-                                <tr>
-                                    <td style="padding: 10px 0; border-bottom: 1px solid #eee;">
-                                        <strong style="color: #666;">Project:</strong>
-                                        <span style="color: #333; float: right;">{{ project_name }}</span>
-                                    </td>
-                                </tr>
-                                <tr>
-                                    <td style="padding: 10px 0; border-bottom: 1px solid #eee;">
-                                        <strong style="color: #666;">Sender:</strong>
-                                        <span style="color: #333; float: right;">{{ sender_name }}{% if sender_company %}, {{ sender_company }}{% endif %}</span>
-                                    </td>
-                                </tr>
-                            </table>
-                            
-                            <!-- Documents -->
-                            <h3 style="margin: 0 0 15px 0; color: #333; font-size: 16px;">
-                                📋 Documents ({{ documents|length }}):
-                            </h3>
-                            <table width="100%" style="border: 1px solid #e0e0e0; border-radius: 4px; border-collapse: collapse; margin-bottom: 25px; table-layout: fixed;">
-                                <thead>
-                                    <tr style="background-color: #f5f5f5;">
-                                        <th style="padding: 12px 10px; text-align: left; border-bottom: 1px solid #e0e0e0; color: #666; font-weight: 600; font-size: 13px; width: 40%;">Document Number</th>
-                                        <th style="padding: 12px 8px; text-align: center; border-bottom: 1px solid #e0e0e0; color: #666; font-weight: 600; font-size: 13px; width: 10%;">Rev.</th>
-                                        <th style="padding: 12px 8px; text-align: center; border-bottom: 1px solid #e0e0e0; color: #666; font-weight: 600; font-size: 13px; width: 10%;">Step</th>
-                                        <th style="padding: 12px 8px; text-align: center; border-bottom: 1px solid #e0e0e0; color: #666; font-weight: 600; font-size: 13px; width: 10%;">Disc.</th>
-                                        <th style="padding: 12px 8px; text-align: center; border-bottom: 1px solid #e0e0e0; color: #666; font-weight: 600; font-size: 13px; width: 15%;">Doc Type</th>
-                                        <th style="padding: 12px 8px; text-align: center; border-bottom: 1px solid #e0e0e0; color: #666; font-weight: 600; font-size: 13px; width: 15%;">Format</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {% for doc in documents %}
-                                    <tr>
-                                        <td style="padding: 10px; border-bottom: 1px solid #eee; color: #1976d2; font-family: 'Consolas', 'Monaco', monospace; font-size: 13px; word-break: break-all;">{{ doc.number }}</td>
-                                        <td style="padding: 10px 8px; border-bottom: 1px solid #eee; color: #333; text-align: center; font-size: 13px; font-weight: 500;">{{ doc.revision or '-' }}</td>
-                                        <td style="padding: 10px 8px; border-bottom: 1px solid #eee; color: #666; text-align: center; font-size: 13px;">{{ doc.revision_step or '-' }}</td>
-                                        <td style="padding: 10px 8px; border-bottom: 1px solid #eee; color: #666; text-align: center; font-size: 13px;">{{ doc.discipline_code or '-' }}</td>
-                                        <td style="padding: 10px 8px; border-bottom: 1px solid #eee; color: #666; text-align: center; font-size: 13px;">{{ doc.doc_type_code or '-' }}</td>
-                                        <td style="padding: 10px 8px; border-bottom: 1px solid #eee; text-align: center; font-size: 13px;">
-                                            {% if doc.file_type == 'PDF' %}📕
-                                            {% elif doc.file_type == 'DOC' or doc.file_type == 'DOCX' %}📘
-                                            {% elif doc.file_type == 'XLS' or doc.file_type == 'XLSX' %}📗
-                                            {% elif doc.file_type == 'DWG' or doc.file_type == 'DXF' %}📐
-                                            {% elif doc.file_type == 'PNG' or doc.file_type == 'JPG' or doc.file_type == 'JPEG' %}🖼️
-                                            {% elif doc.file_type == 'ZIP' or doc.file_type == 'RAR' %}📦
-                                            {% else %}📄{% endif %}
-                                            <span style="color: #999;">{{ doc.file_type or '-' }}</span>
-                                        </td>
-                                    </tr>
-                                    {% endfor %}
-                                </tbody>
-                            </table>
-                            
-                            <!-- Download Button -->
-                            <table width="100%" cellpadding="0" cellspacing="0">
-                                <tr>
-                                    <td align="center" style="padding: 20px 0;">
-                                        <a href="{{ download_link }}" 
-                                           style="display: inline-block; background: linear-gradient(135deg, #4caf50 0%, #43a047 100%); color: #ffffff; text-decoration: none; padding: 15px 40px; border-radius: 6px; font-size: 16px; font-weight: 600; box-shadow: 0 3px 6px rgba(76, 175, 80, 0.3);">
-                                            ⬇️ Download Documents
-                                        </a>
-                                    </td>
-                                </tr>
-                            </table>
-                            
-                            <!-- Expiry notice -->
-                            <p style="margin: 20px 0 0 0; color: #999; font-size: 13px; text-align: center;">
-                                ⏱️ Link valid for {{ expires_in_days }} days
-                            </p>
-                        </td>
-                    </tr>
-                    
-                    <!-- Footer -->
-                    <tr>
-                        <td style="background-color: #f5f5f5; padding: 20px 30px; border-radius: 0 0 8px 8px; border-top: 1px solid #eee;">
-                            <p style="margin: 0; color: #999; font-size: 12px; text-align: center;">
-                                This is an automatic notification from the document management system.<br>
-                                If you have any questions, please contact the sender.
-                            </p>
-                        </td>
-                    </tr>
-                </table>
-            </td>
-        </tr>
-    </table>
-</body>
-</html>
-        ''')
+        template = self.jinja_env.get_template('transmittal.html')
         
         return template.render(
             transmittal_number=transmittal_number,
@@ -307,6 +238,58 @@ Link valid for {expires_in_days} days.
             download_link=download_link,
             expires_in_days=expires_in_days
         )
+
+
+    def send_review_excel_report(
+        self,
+        to_emails: List[str],
+        project_name: str,
+        excel_content: bytes,
+        filename: str,
+        language: str = "ru"
+    ) -> bool:
+        """
+        Send review Excel report via email
+        
+        Args:
+            to_emails: List of recipient email addresses
+            project_name: Name of the project
+            excel_content: Excel file content as bytes
+            filename: Name of the Excel file
+            language: Language for email content ('ru' or 'en')
+            
+        Returns:
+            True if email was sent successfully, False otherwise
+        """
+        if language == "ru":
+            subject = f"[EDMS] Отчет по ревью — {project_name}"
+            html_content = self._render_review_report_email_ru(project_name, filename)
+            plain_content = f"Отчет по ревью для проекта {project_name}.\n\nФайл: {filename}"
+        else:
+            subject = f"[EDMS] Review Report — {project_name}"
+            html_content = self._render_review_report_email_en(project_name, filename)
+            plain_content = f"Review report for project {project_name}.\n\nFile: {filename}"
+        
+        return self.send_email(
+            to_emails=to_emails,
+            subject=subject,
+            html_content=html_content,
+            plain_content=plain_content,
+            attachments=[{
+                'filename': filename,
+                'content': excel_content
+            }]
+        )
+    
+    def _render_review_report_email_ru(self, project_name: str, filename: str) -> str:
+        """Render Russian email template for review report"""
+        template = self.jinja_env.get_template('review_report_ru.html')
+        return template.render(project_name=project_name, filename=filename)
+    
+    def _render_review_report_email_en(self, project_name: str, filename: str) -> str:
+        """Render English email template for review report"""
+        template = self.jinja_env.get_template('review_report_en.html')
+        return template.render(project_name=project_name, filename=filename)
 
 
 # Global email service instance
