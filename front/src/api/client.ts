@@ -1163,7 +1163,10 @@ export const reviewsApi = {
     const queryParams: any = {};
     if (params.projectId) queryParams.project_id = params.projectId;
     if (params.search) queryParams.search = params.search;
-    if (params.selectedCompany) queryParams.selected_company = params.selectedCompany;
+    // Передаем selectedCompany даже если это null (для фильтрации)
+    if (params.selectedCompany !== undefined && params.selectedCompany !== null) {
+      queryParams.selected_company = params.selectedCompany;
+    }
     if (params.onlyOverdue) queryParams.only_overdue = params.onlyOverdue;
     if (params.language) queryParams.language = params.language;
 

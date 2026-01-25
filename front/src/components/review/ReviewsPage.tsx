@@ -868,37 +868,6 @@ const ReviewsPage: React.FC = observer(() => {
           <Typography variant={isMobile ? "h5" : "h4"} component="h1">
             {t('reviews.title')}
           </Typography>
-          {/* Временная кнопка для экспорта через бэкенд */}
-          <Tooltip title="Экспорт в Excel (бэкенд)">
-            <Button
-              variant="outlined"
-              startIcon={<FileDownloadIcon />}
-              onClick={async () => {
-                try {
-                  await reviewsApi.exportToExcel({
-                    projectId: projectStore.selectedProject?.id,
-                    search: searchTerm,
-                    selectedCompany: selectedCompany,
-                    onlyOverdue: onlyOverdue,
-                    language: i18n.language,
-                  });
-                } catch (error: any) {
-                  console.error('Ошибка при экспорте в Excel через бэкенд:', error);
-                  setNotification({
-                    open: true,
-                    message: 'Ошибка при экспорте в Excel',
-                    severity: 'error'
-                  });
-                }
-              }}
-              sx={{ 
-                border: '1px dashed red', // Временная визуальная метка
-                backgroundColor: 'rgba(255, 0, 0, 0.1)'
-              }}
-            >
-              Excel (бэкенд)
-            </Button>
-          </Tooltip>
         </Box>
 
         <ReviewFilters
