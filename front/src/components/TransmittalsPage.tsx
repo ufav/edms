@@ -30,6 +30,7 @@ import NotificationSnackbar from './NotificationSnackbar';
 import { useDeleteDialog } from '../hooks/useDeleteDialog';
 import { transmittalsApi } from '../api/client';
 import { useRefreshStore } from '../hooks/useRefreshStore';
+import { useDebounce } from '../hooks/useDebounce';
 
 const TransmittalsPage: React.FC = observer(() => {
   const { t, i18n } = useTranslation();
@@ -40,6 +41,8 @@ const TransmittalsPage: React.FC = observer(() => {
   const [filterStatus, setFilterStatus] = useState<string>('all');
   const [filterProject] = useState<string>('all');
   const [searchTerm, setSearchTerm] = useState<string>('');
+  // Debounce для поиска - фильтрация будет происходить только через 500ms после окончания ввода
+  const debouncedSearchTerm = useDebounce(searchTerm, 500);
   const [viewerOpen, setViewerOpen] = useState(false);
   const [selectedTransmittalId, setSelectedTransmittalId] = useState<number | null>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
@@ -72,14 +75,14 @@ const TransmittalsPage: React.FC = observer(() => {
     }
   }, [projectStore.selectedProject]);
 
-  // Фильтрация трансмитталов
+  // Фильтрация трансмитталов (используем debounced значение для поиска)
   const filteredTransmittals = transmittalStore.transmittals.filter(t => {
     const statusMatch = filterStatus === 'all' || t.status?.toLowerCase() === filterStatus.toLowerCase();
     const projectMatch = filterProject === 'all' || t.project_id.toString() === filterProject;
     const selectedProjectMatch = !projectStore.hasSelectedProject || t.project_id === projectStore.selectedProject?.id;
-    const searchMatch = searchTerm === '' ||
-      t.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      t.transmittal_number.toLowerCase().includes(searchTerm.toLowerCase());
+    const searchMatch = debouncedSearchTerm === '' ||
+      t.title.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
+      t.transmittal_number.toLowerCase().includes(debouncedSearchTerm.toLowerCase());
 
     return statusMatch && projectMatch && selectedProjectMatch && searchMatch;
   });
@@ -87,7 +90,7 @@ const TransmittalsPage: React.FC = observer(() => {
   // Сбрасываем на первую страницу при изменении фильтров/проекта/поиска
   useEffect(() => {
     setPage(1);
-  }, [filterStatus, filterProject, searchTerm, projectStore.selectedProject]);
+  }, [filterStatus, filterProject, debouncedSearchTerm, projectStore.selectedProject]);
 
   const totalPages = Math.max(1, Math.ceil(filteredTransmittals.length / rowsPerPage));
   const startIndex = (page - 1) * rowsPerPage;

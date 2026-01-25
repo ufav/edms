@@ -45,6 +45,7 @@ import { transmittalCartStore } from '../stores/TransmittalCartStore';
 import { activeRevisionsStore } from '../stores/ActiveRevisionsStore';
 import { reviewStore } from '../stores/ReviewStore';
 import { useDocumentExport } from './document/hooks/useDocumentExport';
+import { useDebounce } from '../hooks/useDebounce';
 
 const DocumentsPage: React.FC = observer(() => {
   const { t, i18n } = useTranslation();
@@ -146,6 +147,9 @@ const DocumentsPage: React.FC = observer(() => {
 
   const { exportToExcel } = useDocumentExport();
 
+  // Debounce для поиска - запрос будет отправляться только через 500ms после окончания ввода
+  const debouncedSearchTerm = useDebounce(searchTerm, 500);
+
   const {
     page,
     size,
@@ -161,7 +165,7 @@ const DocumentsPage: React.FC = observer(() => {
   } = useServerDocumentPagination({
     projectId: projectStore.selectedProject?.id,
     status: filterStatus,
-    search: searchTerm,
+    search: debouncedSearchTerm,
     disciplineId: selectedDisciplineId,
     documentTypeId: selectedDocumentTypeId,
     revisionDescriptionId: selectedRevisionDescriptionId,

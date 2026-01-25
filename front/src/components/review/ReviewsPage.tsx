@@ -57,6 +57,7 @@ import { DocumentViewer } from '../document';
 import type { Document as ApiDocument } from '../../api/client';
 import { useReviewExport } from './hooks/useReviewExport';
 import { ReviewSettingsDialog } from './components/ReviewSettingsDialog';
+import { useDebounce } from '../../hooks/useDebounce';
 
 interface PendingApproval {
   document_id: number;
@@ -655,6 +656,8 @@ const ReviewsPage: React.FC = observer(() => {
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [selectedCompany, setSelectedCompany] = useState<string | null>(null);
   const [onlyOverdue, setOnlyOverdue] = useState<boolean>(false);
+  // Debounce для поиска - фильтрация будет происходить только через 500ms после окончания ввода
+  const debouncedSearchTerm = useDebounce(searchTerm, 500);
 
   const [approvalDialog, setApprovalDialog] = useState<{
     open: boolean;
@@ -712,12 +715,12 @@ const ReviewsPage: React.FC = observer(() => {
     return Array.from(uniqueCompanies).sort();
   }, [reviewStore.reviews]);
 
-  // Фильтрация документов
+  // Фильтрация документов (используем debounced значение для поиска)
   const filteredApprovals = reviewStore.reviews.filter(approval => {
-    const searchMatch = searchTerm === '' ||
-      approval.document_title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      approval.document_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      approval.project_name.toLowerCase().includes(searchTerm.toLowerCase());
+    const searchMatch = debouncedSearchTerm === '' ||
+      approval.document_title.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
+      approval.document_number.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
+      approval.project_name.toLowerCase().includes(debouncedSearchTerm.toLowerCase());
 
     if (!searchMatch) return false;
 
@@ -738,7 +741,7 @@ const ReviewsPage: React.FC = observer(() => {
   // Сбрасываем на первую страницу при изменении фильтров
   useEffect(() => {
     setPage(1);
-  }, [searchTerm, selectedCompany, onlyOverdue]);
+  }, [debouncedSearchTerm, selectedCompany, onlyOverdue]);
 
   const totalPages = Math.max(1, Math.ceil(filteredApprovals.length / rowsPerPage));
   const startIndex = (page - 1) * rowsPerPage;
