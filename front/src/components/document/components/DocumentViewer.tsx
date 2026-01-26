@@ -78,7 +78,13 @@ const DocumentViewer: React.FC<DocumentViewerProps> = observer(({
     onSaveDocument: onSaveDocument
   });
   const fileUpload = useDocumentFileUpload();
-  const revisions = useDocumentRevisions({ documentId, open });
+  const revisions = useDocumentRevisions({ 
+    documentId, 
+    open,
+    onError: (message: string, severity: 'error' | 'warning' | 'info' = 'error') => {
+      documentState.showNotification(message, severity);
+    }
+  });
   const projectData = useDocumentProjectData({ documentId, document, open, isCreating, isEditing: documentState.isEditing });
   const permissions = useDocumentPermissions({ document });
 

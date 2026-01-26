@@ -957,7 +957,9 @@ async def send_transmittal(
     db.flush()  # Получаем ID без коммита
     
     base_url = str(request.base_url).rstrip('/')
-    download_link_url = f"{base_url}/{download_link.token}"
+    # Формируем правильный URL с учетом префикса API и роутера download
+    from app.core.config import settings
+    download_link_url = f"{base_url}{settings.API_V1_STR}/download/{download_link.token}"
     
     # Получаем список документов в трансмиттале с расширенными данными
     from app.models.discipline import Discipline, DocumentType

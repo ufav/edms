@@ -27,6 +27,7 @@ router = APIRouter()
 @router.post("/generate/{transmittal_id}")
 async def generate_download_link(
     transmittal_id: int,
+    request: Request,
     expires_in_days: int = 7,
     max_downloads: int = 10,
     send_email: bool = False,
@@ -64,9 +65,9 @@ async def generate_download_link(
     db.refresh(download_link)
     
     # Build full URL
-    # TODO: Get from config or request
-    base_url = "http://localhost:8000"  # Should be configured
-    full_link = f"{base_url}/{download_link.token}"
+    from app.core.config import settings
+    base_url = str(request.base_url).rstrip('/')
+    full_link = f"{base_url}{settings.API_V1_STR}/download/{download_link.token}"
     
     result = {
         "token": download_link.token,
@@ -261,7 +262,12 @@ async def download_transmittal_files(
         zip_buffer,
         media_type="application/zip",
         headers={
-            "Content-Disposition": f"attachment; filename=\"{filename}\"; filename*=UTF-8''{filename_utf8}"
+            "Content-Disposition": f"attachment; filename=\"{filename}\"; filename*=UTF-8''{filename_utf8}",
+            "Content-Type": "application/zip",
+            "X-Content-Type-Options": "nosniff",
+            "Cache-Control": "no-cache, no-store, must-revalidate",
+            "Pragma": "no-cache",
+            "Expires": "0"
         }
     )
 

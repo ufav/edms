@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import { documentsApi, type Document as ApiDocument } from '../../../api/client';
-import { documentStore } from '../../../stores/DocumentStore';
 import { documentRevisionStore } from '../../../stores/DocumentRevisionStore';
 import { projectStore } from '../../../stores/ProjectStore';
 import { useRefreshStore } from '../../../hooks/useRefreshStore';
@@ -23,6 +22,10 @@ export interface UseDocumentActionsReturn {
     open: boolean;
     message: string;
   };
+  errorNotification: {
+    open: boolean;
+    message: string;
+  };
   
   // Сеттеры
   setIsCreatingDocument: (creating: boolean) => void;
@@ -31,6 +34,7 @@ export interface UseDocumentActionsReturn {
   setDocumentToDelete: (document: ApiDocument | null) => void;
   setDeleting: (deleting: boolean) => void;
   setSuccessNotification: (notification: { open: boolean; message: string }) => void;
+  setErrorNotification: (notification: { open: boolean; message: string }) => void;
   
   // Обработчики действий
   handleUpload: () => void;
@@ -41,10 +45,54 @@ export interface UseDocumentActionsReturn {
   handleSoftDelete: (document: ApiDocument) => void;
   handleConfirmDelete: () => Promise<void>;
   handleCloseNotification: () => void;
+  handleCloseErrorNotification: () => void;
 }
 
 export const useDocumentActions = ({ t, onCloseDialog, onRefreshActiveRevisions, onRefreshDocuments }: UseDocumentActionsProps): UseDocumentActionsReturn => {
   const { refreshDocuments } = useRefreshStore();
+  
+  // Функция для определения ошибок хранилища и возврата понятного сообщения
+  const getErrorMessage = (error: any, defaultMessage: string): string => {
+    const errorDetail = error?.response?.data?.detail || '';
+    const errorMessage = error?.message || '';
+    const errorText = (typeof errorDetail === 'string' ? errorDetail : '') + ' ' + errorMessage;
+    const lowerErrorText = errorText.toLowerCase();
+    
+    // Проверяем, является ли это ошибкой хранилища/MinIO
+    const isStorageError = 
+      lowerErrorText.includes('minio') ||
+      lowerErrorText.includes('хранилищ') ||
+      lowerErrorText.includes('storage') ||
+      lowerErrorText.includes('could not connect') ||
+      lowerErrorText.includes('endpoint url') ||
+      lowerErrorText.includes('ошибка хранения файла в minio') ||
+      lowerErrorText.includes('ошибка загрузки файла в minio');
+    
+    if (isStorageError) {
+      return t('support.errors.storage_unavailable') || 'Файловое хранилище недоступно. Сохранение файлов невозможно.';
+    }
+    
+    // Если это структурированная ошибка для ревизий
+    if (error?.response?.data?.detail?.error_type === 'revision_status_error') {
+      const { revision, status } = error.response.data.detail;
+      const template = t('documents.revision_error');
+      return template
+        .replace('{revision}', revision || 'Unknown')
+        .replace('{status}', status || 'Unknown');
+    }
+    
+    // Если detail - это строка, используем её
+    if (error?.response?.data?.detail && typeof error.response.data.detail === 'string') {
+      return error.response.data.detail;
+    }
+    
+    // Используем message, если есть
+    if (error?.message) {
+      return error.message;
+    }
+    
+    return defaultMessage;
+  };
   
   // Состояния для действий
   const [isCreatingDocument, setIsCreatingDocument] = useState(false);
@@ -142,26 +190,13 @@ export const useDocumentActions = ({ t, onCloseDialog, onRefreshActiveRevisions,
       }
       
     } catch (error: any) {
-      let errorMessage = t('documents.create_error');
+      const errorMessage = getErrorMessage(error, t('documents.create_error'));
       
-      // Обрабатываем структурированную ошибку для ревизий
-      if (error?.response?.data?.detail?.error_type === 'revision_status_error') {
-        const { revision, status } = error.response.data.detail;
-        // Используем ручную интерполяцию, если t() не работает
-        const template = t('documents.revision_error');
-        errorMessage = template
-          .replace('{revision}', revision || 'Unknown')
-          .replace('{status}', status || 'Unknown');
-      } else if (error?.response?.data?.detail) {
-        // Если detail - это строка, используем её
-        if (typeof error.response.data.detail === 'string') {
-          errorMessage = error.response.data.detail;
-        }
-      } else if (error?.message) {
-        errorMessage = error.message;
-      }
-      
-      alert(errorMessage);
+      // Показываем ошибку через снакбар вместо alert
+      setErrorNotification({
+        open: true,
+        message: errorMessage
+      });
     } finally {
       // Сбрасываем состояние загрузки в любом случае
       setIsCreatingDocument(false);
@@ -230,17 +265,13 @@ export const useDocumentActions = ({ t, onCloseDialog, onRefreshActiveRevisions,
         }
       }
     } catch (error: any) {
-      let errorMessage = t('documents.update_error');
+      const errorMessage = getErrorMessage(error, t('documents.update_error'));
       
-      if (error?.response?.data?.detail) {
-        if (typeof error.response.data.detail === 'string') {
-          errorMessage = error.response.data.detail;
-        }
-      } else if (error?.message) {
-        errorMessage = error.message;
-      }
-      
-      alert(errorMessage);
+      // Показываем ошибку через снакбар вместо alert
+      setErrorNotification({
+        open: true,
+        message: errorMessage
+      });
       throw error;
     }
   };
@@ -257,30 +288,22 @@ export const useDocumentActions = ({ t, onCloseDialog, onRefreshActiveRevisions,
       try {
         await documentRevisionStore.loadRevisions(documentId);
       } catch (error: any) {
-        let errorMessage = t('documents.load_revisions_error');
+        const errorMessage = getErrorMessage(error, t('documents.load_revisions_error'));
         
-        if (error?.response?.data?.detail) {
-          if (typeof error.response.data.detail === 'string') {
-            errorMessage = error.response.data.detail;
-          }
-        } else if (error?.message) {
-          errorMessage = error.message;
-        }
-        
-        alert(errorMessage);
+        // Показываем ошибку через снакбар вместо alert
+        setErrorNotification({
+          open: true,
+          message: errorMessage
+        });
       }
     } catch (error: any) {
-      let errorMessage = t('documents.load_document_error');
+      const errorMessage = getErrorMessage(error, t('documents.load_document_error'));
       
-      if (error?.response?.data?.detail) {
-        if (typeof error.response.data.detail === 'string') {
-          errorMessage = error.response.data.detail;
-        }
-      } else if (error?.message) {
-        errorMessage = error.message;
-      }
-      
-      alert(errorMessage);
+      // Показываем ошибку через снакбар вместо alert
+      setErrorNotification({
+        open: true,
+        message: errorMessage
+      });
     }
   };
 
@@ -291,8 +314,13 @@ export const useDocumentActions = ({ t, onCloseDialog, onRefreshActiveRevisions,
       let doc: ApiDocument;
       try {
         doc = await documentsApi.getById(documentId);
-      } catch (error) {
-        alert(t('documents.not_found'));
+      } catch (error: any) {
+        // Показываем ошибку через снакбар вместо alert
+        const errorMessage = getErrorMessage(error, t('documents.not_found'));
+        setErrorNotification({
+          open: true,
+          message: errorMessage
+        });
         return;
       }
 
@@ -328,30 +356,23 @@ export const useDocumentActions = ({ t, onCloseDialog, onRefreshActiveRevisions,
       }, 10);
       
     } catch (error: any) {
-      let errorMessage = t('documents.download_error');
+      // Специальная обработка для "файл не найден"
+      const errorDetail = error?.response?.data?.detail || '';
+      const errorMessage = error?.message || '';
+      const errorText = (typeof errorDetail === 'string' ? errorDetail : '') + ' ' + errorMessage;
+      const lowerErrorText = errorText.toLowerCase();
       
-      if (error?.response?.data?.detail) {
-        if (typeof error.response.data.detail === 'string') {
-          const detail = error.response.data.detail.toLowerCase();
-          if (detail.includes('файл не найден')) {
-            errorMessage = t('documents.file_not_found');
-          } else {
-            errorMessage = error.response.data.detail;
-          }
-        }
-      } else if (error?.message) {
-        const lower = String(error.message).toLowerCase();
-        if (lower.includes('file not found') || lower.includes('файл не найден')) {
-          errorMessage = t('documents.file_not_found');
-        } else {
-          errorMessage = error.message;
-        }
+      let finalErrorMessage: string;
+      if (lowerErrorText.includes('file not found') || lowerErrorText.includes('файл не найден')) {
+        finalErrorMessage = t('documents.file_not_found');
+      } else {
+        finalErrorMessage = getErrorMessage(error, t('documents.download_error'));
       }
       
       // Показываем уведомление об ошибке
       setErrorNotification({
         open: true,
-        message: errorMessage
+        message: finalErrorMessage
       });
     }
   };
@@ -383,17 +404,13 @@ export const useDocumentActions = ({ t, onCloseDialog, onRefreshActiveRevisions,
       
       setDocumentToDelete(null);
     } catch (error: any) {
-      let errorMessage = t('documents.delete_error');
+      const errorMessage = getErrorMessage(error, t('documents.delete_error'));
       
-      if (error?.response?.data?.detail) {
-        if (typeof error.response.data.detail === 'string') {
-          errorMessage = error.response.data.detail;
-        }
-      } else if (error?.message) {
-        errorMessage = error.message;
-      }
-      
-      alert(errorMessage);
+      // Показываем ошибку через снакбар вместо alert
+      setErrorNotification({
+        open: true,
+        message: errorMessage
+      });
     } finally {
       setDeleting(false);
     }

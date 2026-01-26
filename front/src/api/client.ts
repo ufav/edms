@@ -961,25 +961,33 @@ export const documentsApi = {
     } catch (error: any) {
       console.error('Download revision error in API client:', error);
 
-      // Если ошибка 404, проверяем, является ли response.data JSON с сообщением об ошибке
-      if (error.response?.status === 404 && error.response?.data) {
+      // Если ошибка 404 или 500, проверяем, является ли response.data JSON с сообщением об ошибке
+      if ((error.response?.status === 404 || error.response?.status === 500) && error.response?.data) {
         try {
           // Пытаемся прочитать JSON из blob
           const text = await error.response.data.text();
-          console.log('404 response text:', text);
+          console.log(`${error.response.status} response text:`, text);
           const errorData = JSON.parse(text);
-          console.log('404 error data:', errorData);
-          throw new Error(errorData.detail || 'Файл не найден');
+          console.log(`${error.response.status} error data:`, errorData);
+          // Сохраняем оригинальное сообщение об ошибке для дальнейшей обработки
+          const errorWithDetail = new Error(errorData.detail || 'Файл не найден');
+          (errorWithDetail as any).response = error.response;
+          (errorWithDetail as any).originalMessage = errorData.detail;
+          throw errorWithDetail;
         } catch (parseError) {
-          console.error('Error parsing 404 response:', parseError);
-          // Если не удалось распарсить JSON, используем стандартное сообщение
-          throw new Error('Файл не найден');
+          console.error('Error parsing error response:', parseError);
+          // Если не удалось распарсить JSON, создаем ошибку с информацией о статусе
+          const errorWithStatus = new Error('Ошибка загрузки файла');
+          (errorWithStatus as any).response = error.response;
+          throw errorWithStatus;
         }
       }
 
-      // Для других ошибок
+      // Для других ошибок сохраняем информацию о response
       if (error.response?.status) {
-        throw new Error(`Ошибка сервера: ${error.response.status}`);
+        const errorWithStatus = new Error(`Ошибка сервера: ${error.response.status}`);
+        (errorWithStatus as any).response = error.response;
+        throw errorWithStatus;
       }
 
       throw error;

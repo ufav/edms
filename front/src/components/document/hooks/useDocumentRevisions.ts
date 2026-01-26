@@ -2,16 +2,20 @@ import { useState, useEffect } from 'react';
 import { documentRevisionStore } from '../../../stores/DocumentRevisionStore';
 import { documentsApi } from '../../../api/client';
 import { useDeleteDialog } from '../../../hooks/useDeleteDialog';
+import { useTranslation } from 'react-i18next';
 
 interface UseDocumentRevisionsProps {
   documentId?: number | null;
   open: boolean;
+  onError?: (message: string, severity?: 'error' | 'warning' | 'info') => void;
 }
 
 export const useDocumentRevisions = ({
   documentId,
-  open
+  open,
+  onError
 }: UseDocumentRevisionsProps) => {
+  const { t } = useTranslation();
   const [workflowPresetSequence, setWorkflowPresetSequence] = useState<any[]>([]);
   
   // Хук для диалога подтверждения отмены ревизии
@@ -22,9 +26,19 @@ export const useDocumentRevisions = ({
     if (open && documentId) {
       documentRevisionStore.loadRevisions(documentId).catch((error) => {
         console.error('Error loading revisions:', error);
+        // Показываем ошибку загрузки ревизий
+        if (onError) {
+          const errorMessage = error?.response?.data?.detail || error?.message;
+          // Проверяем, связана ли ошибка с MinIO
+          if (errorMessage && (errorMessage.includes('MinIO') || errorMessage.includes('storage') || errorMessage.includes('хранилищ'))) {
+            onError(t('documents.revision_load_storage_error') || t('support.errors.storage_unavailable') || 'Хранилище файлов недоступно', 'error');
+          } else {
+            onError(t('documents.revision_load_error') || 'Ошибка загрузки ревизий', 'error');
+          }
+        }
       });
     }
-  }, [open, documentId]);
+  }, [open, documentId, onError, t]);
 
   // Функция скачивания ревизии
   const handleDownloadRevision = async (revisionId: number, fileName: string) => {
@@ -44,8 +58,47 @@ export const useDocumentRevisions = ({
       
       // Очищаем URL
       URL.revokeObjectURL(url);
-    } catch (error) {
-      // Ошибка скачивания файла
+    } catch (error: any) {
+      console.error('Error downloading revision:', error);
+      // Показываем локализованное сообщение об ошибке
+      if (onError) {
+        let errorMessage = error?.message || '';
+        
+        // Пытаемся извлечь детали ошибки из response
+        if (error?.response?.data) {
+          try {
+            // Если response.data - это Blob, пытаемся прочитать его как текст
+            if (error.response.data instanceof Blob) {
+              const text = await error.response.data.text();
+              try {
+                const errorData = JSON.parse(text);
+                errorMessage = errorData.detail || errorMessage;
+              } catch {
+                // Если не JSON, используем исходное сообщение
+              }
+            } else if (typeof error.response.data === 'object' && error.response.data.detail) {
+              errorMessage = error.response.data.detail;
+            }
+          } catch (parseError) {
+            console.error('Error parsing error response:', parseError);
+          }
+        }
+        
+        // Проверяем, связана ли ошибка с MinIO или хранилищем
+        const isStorageError = errorMessage.includes('MinIO') || 
+                               errorMessage.includes('storage') || 
+                               errorMessage.includes('хранилищ') ||
+                               errorMessage.includes('не найден в MinIO') ||
+                               errorMessage.includes('not found in MinIO');
+        
+        if (isStorageError) {
+          onError(t('documents.revision_download_storage_error') || t('support.errors.storage_unavailable') || 'Хранилище файлов недоступно', 'error');
+        } else if (error?.response?.status === 404) {
+          onError(t('documents.revision_file_not_found') || t('support.errors.file_not_found_in_storage') || 'Файл ревизии не найден', 'error');
+        } else {
+          onError(t('documents.revision_download_error') || 'Ошибка скачивания файла ревизии', 'error');
+        }
+      }
     }
   };
 
