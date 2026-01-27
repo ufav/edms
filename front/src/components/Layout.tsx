@@ -141,22 +141,97 @@ const Layout: React.FC<LayoutProps> = observer(({
 
   // Загружаем количество непрочитанных уведомлений
   useEffect(() => {
+    let isMounted = true;
+    let retryCount = 0;
+    const maxRetries = 3;
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    let hasAuthError = false;
+
     const loadUnreadCount = async () => {
+      // Проверяем, есть ли токен перед запросом
+      const token = localStorage.getItem('token');
+      if (!token) {
+        hasAuthError = true;
+        if (intervalId) {
+          clearInterval(intervalId);
+          intervalId = null;
+        }
+        return;
+      }
+
+      // Если была ошибка авторизации, не продолжаем опрос
+      if (hasAuthError) {
+        return;
+      }
+
       try {
         const count = await notificationsApi.getUnreadCount();
-        setUnreadNotificationsCount(count);
+        if (isMounted) {
+          setUnreadNotificationsCount(count);
+          retryCount = 0; // Сбрасываем счетчик при успехе
+          hasAuthError = false;
+        }
       } catch (error: any) {
-        // Если ошибка 401 (не авторизован), не логируем - это нормальная ситуация при истечении токена
-        if (error?.response?.status !== 401) {
+        if (!isMounted) return;
+        
+        const status = error?.response?.status;
+        const errorCode = error?.code;
+        
+        // Если 401 и это не сетевая ошибка, останавливаем опрос
+        if (status === 401) {
+          // Проверяем, это реальная проблема с авторизацией или сетевая ошибка
+          const isNetworkError = errorCode === 'ERR_NETWORK_IO_SUSPENDED' ||
+                                errorCode === 'ERR_NETWORK' ||
+                                !error.response;
+          
+          if (!isNetworkError) {
+            // Реальная проблема с авторизацией - останавливаем опрос
+            hasAuthError = true;
+            if (intervalId) {
+              clearInterval(intervalId);
+              intervalId = null;
+            }
+            return;
+          }
+        }
+        
+        // Для сетевых ошибок - retry с экспоненциальной задержкой
+        if (retryCount < maxRetries && (
+          errorCode === 'ERR_NETWORK_IO_SUSPENDED' ||
+          errorCode === 'ERR_NETWORK' ||
+          !error.response
+        )) {
+          retryCount++;
+          const delay = Math.min(1000 * Math.pow(2, retryCount), 30000);
+          setTimeout(() => {
+            if (isMounted && !hasAuthError) {
+              loadUnreadCount();
+            }
+          }, delay);
+        } else if (status !== 401) {
+          // Логируем только не-401 ошибки
           console.error('Error loading unread notifications count:', error);
         }
       }
     };
 
     loadUnreadCount();
-    // Обновляем каждые 30 секунд
-    const interval = setInterval(loadUnreadCount, 30000);
-    return () => clearInterval(interval);
+    
+    // Обновляем каждые 30 секунд, но только если нет проблем с авторизацией
+    intervalId = setInterval(() => {
+      // Проверяем, есть ли токен и нет ли ошибки авторизации перед опросом
+      const token = localStorage.getItem('token');
+      if (token && !hasAuthError) {
+        loadUnreadCount();
+      }
+    }, 30000);
+    
+    return () => {
+      isMounted = false;
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
   }, []);
 
   // Обновляем счетчик при открытии диалога уведомлений

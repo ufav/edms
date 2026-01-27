@@ -114,9 +114,20 @@ function App() {
           const refreshed = await authApi.refresh();
           setAuthToken(refreshed.access_token);
           setTokenExpiryMs(Date.now() + refreshed.expires_in * 1000);
-        } catch (_err) {
-          // refresh не удался — выходим из системы
-          handleLogout();
+        } catch (err: any) {
+          // Проверяем, это сетевая ошибка или реальная проблема с авторизацией
+          const isNetworkError = !err?.response && (
+            err?.code === 'ERR_NETWORK_IO_SUSPENDED' ||
+            err?.code === 'ERR_NETWORK' ||
+            err?.message === 'Network Error'
+          );
+          
+          if (!isNetworkError) {
+            // Только при реальной проблеме с авторизацией выходим
+            handleLogout();
+          }
+          // При сетевых ошибках просто пропускаем этот refresh
+          // Попробуем в следующий раз
         }
       }
     }, 30000); // каждые 30 секунд

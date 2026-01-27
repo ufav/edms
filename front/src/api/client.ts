@@ -48,6 +48,21 @@ apiClient.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
     const status = error?.response?.status;
+    const errorCode = error?.code;
+    const errorMessage = error?.message;
+
+    // Обработка сетевых ошибок (не критичные - не делаем logout)
+    if (!error.response) {
+      // ERR_NETWORK_IO_SUSPENDED - временная ошибка браузера (вкладка в фоне, экономия батареи)
+      // ERR_NETWORK - общая сетевая ошибка
+      if (errorCode === 'ERR_NETWORK_IO_SUSPENDED' || 
+          errorCode === 'ERR_NETWORK' ||
+          errorMessage === 'Network Error') {
+        // Не делаем logout при временных сетевых ошибках
+        // Просто пробрасываем ошибку дальше
+        return Promise.reject(error);
+      }
+    }
 
     if (status === 401 && !originalRequest._retry) {
       originalRequest._retry = true;
@@ -59,6 +74,14 @@ apiClient.interceptors.response.use(
           isRefreshing = true;
           const refreshed = await authApi.refresh();
           setAuthToken(refreshed.access_token);
+          
+          // Уведомляем о новом токене для WebSocket и других компонентов
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('token-refreshed', { 
+              detail: { token: refreshed.access_token } 
+            }));
+          }
+          
           // release queued
           pendingQueue.forEach((res) => res());
           pendingQueue = [];
@@ -66,11 +89,23 @@ apiClient.interceptors.response.use(
         }
         // retry
         return apiClient(originalRequest);
-      } catch (e) {
+      } catch (e: any) {
         isRefreshing = false;
         pendingQueue = [];
-        removeAuthToken();
-        if (onUnauthorized) onUnauthorized();
+        
+        // Проверяем, это сетевая ошибка или реальная проблема с авторизацией
+        const isNetworkError = !e?.response && (
+          e?.code === 'ERR_NETWORK_IO_SUSPENDED' ||
+          e?.code === 'ERR_NETWORK' ||
+          e?.message === 'Network Error'
+        );
+        
+        if (!isNetworkError) {
+          // Только при реальной проблеме с авторизацией делаем logout
+          removeAuthToken();
+          if (onUnauthorized) onUnauthorized();
+        }
+        
         return Promise.reject(error);
       }
     }
@@ -1522,32 +1557,8 @@ export const authApi = {
   },
 };
 
-// Обработчик ошибок
-apiClient.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    // Если токен истек, удаляем его
-    if (error.response?.status === 401) {
-      removeAuthToken();
-      // Можно добавить редирект на страницу входа
-    }
-
-    // Обрабатываем сетевые ошибки
-    if (!error.response) {
-      // Сетевая ошибка или таймаут
-      const networkError = new Error('Network Error');
-      return Promise.reject(networkError);
-    }
-
-    // Обрабатываем ошибки CORS
-    if (error.code === 'ERR_NETWORK' || error.message === 'Network Error') {
-      const corsError = new Error('CORS Error');
-      return Promise.reject(corsError);
-    }
-
-    return Promise.reject(error);
-  }
-);
+// Второй interceptor удален - логика обработки ошибок объединена в первый interceptor выше
+// Это предотвращает конфликты и дублирование обработки
 
 export const supportApi = {
   // Создание тикета
