@@ -365,80 +365,61 @@ class ProjectSupportFileAdmin(ModelView, model=ProjectSupportFile):
 
 def init_admin(app):
     admin = Admin(app, engine, title="Admin Panel", base_url="/admin")
-    
-    # Основные таблицы
-    admin.add_view(UserAdmin)
-    admin.add_view(ProjectAdmin)
-    admin.add_view(ProjectMemberAdmin)
-    admin.add_view(ProjectParticipantAdmin)
-    
-    # Документы
-    admin.add_view(DocumentAdmin)
-    admin.add_view(DocumentRevisionAdmin)
-    admin.add_view(DocumentReviewAdmin)
-    admin.add_view(DocumentCommentAdmin)
-    admin.add_view(DocumentWorkflowHistoryAdmin)
-    admin.add_view(DocumentApprovalAdmin)
-    admin.add_view(FileAdmin)
-    
-    # Трансмитталы
-    admin.add_view(TransmittalAdmin)
-    admin.add_view(TransmittalRevisionAdmin)
-    admin.add_view(TransmittalImportSettingsAdmin)
-    
-    # Справочники - ревизии
-    admin.add_view(RevisionStatusAdmin)
-    admin.add_view(RevisionDescriptionAdmin)
-    admin.add_view(RevisionStepAdmin)
-    admin.add_view(ReviewCodeAdmin)
-    admin.add_view(OriginatorAdmin)
-    
-    # Справочники - дисциплины и типы
-    admin.add_view(DisciplineAdmin)
-    admin.add_view(DocumentTypeAdmin)
-    
-    # Справочники - компании и контакты
-    admin.add_view(CompanyAdmin)
-    admin.add_view(DepartmentAdmin)
-    admin.add_view(ContactAdmin)
-    admin.add_view(CompanyRoleAdmin)
-    
-    # Справочники - роли
-    admin.add_view(UserRoleAdmin)
-    admin.add_view(ProjectRoleAdmin)
-    
-    # Справочники - статусы
-    admin.add_view(WorkflowStatusAdmin)
-    admin.add_view(TransmittalStatusAdmin)
-    
-    # Справочники - языки
-    admin.add_view(LanguageAdmin)
-    
-    # Проекты - настройки
-    admin.add_view(ProjectDisciplineDocumentTypeAdmin)
-    admin.add_view(ProjectRevisionDescriptionAdmin)
-    admin.add_view(ProjectRevisionStepAdmin)
-    
-    # Workflow
-    admin.add_view(WorkflowPresetAdmin)
-    admin.add_view(WorkflowPresetSequenceAdmin)
-    admin.add_view(WorkflowPresetRuleAdmin)
-    
-    # Системные таблицы
-    admin.add_view(UserSettingsAdmin)
-    admin.add_view(NotificationAdmin)
-    admin.add_view(AuditLogAdmin)
-    
-    # Участки тех. процесса
-    admin.add_view(AreaAdmin)
-    
-    # Обращения в поддержку
-    admin.add_view(SupportTicketAdmin)
-    admin.add_view(SupportMessageAdmin)
-    admin.add_view(SupportTicketFileAdmin)
-    
-    # Файлы support pack проектов
-    admin.add_view(ProjectSupportFileAdmin)
+
+    # Алфавитный порядок таблиц в левом меню админки.
+    # В sqladmin порядок напрямую зависит от последовательности add_view.
+    view_classes = [
+        UserAdmin,
+        ProjectAdmin,
+        ProjectMemberAdmin,
+        ProjectParticipantAdmin,
+        DocumentAdmin,
+        DocumentRevisionAdmin,
+        DocumentReviewAdmin,
+        DocumentCommentAdmin,
+        DocumentWorkflowHistoryAdmin,
+        DocumentApprovalAdmin,
+        FileAdmin,
+        TransmittalAdmin,
+        TransmittalRevisionAdmin,
+        TransmittalImportSettingsAdmin,
+        RevisionStatusAdmin,
+        RevisionDescriptionAdmin,
+        RevisionStepAdmin,
+        ReviewCodeAdmin,
+        OriginatorAdmin,
+        DisciplineAdmin,
+        DocumentTypeAdmin,
+        CompanyAdmin,
+        DepartmentAdmin,
+        ContactAdmin,
+        CompanyRoleAdmin,
+        UserRoleAdmin,
+        ProjectRoleAdmin,
+        WorkflowStatusAdmin,
+        TransmittalStatusAdmin,
+        LanguageAdmin,
+        ProjectDisciplineDocumentTypeAdmin,
+        ProjectRevisionDescriptionAdmin,
+        ProjectRevisionStepAdmin,
+        WorkflowPresetAdmin,
+        WorkflowPresetSequenceAdmin,
+        WorkflowPresetRuleAdmin,
+        UserSettingsAdmin,
+        NotificationAdmin,
+        AuditLogAdmin,
+        AreaAdmin,
+        SupportTicketAdmin,
+        SupportMessageAdmin,
+        SupportTicketFileAdmin,
+        ProjectSupportFileAdmin,
+    ]
+
+    for view_class in sorted(
+        view_classes,
+        key=lambda vc: str(getattr(vc, "name_plural", None) or getattr(vc, "name", "")).lower()
+    ):
+        admin.add_view(view_class)
     
     try:
         # Simple log to confirm mounting

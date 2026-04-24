@@ -260,6 +260,10 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
   const getRoleName = useMemo(() => (role: any) => (i18n.language === 'en' && role.name_en) ? role.name_en : role.name, [i18n.language]);
   const getRevisionDescriptionName = useMemo(() => (rd: any) => (i18n.language === 'en') ? rd.description : (rd.description_native || rd.description), [i18n.language]);
   const getRevisionStepName = useMemo(() => (rs: any) => (i18n.language === 'en') ? rs.description : (rs.description_native || rs.description), [i18n.language]);
+  const selectedWorkflowPresetObj = useMemo(
+    () => projectDialogStore.workflowPresets.find((p) => p.id === selectedWorkflowPreset) || null,
+    [projectDialogStore.workflowPresets, selectedWorkflowPreset]
+  );
 
   // Загружаем данные при открытии диалога
   useEffect(() => {
@@ -360,6 +364,33 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
       }
     }
   }, [projectDialogStore.workflowPresets.length, mode, projectId, isInitialized, pendingWorkflowPresetId, selectedWorkflowPreset]);
+
+  // Если выбран workflow preset, ревизии проекта синхронизируются из sequence пресета.
+  // Это исключает ручные расхождения между вкладками "Ревизии" и "Workflow".
+  useEffect(() => {
+    if (!selectedWorkflowPresetObj) return;
+    const sequences = Array.isArray(selectedWorkflowPresetObj.sequences) ? selectedWorkflowPresetObj.sequences : [];
+    if (sequences.length === 0) return;
+
+    const descriptionIds = Array.from(
+      new Set(
+        sequences
+          .map((seq: any) => seq?.revision_description_id)
+          .filter((id: any) => Number.isInteger(id))
+      )
+    ) as number[];
+
+    const stepIds = Array.from(
+      new Set(
+        sequences
+          .map((seq: any) => seq?.revision_step_id)
+          .filter((id: any) => Number.isInteger(id))
+      )
+    ) as number[];
+
+    setSelectedRevisionDescriptionsWithTracking(descriptionIds);
+    setSelectedRevisionStepsWithTracking(stepIds);
+  }, [selectedWorkflowPresetObj?.id, projectDialogStore.workflowPresets.length]);
 
   const loadProjectRoles = async () => {
     try {
@@ -611,6 +642,30 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
 
       // Преобразуем статус в enum формат
       const { budget, ...formDataWithoutBudget } = formData;
+      const presetSequences = selectedWorkflowPresetObj?.sequences || [];
+      const revisionDescriptionsFromPreset = Array.from(
+        new Set(
+          presetSequences
+            .map((seq: any) => seq?.revision_description_id)
+            .filter((id: any) => Number.isInteger(id))
+        )
+      ) as number[];
+      const revisionStepsFromPreset = Array.from(
+        new Set(
+          presetSequences
+            .map((seq: any) => seq?.revision_step_id)
+            .filter((id: any) => Number.isInteger(id))
+        )
+      ) as number[];
+      const effectiveRevisionDescriptions =
+        selectedWorkflowPreset && revisionDescriptionsFromPreset.length > 0
+          ? revisionDescriptionsFromPreset
+          : selectedRevisionDescriptions;
+      const effectiveRevisionSteps =
+        selectedWorkflowPreset && revisionStepsFromPreset.length > 0
+          ? revisionStepsFromPreset
+          : selectedRevisionSteps;
+
       const projectData = {
         ...formDataWithoutBudget,
         status: formData.status || 'PLANNING',
@@ -624,8 +679,8 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
           }));
           return acc;
         }, {} as { [key: number]: Array<{ documentTypeId: number, drs?: string }> }),
-        selected_revision_descriptions: selectedRevisionDescriptions,
-        selected_revision_steps: selectedRevisionSteps,
+        selected_revision_descriptions: effectiveRevisionDescriptions,
+        selected_revision_steps: effectiveRevisionSteps,
         workflow_preset_id: selectedWorkflowPreset,
         members: pendingProjectMembers.map(member => ({
           user_id: member.user_id,
@@ -1224,7 +1279,13 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
             >
               <Tab label={t('createProject.tabs.main')} />
               <Tab label={t('createProject.tabs.disciplines_types')} />
-              <Tab label={t('createProject.tabs.revisions')} />
+              <Tab
+                label={
+                  selectedWorkflowPresetObj
+                    ? `${t('createProject.tabs.revisions')} (preset)`
+                    : t('createProject.tabs.revisions')
+                }
+              />
               <Tab label={t('createProject.tabs.workflow')} />
               <Tab label={t('createProject.tabs.participants')} />
               <Tab label={t('createProject.tabs.users')} />
@@ -1298,6 +1359,8 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
                 onRevisionStepToggle={handleRevisionStepToggle}
                 getRevisionDescriptionName={getRevisionDescriptionName}
                 getRevisionStepName={getRevisionStepName}
+                isLockedByPreset={Boolean(selectedWorkflowPresetObj)}
+                selectedPresetName={selectedWorkflowPresetObj?.name || null}
               />
             )}
 

@@ -5,7 +5,8 @@ import {
   Chip,
   Card,
   CardContent,
-  CardHeader
+  CardHeader,
+  Alert
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 
@@ -18,6 +19,8 @@ interface RevisionsTabProps {
   onRevisionStepToggle: (id: number) => void;
   getRevisionDescriptionName: (rd: any) => string;
   getRevisionStepName: (rs: any) => string;
+  isLockedByPreset?: boolean;
+  selectedPresetName?: string | null;
 }
 
 const RevisionsTab: React.FC<RevisionsTabProps> = ({
@@ -28,12 +31,22 @@ const RevisionsTab: React.FC<RevisionsTabProps> = ({
   onRevisionDescriptionToggle,
   onRevisionStepToggle,
   getRevisionDescriptionName,
-  getRevisionStepName
+  getRevisionStepName,
+  isLockedByPreset = false,
+  selectedPresetName = null,
 }) => {
   const { t } = useTranslation();
 
   return (
     <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      {isLockedByPreset && (
+        <Alert severity="info">
+          {selectedPresetName
+            ? `Набор ревизий задается выбранным пресетом workflow: ${selectedPresetName}`
+            : 'Набор ревизий задается выбранным пресетом workflow'}
+        </Alert>
+      )}
+
       {/* Revision Descriptions */}
       <Card variant="outlined">
         <CardHeader
@@ -77,8 +90,10 @@ const RevisionsTab: React.FC<RevisionsTabProps> = ({
                     ? 'primary'
                     : 'default'
                 }
-                onClick={() => onRevisionDescriptionToggle(revisionDescription.id)}
-                clickable
+                onClick={() => {
+                  if (!isLockedByPreset) onRevisionDescriptionToggle(revisionDescription.id);
+                }}
+                clickable={!isLockedByPreset}
               />
             ))}
           </Box>
@@ -126,8 +141,10 @@ const RevisionsTab: React.FC<RevisionsTabProps> = ({
                     ? 'primary'
                     : 'default'
                 }
-                onClick={() => onRevisionStepToggle(revisionStep.id)}
-                clickable
+                onClick={() => {
+                  if (!isLockedByPreset) onRevisionStepToggle(revisionStep.id);
+                }}
+                clickable={!isLockedByPreset}
               />
             ))}
           </Box>
