@@ -1183,7 +1183,7 @@ async def send_transmittal(
     db.commit()
     db.refresh(transmittal)
     
-    # Логирование действия
+    # Логирование действия отправки трансмиттала
     new_values = {
         "id": transmittal.id,
         "status_id": sent_status.id,
@@ -1195,7 +1195,7 @@ async def send_transmittal(
     log_action(
         db=db,
         user_id=current_user.id,
-        action="update",
+        action="send",
         entity_type="transmittal",
         entity_id=transmittal_id,
         old_values=old_values,

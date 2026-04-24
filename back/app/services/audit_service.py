@@ -24,9 +24,32 @@ def get_client_ip(request: Request) -> Optional[str]:
     return None
 
 
-def get_user_agent(request: Request) -> Optional[str]:
-    """Получение User-Agent из запроса"""
-    return request.headers.get("User-Agent")
+def get_platform(request: Request) -> str:
+    """Определение платформы (web/mobile) из User-Agent"""
+    if not request or not hasattr(request, 'headers'):
+        return 'web'
+    
+    user_agent = request.headers.get("User-Agent", "")
+    if not user_agent:
+        return 'web'
+    
+    user_agent_lower = user_agent.lower()
+    
+    # Мобильные устройства и приложения
+    mobile_keywords = [
+        'mobile', 'android', 'iphone', 'ipad', 'ipod', 
+        'blackberry', 'windows phone', 'opera mini', 
+        'mobile safari', 'webos', 'palm', 'kindle',
+        'tablet', 'touch', 'fennec', 'maemo'
+    ]
+    
+    # Проверяем наличие мобильных ключевых слов
+    for keyword in mobile_keywords:
+        if keyword in user_agent_lower:
+            return 'mobile'
+    
+    # По умолчанию считаем веб-браузером
+    return 'web'
 
 
 def log_action(
@@ -50,7 +73,7 @@ def log_action(
         entity_id: ID сущности
         old_values: Старые значения (для update)
         new_values: Новые значения (для create/update)
-        request: FastAPI Request объект для получения IP и User-Agent
+        request: FastAPI Request объект для получения IP и определения платформы
     
     Returns:
         AuditLog: Созданная запись лога
@@ -66,7 +89,8 @@ def log_action(
     
     if request:
         audit_log.ip_address = get_client_ip(request)
-        audit_log.user_agent = get_user_agent(request)
+        platform_value = get_platform(request)
+        audit_log.platform = platform_value
     
     db.add(audit_log)
     db.commit()
@@ -91,7 +115,7 @@ def add_log_task(
     
     Args:
         background_tasks: FastAPI BackgroundTasks объект
-        request: FastAPI Request объект для получения IP и User-Agent
+        request: FastAPI Request объект для получения IP и определения платформы
         action: Тип действия (create, update, delete, etc.)
         entity_type: Тип сущности (user, document, project, etc.)
         entity_id: ID сущности

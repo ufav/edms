@@ -333,7 +333,7 @@ const Layout: React.FC<LayoutProps> = observer(({
   return (
     <Box sx={{
       display: 'flex',
-      height: '100vh',
+      minHeight: '100vh',
       width: '100%',
       minWidth: 0
     }}>
@@ -545,7 +545,6 @@ const Layout: React.FC<LayoutProps> = observer(({
           minWidth: 0,
           mt: '64px',
           backgroundColor: '#ffffff',
-          minHeight: 'calc(100vh - 64px)',
           display: 'flex',
           flexDirection: 'column'
         }}

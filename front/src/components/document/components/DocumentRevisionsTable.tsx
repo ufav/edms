@@ -156,12 +156,6 @@ const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer((
     );
 
     if (isInActiveRevisions) {
-      console.log('Release blocked: revision requires transmittal', {
-        revisionId: revision.id,
-        revisionDescriptionId: revision.revision_description_id,
-        revisionStepId: revision.revision_step_id,
-        isInActiveRevisions
-      });
       return false;
     }
 
@@ -174,10 +168,6 @@ const DocumentRevisionsTable: React.FC<DocumentRevisionsTableProps> = observer((
     if (workflowPresetSequence && workflowPresetSequence.length > 0) {
       const firstSequence = workflowPresetSequence[0];
       if (firstSequence && firstSequence.requires_transmittal) {
-        console.log('Release blocked: creating revision requires transmittal', {
-          firstSequence,
-          requiresTransmittal: firstSequence.requires_transmittal
-        });
         return false;
       }
     }

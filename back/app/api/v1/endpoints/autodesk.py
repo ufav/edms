@@ -4,13 +4,14 @@ API endpoints for Autodesk Platform Services integration
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from pydantic import BaseModel
 
 from app.core.database import get_db
 from app.services.auth import get_current_active_user
 from app.models.user import User
 from app.models.document import Document, DocumentRevision, File as FileModel
+from app.models.document_markup import DocumentMarkup
 from app.services.autodesk_service import autodesk_service
 from app.services.minio_service import minio_service
 from app.core.config import settings
@@ -29,6 +30,15 @@ class TranslationStatusResponse(BaseModel):
     status: str
     progress: str
     urn: str
+
+
+class MarkupPayload(BaseModel):
+    markup_data: str
+
+
+class MarkupResponse(BaseModel):
+    markup_data: Optional[str] = None
+    updated_at: Optional[str] = None
 
 
 @router.get("/viewer/token", response_model=ViewerTokenResponse)
@@ -50,6 +60,27 @@ async def get_viewer_token(
         )
 
 
+def _get_document_with_access(
+    db: Session,
+    document_id: int,
+    current_user: User
+) -> Document:
+    document = db.query(Document).filter(Document.id == document_id).first()
+    if not document:
+        raise HTTPException(status_code=404, detail="Документ не найден")
+
+    from app.models.project import ProjectMember
+    project_member = db.query(ProjectMember).filter(
+        ProjectMember.project_id == document.project_id,
+        ProjectMember.user_id == current_user.id
+    ).first()
+
+    if not current_user.is_admin and not project_member:
+        raise HTTPException(status_code=403, detail="Нет прав доступа к документу")
+
+    return document
+
+
 @router.post("/documents/{document_id}/revisions/{revision_id}/viewer/prepare")
 async def prepare_file_for_viewer(
     document_id: int,
@@ -62,9 +93,7 @@ async def prepare_file_for_viewer(
     Загружает файл в Autodesk OSS и запускает перевод
     """
     # Проверяем существование документа и ревизии
-    document = db.query(Document).filter(Document.id == document_id).first()
-    if not document:
-        raise HTTPException(status_code=404, detail="Документ не найден")
+    document = _get_document_with_access(db, document_id, current_user)
     
     revision = db.query(DocumentRevision).filter(
         DocumentRevision.id == revision_id,
@@ -74,16 +103,6 @@ async def prepare_file_for_viewer(
     
     if not revision:
         raise HTTPException(status_code=404, detail="Ревизия не найдена")
-    
-    # Проверяем права доступа
-    from app.models.project import ProjectMember
-    project_member = db.query(ProjectMember).filter(
-        ProjectMember.project_id == document.project_id,
-        ProjectMember.user_id == current_user.id
-    ).first()
-    
-    if not current_user.is_admin and not project_member:
-        raise HTTPException(status_code=403, detail="Нет прав доступа к документу")
     
     # Получаем файл ревизии
     revision_file = db.query(FileModel).filter(
@@ -155,9 +174,7 @@ async def get_viewer_status(
 ):
     """Получить статус перевода файла для просмотра"""
     # Проверяем существование документа и ревизии
-    document = db.query(Document).filter(Document.id == document_id).first()
-    if not document:
-        raise HTTPException(status_code=404, detail="Документ не найден")
+    document = _get_document_with_access(db, document_id, current_user)
     
     revision = db.query(DocumentRevision).filter(
         DocumentRevision.id == revision_id,
@@ -167,16 +184,6 @@ async def get_viewer_status(
     
     if not revision:
         raise HTTPException(status_code=404, detail="Ревизия не найдена")
-    
-    # Проверяем права доступа
-    from app.models.project import ProjectMember
-    project_member = db.query(ProjectMember).filter(
-        ProjectMember.project_id == document.project_id,
-        ProjectMember.user_id == current_user.id
-    ).first()
-    
-    if not current_user.is_admin and not project_member:
-        raise HTTPException(status_code=403, detail="Нет прав доступа к документу")
     
     # Получаем файл ревизии
     revision_file = db.query(FileModel).filter(
@@ -203,3 +210,79 @@ async def get_viewer_status(
             status_code=500,
             detail=f"Ошибка получения статуса: {str(e)}"
         )
+
+
+@router.get("/documents/{document_id}/revisions/{revision_id}/markups", response_model=MarkupResponse)
+async def get_revision_markups(
+    document_id: int,
+    revision_id: int,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    _get_document_with_access(db, document_id, current_user)
+
+    revision = db.query(DocumentRevision).filter(
+        DocumentRevision.id == revision_id,
+        DocumentRevision.document_id == document_id,
+        DocumentRevision.is_deleted == 0
+    ).first()
+    if not revision:
+        raise HTTPException(status_code=404, detail="Ревизия не найдена")
+
+    # Маркапы общие на ревизию — один набор, виден всем участникам проекта.
+    markup = db.query(DocumentMarkup).filter(
+        DocumentMarkup.revision_id == revision_id
+    ).first()
+    if not markup:
+        return {"markup_data": None, "updated_at": None}
+
+    return {
+        "markup_data": markup.markup_data,
+        "updated_at": markup.updated_at.isoformat() if markup.updated_at else None
+    }
+
+
+@router.put("/documents/{document_id}/revisions/{revision_id}/markups", response_model=MarkupResponse)
+async def save_revision_markups(
+    document_id: int,
+    revision_id: int,
+    payload: MarkupPayload,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    _get_document_with_access(db, document_id, current_user)
+
+    revision = db.query(DocumentRevision).filter(
+        DocumentRevision.id == revision_id,
+        DocumentRevision.document_id == document_id,
+        DocumentRevision.is_deleted == 0
+    ).first()
+    if not revision:
+        raise HTTPException(status_code=404, detail="Ревизия не найдена")
+
+    if not payload.markup_data.strip():
+        raise HTTPException(status_code=400, detail="markup_data не может быть пустым")
+
+    # Upsert по ревизии — один общий маркап-набор на ревизию.
+    markup = db.query(DocumentMarkup).filter(
+        DocumentMarkup.revision_id == revision_id
+    ).first()
+
+    if markup:
+        markup.markup_data = payload.markup_data
+        markup.last_modified_by_id = current_user.id
+    else:
+        markup = DocumentMarkup(
+            document_id=document_id,
+            revision_id=revision_id,
+            last_modified_by_id=current_user.id,
+            markup_data=payload.markup_data
+        )
+        db.add(markup)
+
+    db.commit()
+    db.refresh(markup)
+    return {
+        "markup_data": markup.markup_data,
+        "updated_at": markup.updated_at.isoformat() if markup.updated_at else None
+    }

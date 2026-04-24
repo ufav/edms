@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" \"http://localhost:9000/docste-files/PRJ-001/dwg%20file/A01_17_88/020-3300-PPP-GAD-20048-08.dwg?AWSAccessKeyId=admin&Signature=5XFJiqYdO0sVSCRiL2bBFx1v%2BN0%3D&Expires=1776322401\")"
+    ]
+  }
+}

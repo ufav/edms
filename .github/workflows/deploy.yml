@@ -1,30 +1,78 @@
-name: Deploy to Server
+﻿name: Deploy to Server
 
 on:
+  # Автоматический деплой при пуше в main
   push:
     branches:
       - main
+  # Ручной запуск из вкладки Actions с выбором режима
+  workflow_dispatch:
+    inputs:
+      full_rebuild:
+        description: "Полная пересборка (--no-cache, down)"
+        required: false
+        default: "false"
+        type: choice
+        options:
+          - "false"
+          - "true"
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
       - name: Deploy via SSH
-        uses: appleboy/ssh-action@v0.1.10
+        uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.HOST }}
           username: ${{ secrets.USERNAME }}
           key: ${{ secrets.SSH_KEY }}
+          command_timeout: 20m
           script: |
             set -e
             cd /home/ubuntu/edms
+
+            # Все переменные (DB_*, MINIO_*) — в back/.env
+            ENV_FILE="--env-file ./back/.env"
+            FULL="${{ github.event.inputs.full_rebuild }}"
+
+            # Забираем последний код
             git fetch origin
             git reset --hard origin/main
-            docker-compose down
-            docker-compose build --no-cache nginx back
-            docker-compose up -d
-            docker ps
+
+            if [ "$FULL" = "true" ]; then
+              # ── Полная пересборка ──────────────────────────────
+              # Останавливает все контейнеры, чистит весь build cache,
+              # собирает образы с нуля. Использовать при проблемах
+              # с кэшем или зависимостями (Actions → Run workflow).
+              echo "=== FULL REBUILD ==="
+              docker compose $ENV_FILE down --remove-orphans
+              docker builder prune -af || true
+              docker compose $ENV_FILE build --no-cache nginx back
+            else
+              # ── Инкрементальная сборка (по умолчанию) ──────────
+              # Использует Docker layer cache: если requirements.txt
+              # или package.json не менялись, зависимости не
+              # переустанавливаются. db и minio не трогаются.
+              echo "=== INCREMENTAL BUILD ==="
+              docker compose $ENV_FILE build nginx back
+            fi
+
+            # Пересоздаёт только контейнеры, чей образ изменился.
+            # db, minio остаются работать без перезапуска.
+            docker compose $ENV_FILE up -d
+
+            # Применяем миграции Alembic (новые таблицы/индексы)
+            BACK_CONTAINER=$(docker compose $ENV_FILE ps -q back)
+            if [ -n "$BACK_CONTAINER" ]; then
+              docker exec $BACK_CONTAINER alembic upgrade head || true
+            fi
+
+            # ── Очистка диска ─────────────────────────────────────
+            # Остановленные контейнеры (старые версии после up -d)
+            docker container prune -f
+            # Висячие образы (старые слои, не привязанные к тегу)
+            docker image prune -f
+            # Build cache старше 48 ч (свежий кэш остаётся)
+            docker builder prune -f --filter "until=48h"

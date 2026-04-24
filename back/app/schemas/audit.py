@@ -24,7 +24,7 @@ class AuditLogResponse(BaseModel):
     old_values: Optional[Dict[str, Any]] = None
     new_values: Optional[Dict[str, Any]] = None
     ip_address: Optional[str] = None
-    user_agent: Optional[str] = None
+    platform: Optional[str] = None
     created_at: datetime
     
     # User info

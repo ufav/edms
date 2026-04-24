@@ -255,6 +255,25 @@ const Login: React.FC<LoginProps> = ({ onLogin, loginError }) => {
                     </InputAdornment>
                   }
                   label={t('auth.username')}
+                  sx={{
+                    '& input:-webkit-autofill': {
+                      WebkitBoxShadow: '0 0 0 100px white inset !important',
+                      WebkitTextFillColor: 'rgba(0, 0, 0, 0.87) !important',
+                      caretColor: 'rgba(0, 0, 0, 0.87) !important',
+                    },
+                    '& input:-webkit-autofill:hover': {
+                      WebkitBoxShadow: '0 0 0 100px white inset !important',
+                      WebkitTextFillColor: 'rgba(0, 0, 0, 0.87) !important',
+                    },
+                    '& input:-webkit-autofill:focus': {
+                      WebkitBoxShadow: '0 0 0 100px white inset !important',
+                      WebkitTextFillColor: 'rgba(0, 0, 0, 0.87) !important',
+                    },
+                    '& input:-webkit-autofill:active': {
+                      WebkitBoxShadow: '0 0 0 100px white inset !important',
+                      WebkitTextFillColor: 'rgba(0, 0, 0, 0.87) !important',
+                    },
+                  }}
                 />
               </FormControl>
               
@@ -284,6 +303,25 @@ const Login: React.FC<LoginProps> = ({ onLogin, loginError }) => {
                     </InputAdornment>
                   }
                   label={t('auth.password')}
+                  sx={{
+                    '& input:-webkit-autofill': {
+                      WebkitBoxShadow: '0 0 0 100px white inset !important',
+                      WebkitTextFillColor: 'rgba(0, 0, 0, 0.87) !important',
+                      caretColor: 'rgba(0, 0, 0, 0.87) !important',
+                    },
+                    '& input:-webkit-autofill:hover': {
+                      WebkitBoxShadow: '0 0 0 100px white inset !important',
+                      WebkitTextFillColor: 'rgba(0, 0, 0, 0.87) !important',
+                    },
+                    '& input:-webkit-autofill:focus': {
+                      WebkitBoxShadow: '0 0 0 100px white inset !important',
+                      WebkitTextFillColor: 'rgba(0, 0, 0, 0.87) !important',
+                    },
+                    '& input:-webkit-autofill:active': {
+                      WebkitBoxShadow: '0 0 0 100px white inset !important',
+                      WebkitTextFillColor: 'rgba(0, 0, 0, 0.87) !important',
+                    },
+                  }}
                 />
               </FormControl>
               

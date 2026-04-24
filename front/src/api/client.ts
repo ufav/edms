@@ -1049,6 +1049,28 @@ export const autodeskApi = {
     const response = await apiClient.get(`/autodesk/documents/${documentId}/revisions/${revisionId}/viewer/status`);
     return response.data;
   },
+
+  getRevisionMarkups: async (
+    documentId: number,
+    revisionId: number
+  ): Promise<{ markup_data: string | null; updated_at: string | null }> => {
+    const response = await apiClient.get(
+      `/autodesk/documents/${documentId}/revisions/${revisionId}/markups`
+    );
+    return response.data;
+  },
+
+  saveRevisionMarkups: async (
+    documentId: number,
+    revisionId: number,
+    markupData: string
+  ): Promise<{ markup_data: string; updated_at: string | null }> => {
+    const response = await apiClient.put(
+      `/autodesk/documents/${documentId}/revisions/${revisionId}/markups`,
+      { markup_data: markupData }
+    );
+    return response.data;
+  },
 };
 
 // API методы для трансмитталов
@@ -1553,6 +1575,39 @@ export const authApi = {
   // Обновление access-токена по refresh cookie
   refresh: async (): Promise<{ access_token: string; token_type: string; expires_in: number }> => {
     const response = await apiClient.post('/auth/refresh');
+    return response.data;
+  },
+};
+
+// API методы для дашборда
+export const dashboardApi = {
+  // Получить распределение документов по статусам workflow
+  getWorkflowStatusDistribution: async (projectId?: number): Promise<Array<{ status: string; status_id: number; count: number }>> => {
+    const params: any = {};
+    if (projectId) {
+      params.project_id = projectId;
+    }
+    const response = await apiClient.get('/dashboard/workflow-status-distribution', { params });
+    return response.data;
+  },
+
+  // Получить динамику создания документов
+  getDocumentCreationTimeline: async (projectId?: number, period: string = '30d'): Promise<Array<{ date: string; count: number }>> => {
+    const params: any = { period };
+    if (projectId) {
+      params.project_id = projectId;
+    }
+    const response = await apiClient.get('/dashboard/document-creation-timeline', { params });
+    return response.data;
+  },
+
+  // Получить распределение документов по типам
+  getDocumentTypeDistribution: async (projectId?: number): Promise<Array<{ type_id: number | null; type_name: string; type_name_en: string; count: number }>> => {
+    const params: any = {};
+    if (projectId) {
+      params.project_id = projectId;
+    }
+    const response = await apiClient.get('/dashboard/document-type-distribution', { params });
     return response.data;
   },
 };

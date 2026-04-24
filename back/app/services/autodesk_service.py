@@ -14,7 +14,7 @@ class AutodeskService:
     
     BASE_URL = "https://developer.api.autodesk.com"
     TOKEN_URL = f"{BASE_URL}/authentication/v2/token"
-    DATA_MANAGEMENT_URL = f"{BASE_URL}/data/v1"
+    OSS_URL = f"{BASE_URL}/oss/v2"
     MODEL_DERIVATIVE_URL = f"{BASE_URL}/modelderivative/v2"
     
     def __init__(self):
@@ -67,12 +67,12 @@ class AutodeskService:
         }
         
         # Проверяем существование bucket
-        check_url = f"{self.DATA_MANAGEMENT_URL}/buckets/{self.bucket_key}/details"
+        check_url = f"{self.OSS_URL}/buckets/{self.bucket_key}/details"
         response = requests.get(check_url, headers=headers)
         
         if response.status_code == 404:
             # Создаем bucket
-            create_url = f"{self.DATA_MANAGEMENT_URL}/buckets"
+            create_url = f"{self.OSS_URL}/buckets"
             bucket_data = {
                 'bucketKey': self.bucket_key,
                 'policyKey': 'temporary'  # или 'persistent' для постоянного хранения
@@ -97,17 +97,29 @@ class AutodeskService:
         token = self._get_access_token()
         self._ensure_bucket()
         
-        # Загружаем файл в OSS
-        upload_url = f"{self.DATA_MANAGEMENT_URL}/oss/v2/buckets/{self.bucket_key}/objects/{object_name}"
-        headers = {
-            'Authorization': f'Bearer {token}',
-            'Content-Type': 'application/octet-stream'
-        }
-        
-        response = requests.put(upload_url, headers=headers, data=file_content)
-        response.raise_for_status()
-        
-        upload_data = response.json()
+        # Актуальный способ загрузки в APS OSS: signed S3 upload (legacy PUT deprecated)
+        auth_headers = {'Authorization': f'Bearer {token}'}
+        sign_url = f"{self.OSS_URL}/buckets/{self.bucket_key}/objects/{object_name}/signeds3upload"
+        sign_resp = requests.get(sign_url, headers=auth_headers)
+        sign_resp.raise_for_status()
+        sign_data = sign_resp.json()
+
+        urls = sign_data.get('urls') or []
+        upload_key = sign_data.get('uploadKey')
+        if not urls or not upload_key:
+            raise ValueError("Failed to get signed S3 upload URL from Autodesk")
+
+        # Для наших файлов достаточно однокусковой загрузки
+        put_resp = requests.put(urls[0], data=file_content, headers={'Content-Type': 'application/octet-stream'})
+        put_resp.raise_for_status()
+
+        complete_resp = requests.post(
+            sign_url,
+            headers={**auth_headers, 'Content-Type': 'application/json'},
+            json={'uploadKey': upload_key}
+        )
+        complete_resp.raise_for_status()
+        upload_data = complete_resp.json()
         object_id = upload_data.get('objectId')
         
         if not object_id:
@@ -147,9 +159,12 @@ class AutodeskService:
             'Content-Type': 'application/json'
         }
         
+        # Model Derivative API ожидает URN в base64 от objectId
+        urn_b64 = base64.b64encode(object_id.encode('utf-8')).decode('utf-8')
+
         job_data = {
             'input': {
-                'urn': object_id
+                'urn': urn_b64
             },
             'output': {
                 'formats': output_formats
@@ -157,10 +172,11 @@ class AutodeskService:
         }
         
         response = requests.post(translate_url, headers=headers, json=job_data)
-        response.raise_for_status()
+        if not response.ok:
+            raise ValueError(f"Autodesk translate failed: {response.status_code} {response.text}")
         
-        # Возвращаем URN для просмотра
-        return object_id
+        # Возвращаем base64 URN для просмотра
+        return urn_b64
     
     def get_translation_status(self, urn: str) -> Dict[str, Any]:
         """

@@ -18,6 +18,9 @@ import TransmittalDialog from './transmittal/components/TransmittalDialog';
 import { useDocumentActions } from './document/hooks/useDocumentActions';
 import { disciplineStore } from '../stores/DisciplineStore';
 import { areaStore } from '../stores/AreaStore';
+import WorkflowStatusChart from './dashboard/charts/WorkflowStatusChart';
+import DocumentCreationChart from './dashboard/charts/DocumentCreationChart';
+import DocumentTypeChart from './dashboard/charts/DocumentTypeChart';
 
 const Dashboard: React.FC = observer(() => {
   const { t, i18n } = useTranslation();
@@ -266,7 +269,8 @@ const Dashboard: React.FC = observer(() => {
       {/* блок быстрых действий можно вернуть, раскомментировав код ниже */}
       {/* <Grid container spacing={isMobile ? 2 : 3}>...</Grid> */}
 
-      <Grid container spacing={isMobile ? 1 : 1.5}>
+      {/* Прогресс-бары по дисциплинам и шагам ревизий */}
+      <Grid container spacing={isMobile ? 1 : 1.5} sx={{ mb: isMobile ? 1.5 : 2 }}>
         <Grid item xs={12} md={6}>
           <Paper sx={{ p: isMobile ? 2 : 3, boxShadow: 'none', border: '1px solid #e0e0e0' }}>
             <Typography variant="h6" gutterBottom sx={{ mb: 1.5 }}>
@@ -476,8 +480,27 @@ const Dashboard: React.FC = observer(() => {
             </Box>
           </Paper>
         </Grid>
+      </Grid>
 
-        {/* Последние активности - скрыто */}
+      {/* Графики - равномерное распределение */}
+      <Grid container spacing={isMobile ? 1 : 1.5}>
+        {/* График распределения по статусам workflow */}
+        <Grid item xs={12} md={4}>
+          <WorkflowStatusChart />
+        </Grid>
+
+        {/* График динамики создания документов */}
+        <Grid item xs={12} md={4}>
+          <DocumentCreationChart />
+        </Grid>
+
+        {/* График распределения по типам документов */}
+        <Grid item xs={12} md={4}>
+          <DocumentTypeChart />
+        </Grid>
+      </Grid>
+
+      {/* Последние активности - скрыто */}
         {/* <Grid item xs={12} md={6}>
           <Paper sx={{ p: isMobile ? 2 : 3, boxShadow: 'none', border: '1px solid #e0e0e0' }}>
             <Typography variant="h6" gutterBottom>
@@ -506,7 +529,6 @@ const Dashboard: React.FC = observer(() => {
             </Box>
           </Paper>
         </Grid> */}
-      </Grid>
 
       {/* Модалки существующих компонентов */}
       {/* Проект: создание */}

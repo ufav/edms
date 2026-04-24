@@ -41,7 +41,7 @@ class AuditLog(Base):
     old_values = Column(JSON)
     new_values = Column(JSON)
     ip_address = Column(String(45))  # IPv6 support
-    user_agent = Column(Text)
+    platform = Column(String(20))  # 'web' or 'mobile'
     created_at = Column(DateTime(timezone=True), server_default=text("timezone('UTC', now())"))
     
     # Relationships

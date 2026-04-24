@@ -807,7 +807,7 @@ async def create_document_with_revision(
         db.add(workflow_history)
         db.commit()
     
-    # Логирование действия (без Request для Form-запроса)
+    # Логирование действия
     new_values = {
         "id": db_document.id,
         "title": db_document.title,
@@ -824,7 +824,7 @@ async def create_document_with_revision(
         entity_id=db_document.id,
         old_values=None,
         new_values=new_values,
-        request=None,  # Request недоступен в Form-запросах
+        request=request,
     )
     
     # Получаем информацию о файлах из таблицы files
@@ -1559,6 +1559,29 @@ async def release_revision(
     db.add(workflow_history)
     db.commit()
     
+    # Логирование действия выпуска ревизии
+    old_values = {
+        "id": revision.id,
+        "document_id": document.id,
+        "workflow_status_id": draft_status.id,
+    }
+    new_values = {
+        "id": revision.id,
+        "document_id": document.id,
+        "workflow_status_id": in_review_status.id,
+        "action": "release",
+    }
+    log_action(
+        db=db,
+        user_id=current_user.id,
+        action="update",
+        entity_type="document_revision",
+        entity_id=revision_id,
+        old_values=old_values,
+        new_values=new_values,
+        request=request,
+    )
+    
     return {"message": "Ревизия успешно выпущена для внутреннего утверждения"}
 
 
@@ -1935,6 +1958,28 @@ async def create_document_revision(
         )
         db.add(workflow_history)
         db.commit()
+    
+    # Логирование действия создания ревизии
+    new_values = {
+        "id": revision_row.id,
+        "document_id": document.id,
+        "number": revision_row.number,
+        "revision_description_id": revision_row.revision_description_id,
+        "revision_step_id": revision_row.revision_step_id,
+        "revision_status_id": revision_row.revision_status_id,
+        "workflow_status_id": revision_row.workflow_status_id,
+        "change_description": revision_row.change_description,
+    }
+    log_action(
+        db=db,
+        user_id=current_user.id,
+        action="create",
+        entity_type="document_revision",
+        entity_id=revision_row.id,
+        old_values=None,
+        new_values=new_values,
+        request=request,
+    )
     
     db.refresh(document)
 
