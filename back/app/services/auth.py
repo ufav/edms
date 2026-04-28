@@ -8,6 +8,7 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -28,9 +29,12 @@ def get_password_hash(password: str) -> str:
     """Хеширование пароля"""
     return pwd_context.hash(password)
 
-def authenticate_user(db: Session, username: str, password: str) -> Optional[User]:
-    """Аутентификация пользователя"""
-    user = db.query(User).filter(User.username == username).first()
+def authenticate_user(db: Session, identifier: str, password: str) -> Optional[User]:
+    """Аутентификация по email (OAuth2PasswordRequestForm передаёт значение в поле username)."""
+    email = (identifier or "").strip().lower()
+    if not email:
+        return None
+    user = db.query(User).filter(func.lower(User.email) == email).first()
     if not user:
         return None
     if not verify_password(password, user.hashed_password):
@@ -54,6 +58,16 @@ def decode_token(token: str) -> Optional[dict]:
     except JWTError:
         return None
 
+def user_id_from_token_sub(sub) -> Optional[int]:
+    """JWT sub хранит строковый id пользователя."""
+    if sub is None:
+        return None
+    try:
+        return int(sub)
+    except (TypeError, ValueError):
+        return None
+
+
 async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     """Получение текущего пользователя из токена"""
     credentials_exception = HTTPException(
@@ -63,13 +77,13 @@ async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = De
     )
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-        username: str = payload.get("sub")
-        if username is None:
+        uid = user_id_from_token_sub(payload.get("sub"))
+        if uid is None:
             raise credentials_exception
     except JWTError:
         raise credentials_exception
-    
-    user = db.query(User).filter(User.username == username).first()
+
+    user = db.query(User).filter(User.id == uid).first()
     if user is None:
         raise credentials_exception
     return user

@@ -28,7 +28,7 @@ class AuditLogResponse(BaseModel):
     created_at: datetime
     
     # User info
-    user_username: Optional[str] = None
+    user_email: Optional[str] = None
     user_full_name: Optional[str] = None
     
     class Config:

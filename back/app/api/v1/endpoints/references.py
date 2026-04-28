@@ -163,6 +163,33 @@ def create_company(company: CompanyCreate, db: Session = Depends(get_db)):
     return db_company
 
 
+@router.put("/companies/{company_id}", response_model=CompanyResponse)
+def update_company(company_id: int, company_data: CompanyCreate, db: Session = Depends(get_db)):
+    """Update company"""
+    company = db.query(Company).filter(Company.id == company_id).first()
+    if not company:
+        raise HTTPException(status_code=404, detail="Компания не найдена")
+
+    for field, value in company_data.dict().items():
+        setattr(company, field, value)
+
+    db.commit()
+    db.refresh(company)
+    return company
+
+
+@router.delete("/companies/{company_id}")
+def delete_company(company_id: int, db: Session = Depends(get_db)):
+    """Delete company"""
+    company = db.query(Company).filter(Company.id == company_id).first()
+    if not company:
+        raise HTTPException(status_code=404, detail="Компания не найдена")
+
+    db.delete(company)
+    db.commit()
+    return {"message": "Компания удалена"}
+
+
 # User Role endpoints
 @router.get("/user-roles", response_model=List[UserRoleResponse])
 def get_user_roles(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):

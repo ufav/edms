@@ -10,7 +10,7 @@ import logging
 from app.core.database import get_db
 from app.models.user import User
 from app.models.support import SupportTicket
-from app.services.auth import decode_token
+from app.services.auth import decode_token, user_id_from_token_sub
 from app.services.websocket_manager import connection_manager
 
 router = APIRouter()
@@ -41,15 +41,15 @@ async def websocket_endpoint(
             await websocket.close(code=1008, reason="Invalid token")
             return
         
-        username = payload.get("sub")
-        if not username:
+        uid = user_id_from_token_sub(payload.get("sub"))
+        if not uid:
             await websocket.close(code=1008, reason="Invalid token")
             return
         
         # Получаем пользователя из БД (WebSocket не поддерживает Depends, используем get_db напрямую)
         db = next(get_db())
         try:
-            user = db.query(User).filter(User.username == username).first()
+            user = db.query(User).filter(User.id == uid).first()
             if not user or not user.is_active:
                 await websocket.close(code=1008, reason="User not found or inactive")
                 return

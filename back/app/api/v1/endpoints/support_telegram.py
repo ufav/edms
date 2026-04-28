@@ -335,7 +335,7 @@ async def process_telegram_update(update: dict, db: Session = None):
                         keyboard = []
                         for ticket in tickets[:10]:  # Максимум 10 тикетов
                             user = db.query(User).filter(User.id == ticket.user_id).first()
-                            user_name = user.username if user else "Неизвестно"
+                            user_name = ((user.full_name or user.email) if user else None) or "Неизвестно"
                             status_emoji = "🆕" if ticket.status == TicketStatus.NEW else "🔄"
                             button_text = f"{status_emoji} #{ticket.id}: {ticket.subject[:30]}"
                             if len(ticket.subject) > 30:
@@ -475,7 +475,7 @@ async def process_telegram_update(update: dict, db: Session = None):
                     keyboard = []
                     for ticket in tickets[:10]:  # Максимум 10 тикетов
                         user = db.query(User).filter(User.id == ticket.user_id).first()
-                        user_name = user.username if user else "Неизвестно"
+                        user_name = ((user.full_name or user.email) if user else None) or "Неизвестно"
                         status_emoji = "🆕" if ticket.status == TicketStatus.NEW else "🔄"
                         button_text = f"{status_emoji} #{ticket.id}: {ticket.subject[:30]}"
                         if len(ticket.subject) > 30:
@@ -561,7 +561,7 @@ async def show_ticket_details_in_telegram(
     
     # Получаем пользователя
     user = db.query(User).filter(User.id == ticket.user_id).first()
-    user_name = user.username if user else "Неизвестно"
+    user_name = ((user.full_name or user.email) if user else None) or "Неизвестно"
     
     # Получаем последние сообщения
     messages = db.query(SupportMessage).filter(

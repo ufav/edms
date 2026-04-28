@@ -14,7 +14,7 @@ def test_server_pagination():
     
     # 1. Логин для получения токена
     login_data = {
-        "username": "test",
+        "username": "test@edms.com",
         "password": "test123"
     }
     

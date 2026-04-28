@@ -33,6 +33,7 @@ import {
   History as HistoryIcon,
   Support as SupportIcon,
   Notifications as NotificationsIcon,
+  Business as BusinessIcon,
 } from '@mui/icons-material';
 import ProjectSelector from './ProjectSelector';
 import ProfileDialog from './ProfileDialog';
@@ -56,7 +57,7 @@ interface LayoutProps {
   currentPage: string;
   onPageChange: (page: string) => void;
   onLogout: () => void;
-  user: { username: string; role: string } | null;
+  user: { full_name: string; email: string; role: string } | null;
   onProjectSelect: (project: Project) => void;
 }
 
@@ -277,7 +278,8 @@ const Layout: React.FC<LayoutProps> = observer(({
       ...(permissions.canViewWorkflows ? [{ id: 'workflows', label: t('menu.workflows'), icon: <WorkflowIcon /> }] : []),
       ...(permissions.canViewUsers ? [{ id: 'users', label: t('menu.users'), icon: <UserIcon /> }] : []),
       ...(permissions.canViewAdmin ? [
-        { id: 'audit-logs', label: t('menu.audit_logs'), icon: <HistoryIcon /> }
+        { id: 'audit-logs', label: t('menu.audit_logs'), icon: <HistoryIcon /> },
+        { id: 'companies-contacts', label: t('menu.companies_contacts'), icon: <BusinessIcon /> },
       ] : []),
     ];
   }, [t, reviewStore.reviews.length, permissions.canViewWorkflows, permissions.canViewUsers, permissions.canViewAdmin]);
@@ -461,7 +463,7 @@ const Layout: React.FC<LayoutProps> = observer(({
               <MenuItem disabled>
                 <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
                   <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
-                    {user?.username || 'Гость'}
+                    {(userStore.currentUser?.full_name || user?.full_name || userStore.currentUser?.email || user?.email || 'Гость')}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
                     {userStore.currentUser?.role === 'admin' ? 'Администратор' :
@@ -553,7 +555,7 @@ const Layout: React.FC<LayoutProps> = observer(({
       </Box>
 
       {/* Profile Dialog */}
-      <ProfileDialog open={profileOpen} onClose={() => setProfileOpen(false)} username={user?.username || undefined} />
+      <ProfileDialog open={profileOpen} onClose={() => setProfileOpen(false)} />
 
       {/* Notifications Popover */}
       <NotificationsDialog

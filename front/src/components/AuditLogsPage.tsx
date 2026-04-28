@@ -84,7 +84,7 @@ const AuditLogsPage: React.FC = () => {
     return (
       log.action.toLowerCase().includes(searchLower) ||
       log.entity_type.toLowerCase().includes(searchLower) ||
-      log.user_username?.toLowerCase().includes(searchLower) ||
+      log.user_email?.toLowerCase().includes(searchLower) ||
       log.user_full_name?.toLowerCase().includes(searchLower) ||
       log.ip_address?.toLowerCase().includes(searchLower)
     );
@@ -407,7 +407,7 @@ const AuditLogsPage: React.FC = () => {
                           textOverflow: 'ellipsis', 
                           whiteSpace: 'nowrap' 
                         }}>
-                          {log.user_full_name || log.user_username || '-'}
+                          {log.user_full_name || log.user_email || '-'}
                         </Typography>
                       </TableCell>
                       <TableCell sx={{ 

@@ -1069,7 +1069,7 @@ async def send_transmittal(
                 })
     
     # Получаем информацию об отправителе
-    sender_name = current_user.full_name or current_user.username
+    sender_name = current_user.full_name or current_user.email
     sender_company = ""  # Убран "EDMS"
     project = db.query(Project).filter(Project.id == transmittal.project_id).first()
     project_name = project.name if project else "Проект"

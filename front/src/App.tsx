@@ -13,6 +13,7 @@ import ReviewsPage from './components/review/ReviewsPage';
 import UsersPage from './components/UsersPage';
 import WorkflowPresetsPage from './components/WorkflowPresetsPage';
 import AuditLogsPage from './components/AuditLogsPage';
+import CompaniesContactsPage from './components/CompaniesContactsPage';
 import AdminRoutes from './pages/admin/AdminRoutes';
 import { authApi, setAuthToken, removeAuthToken, setUnauthorizedHandler } from './api/client';
 import { projectStore } from './stores/ProjectStore';
@@ -36,7 +37,7 @@ const theme = createTheme({
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [user, setUser] = useState<{ username: string; role: string } | null>(null);
+  const [user, setUser] = useState<{ full_name: string; email: string; role: string } | null>(null);
   const [currentPage, setCurrentPage] = useState('dashboard');
   const [tokenExpiryMs, setTokenExpiryMs] = useState<number | null>(null);
   const [loginError, setLoginError] = useState<string | null>(null);
@@ -57,7 +58,8 @@ function App() {
           if (userStore.currentUser) {
             setIsAuthenticated(true);
             setUser({ 
-              username: userStore.currentUser.username, 
+              full_name: userStore.currentUser.full_name,
+              email: userStore.currentUser.email,
               role: userStore.currentUser.role 
             });
             // Загружаем справочные данные после успешной аутентификации
@@ -71,7 +73,8 @@ function App() {
       } else if (isAuthenticated) {
         userStore.loadCurrentUser().then(() => {
           setUser({ 
-            username: userStore.currentUser?.username || '', 
+            full_name: userStore.currentUser?.full_name || '',
+            email: userStore.currentUser?.email || '',
             role: userStore.currentUser?.role || '' 
           });
         });
@@ -134,11 +137,11 @@ function App() {
     return () => clearInterval(id);
   }, [isAuthenticated, tokenExpiryMs]);
 
-  const handleLogin = async (username: string, password: string) => {
+  const handleLogin = async (email: string, password: string) => {
     try {
       setLoginError(null);
-      // Попытка входа через API
-      const response = await authApi.login(username, password);
+      // Попытка входа через API (OAuth2 передаёт email в поле username)
+      const response = await authApi.login(email, password);
       
       setAuthToken(response.access_token);
       setTokenExpiryMs(Date.now() + (response as any).expires_in * 1000);
@@ -147,7 +150,8 @@ function App() {
       // Получаем информацию о пользователе с ролью
       await userStore.loadCurrentUser();
       setUser({ 
-        username: userStore.currentUser?.username || '', 
+        full_name: userStore.currentUser?.full_name || '',
+        email: userStore.currentUser?.email || '',
         role: userStore.currentUser?.role || '' 
       });
       
@@ -218,6 +222,8 @@ function App() {
         return permissions.canViewUsers ? <UsersPage /> : <Dashboard />;
       case 'audit-logs':
         return permissions.canViewAdmin ? <AuditLogsPage /> : <Dashboard />;
+      case 'companies-contacts':
+        return permissions.canViewAdmin ? <CompaniesContactsPage /> : <Dashboard />;
       default:
         return <Dashboard />;
     }

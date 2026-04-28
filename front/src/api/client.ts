@@ -454,7 +454,6 @@ export interface TransmittalImportSettingsUpdate {
 
 export interface User {
   id: number;
-  username: string;
   email: string;
   full_name: string;
   role: string;
@@ -475,7 +474,7 @@ export interface AuditLog {
   ip_address: string | null;
   user_agent: string | null;
   created_at: string;
-  user_username: string | null;
+  user_email: string | null;
   user_full_name: string | null;
 }
 
@@ -1305,7 +1304,6 @@ export const usersApi = {
 
   // Создать пользователя
   create: async (userData: {
-    username: string;
     email: string;
     full_name: string;
     password: string;
@@ -1536,10 +1534,10 @@ export const userSettingsApi = {
 
 // API методы для аутентификации
 export const authApi = {
-  // Вход в систему
-  login: async (username: string, password: string): Promise<{ access_token: string; token_type: string }> => {
+  // Вход в систему (email уходит в поле username формы OAuth2)
+  login: async (email: string, password: string): Promise<{ access_token: string; token_type: string }> => {
     const params = new URLSearchParams();
-    params.append('username', username);
+    params.append('username', email.trim());
     params.append('password', password);
 
     const response = await apiClient.post('/auth/login', params, {
@@ -1552,7 +1550,6 @@ export const authApi = {
 
   // Регистрация
   register: async (userData: {
-    username: string;
     email: string;
     full_name: string;
     password: string;
@@ -1564,6 +1561,16 @@ export const authApi = {
   // Получить текущего пользователя
   getCurrentUser: async (): Promise<User> => {
     const response = await apiClient.get('/auth/me');
+    return response.data;
+  },
+
+  /** Обновить профиль (имя, email). При смене email передайте current_password */
+  patchProfile: async (body: {
+    full_name?: string;
+    email?: string;
+    current_password?: string;
+  }): Promise<User> => {
+    const response = await apiClient.patch('/auth/me', body);
     return response.data;
   },
 
@@ -1857,6 +1864,12 @@ export const referencesApi = {
 
   createCompany: (data: Partial<Company>): Promise<Company> =>
     apiClient.post('/references/companies', data).then(res => res.data),
+
+  updateCompany: (companyId: number, data: Partial<Company>): Promise<Company> =>
+    apiClient.put(`/references/companies/${companyId}`, data).then(res => res.data),
+
+  deleteCompany: (companyId: number): Promise<{ message: string }> =>
+    apiClient.delete(`/references/companies/${companyId}`).then(res => res.data),
 
   // User Roles
   getUserRoles: (): Promise<UserRole[]> =>

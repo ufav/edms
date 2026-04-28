@@ -19,7 +19,6 @@ def user_to_dict(user: User) -> Dict[str, Any]:
     """Конвертация пользователя в словарь для логов"""
     return {
         "id": user.id,
-        "username": user.username,
         "email": user.email,
         "full_name": user.full_name,
         "role": user.role,
@@ -39,7 +38,6 @@ async def get_users(
     return [
         {
             "id": user.id,
-            "username": user.username,
             "email": user.email,
             "full_name": user.full_name,
             "role": user.role,
@@ -63,7 +61,6 @@ async def get_user(
     
     return {
         "id": user.id,
-        "username": user.username,
         "email": user.email,
         "full_name": user.full_name,
         "role": user.role,
@@ -87,11 +84,6 @@ async def create_user(
     if not current_user.is_admin:
         raise HTTPException(status_code=403, detail="Доступ запрещен. Требуются права администратора.")
     
-    # Проверка существования пользователя с таким username
-    existing_user = db.query(User).filter(User.username == user_data.username).first()
-    if existing_user:
-        raise HTTPException(status_code=400, detail="Пользователь с таким username уже существует")
-    
     # Проверка существования пользователя с таким email
     existing_email = db.query(User).filter(User.email == user_data.email).first()
     if existing_email:
@@ -100,7 +92,6 @@ async def create_user(
     # Создание пользователя
     hashed_password = get_password_hash(user_data.password)
     new_user = User(
-        username=user_data.username,
         email=user_data.email,
         full_name=user_data.full_name,
         hashed_password=hashed_password,
@@ -127,7 +118,6 @@ async def create_user(
     
     return {
         "id": new_user.id,
-        "username": new_user.username,
         "email": new_user.email,
         "full_name": new_user.full_name,
         "role": new_user.role,
@@ -196,7 +186,6 @@ async def update_user(
     
     return {
         "id": user.id,
-        "username": user.username,
         "email": user.email,
         "full_name": user.full_name,
         "role": user.role,

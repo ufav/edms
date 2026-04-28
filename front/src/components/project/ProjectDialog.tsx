@@ -30,7 +30,6 @@ import DocumentTypeSelectionDialog from '../DocumentTypeSelectionDialog';
 import MainTab from './MainTab';
 import DisciplinesTypesTab from './DisciplinesTypesTab';
 import { handleExcelImport } from './ExcelImportHandler';
-import RevisionsTab from './RevisionsTab';
 import WorkflowTab from './WorkflowTab';
 import ParticipantsTab from './ParticipantsTab';
 import UsersTab from './UsersTab';
@@ -1279,13 +1278,6 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
             >
               <Tab label={t('createProject.tabs.main')} />
               <Tab label={t('createProject.tabs.disciplines_types')} />
-              <Tab
-                label={
-                  selectedWorkflowPresetObj
-                    ? `${t('createProject.tabs.revisions')} (preset)`
-                    : t('createProject.tabs.revisions')
-                }
-              />
               <Tab label={t('createProject.tabs.workflow')} />
               <Tab label={t('createProject.tabs.participants')} />
               <Tab label={t('createProject.tabs.users')} />
@@ -1348,24 +1340,8 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
               />
             )}
 
-            {/* Tab 2: Ревизии */}
+            {/* Tab 2: Workflow */}
             {tabIndex === 2 && (
-              <RevisionsTab
-                revisionDescriptions={projectDialogStore.revisionDescriptions}
-                revisionSteps={projectDialogStore.revisionSteps}
-                selectedRevisionDescriptions={selectedRevisionDescriptions}
-                selectedRevisionSteps={selectedRevisionSteps}
-                onRevisionDescriptionToggle={handleRevisionDescriptionToggle}
-                onRevisionStepToggle={handleRevisionStepToggle}
-                getRevisionDescriptionName={getRevisionDescriptionName}
-                getRevisionStepName={getRevisionStepName}
-                isLockedByPreset={Boolean(selectedWorkflowPresetObj)}
-                selectedPresetName={selectedWorkflowPresetObj?.name || null}
-              />
-            )}
-
-            {/* Tab 3: Workflow */}
-            {tabIndex === 3 && (
               <WorkflowTab
                 workflowPresets={projectDialogStore.workflowPresets}
                 selectedWorkflowPreset={selectedWorkflowPreset}
@@ -1373,8 +1349,8 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
               />
             )}
 
-            {/* Tab 4: Участники */}
-            {tabIndex === 4 && (
+            {/* Tab 3: Участники */}
+            {tabIndex === 3 && (
               <ParticipantsTab
                 pendingParticipants={pendingParticipants}
                 companies={referenceDataStore.companies}
@@ -1389,8 +1365,8 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
               />
             )}
 
-            {/* Tab 5: Доступ */}
-            {tabIndex === 5 && (
+            {/* Tab 4: Доступ */}
+            {tabIndex === 4 && (
               <UsersTab
                 pendingProjectMembers={pendingProjectMembers}
                 users={users}
@@ -1400,8 +1376,8 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
               />
             )}
 
-            {/* Tab 6: Support Pack */}
-            {tabIndex === 6 && (
+            {/* Tab 5: Support Pack */}
+            {tabIndex === 5 && (
               <SupportPackTab
                 projectId={mode === 'edit' ? projectId : undefined}
                 pendingFiles={pendingSupportFiles}
@@ -1422,8 +1398,8 @@ const ProjectDialog: React.FC<ProjectDialogProps> = observer(({
               />
             )}
 
-            {/* Tab 7: Итоги */}
-            {tabIndex === 7 && (
+            {/* Tab 6: Итоги */}
+            {tabIndex === 6 && (
               <SummaryTab
                 formData={{
                   ...formData,

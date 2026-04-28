@@ -137,7 +137,7 @@ async def send_transmittal_email(
             })
     
     # Get sender info
-    sender_name = current_user.full_name or current_user.username
+    sender_name = current_user.full_name or current_user.email
     sender_company = "EDMS"  # TODO: Get from user's company
     
     # Get project name

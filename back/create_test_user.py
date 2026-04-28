@@ -31,7 +31,6 @@ def create_test_user():
         hashed_password = pwd_context.hash("test123")
         
         new_user = User(
-            username="test",
             email="test@edms.com",
             full_name="Test User",
             hashed_password=hashed_password,

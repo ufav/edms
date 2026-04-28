@@ -88,9 +88,6 @@ const WorkflowTab: React.FC<WorkflowTabProps> = ({
                   <Typography variant="body2">
                     <strong>{t('createProject.fields.sequences_count')}:</strong> {preset.sequences?.length || 0}
                   </Typography>
-                  <Typography variant="body2">
-                    <strong>{t('createProject.fields.rules_count')}:</strong> {preset.rules?.length || 0}
-                  </Typography>
                 </Box>
 
                 {/* Последовательность ревизий */}
@@ -136,63 +133,6 @@ const WorkflowTab: React.FC<WorkflowTabProps> = ({
                   </Box>
                 )}
 
-                {/* Правила переходов */}
-                {preset.rules && preset.rules.length > 0 && (
-                  <Box>
-                    <Typography variant="subtitle2" gutterBottom>
-                      {t('createProject.sections.transition_rules')}
-                    </Typography>
-                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                      {preset.rules.map((rule: any, index: number) => (
-                        <Box key={index} sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
-                          <Typography variant="body2" sx={{ minWidth: '20px' }}>
-                            {index + 1}.
-                          </Typography>
-                          <Typography variant="body2" color="text.secondary">{t('createProject.sections.if_condition')}</Typography>
-                          <Chip
-                            label={rule.current_revision?.description?.code || 'U'}
-                            color="primary"
-                            size="small"
-                          />
-                          <Typography variant="body2">-</Typography>
-                          <Chip
-                            label={rule.current_revision?.step?.code || 'TCO'}
-                            color="secondary"
-                            size="small"
-                          />
-                          <Typography variant="body2" color="text.secondary">+</Typography>
-                          <Chip
-                            label={rule.review_code?.code || 'Code 1'}
-                            color="warning"
-                            size="small"
-                          />
-                          <Typography variant="body2" color="text.secondary">→</Typography>
-                          {rule.next_revision ? (
-                            <>
-                              <Chip
-                                label={rule.next_revision.description?.code || 'U'}
-                                color="success"
-                                size="small"
-                              />
-                              <Typography variant="body2">-</Typography>
-                              <Chip
-                                label={rule.next_revision.step?.code || 'Construction'}
-                                color="success"
-                                size="small"
-                              />
-                            </>
-                          ) : (
-                            <Chip
-                              label={`+1 ${t('createProject.sections.increment_number')} (${rule.action_on_fail})`}
-                              color="default"
-                              size="small"
-                            />
-                          )}
-                        </Box>
-                      ))}
-                    </Box>
-                  </Box>
-                )}
               </Card>
             );
           })()}

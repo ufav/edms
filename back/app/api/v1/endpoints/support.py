@@ -178,7 +178,7 @@ async def create_support_ticket(
         background_tasks.add_task(
             telegram_service.send_ticket_notification,
             ticket_id=ticket.id,
-            user_name=current_user.full_name or current_user.username,
+            user_name=current_user.full_name or current_user.email,
             subject=subject,
             message=message,
             has_files=len(uploaded_files) > 0,
@@ -196,8 +196,8 @@ async def create_support_ticket(
         last_message_at=ticket.last_message_at,
         user={
             'id': current_user.id,
-            'username': current_user.username,
             'email': current_user.email,
+            'full_name': current_user.full_name,
         } if current_user else None,
     )
 
@@ -244,8 +244,8 @@ async def get_support_tickets(
             last_message_at=row.last_message_at,
             user={
                 'id': user.id,
-                'username': user.username,
                 'email': user.email,
+                'full_name': user.full_name,
             } if user else None,
         ))
     
@@ -323,8 +323,8 @@ async def get_support_ticket(
         last_message_at=ticket_data.last_message_at,
         user={
             'id': user.id,
-            'username': user.username,
             'email': user.email,
+            'full_name': user.full_name,
         } if user else None,
         messages=messages_response,
         files=[{
@@ -498,7 +498,7 @@ async def create_support_message(
     # Отправка уведомления в Telegram
     if telegram_service.is_configured():
         # Получаем информацию о пользователе для уведомления
-        user_name = current_user.full_name or current_user.username
+        user_name = current_user.full_name or current_user.email
         background_tasks.add_task(
             telegram_service.send_message_notification,
             ticket_id=ticket_id,
@@ -561,7 +561,7 @@ async def reopen_ticket(
     
     # Отправка уведомления в Telegram администратору
     if telegram_service.is_configured():
-        user_name = current_user.full_name or current_user.username
+        user_name = current_user.full_name or current_user.email
         background_tasks.add_task(
             telegram_service.send_message,
             chat_id=telegram_service.admin_chat_id,

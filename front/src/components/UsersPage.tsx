@@ -53,7 +53,6 @@ const UsersPage: React.FC = observer(() => {
   const [dialogMode, setDialogMode] = useState<'create' | 'edit'>('create');
   const [editingUserId, setEditingUserId] = useState<number | null>(null);
   const [formData, setFormData] = useState({
-    username: '',
     full_name: '',
     email: '',
     role: 'viewer',
@@ -89,8 +88,7 @@ const UsersPage: React.FC = observer(() => {
     const statusMatch = filterStatus === 'all' || 
       (filterStatus === 'active' && user.is_active) ||
       (filterStatus === 'inactive' && !user.is_active);
-    const searchMatch = searchTerm === '' || 
-      user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    const searchMatch = searchTerm === '' ||
       user.full_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       user.email.toLowerCase().includes(searchTerm.toLowerCase());
     
@@ -108,7 +106,7 @@ const UsersPage: React.FC = observer(() => {
   const handleCreate = () => {
     setDialogMode('create');
     setEditingUserId(null);
-    setFormData({ username: '', full_name: '', email: '', role: 'viewer', is_active: true, password: '' });
+    setFormData({ full_name: '', email: '', role: 'viewer', is_active: true, password: '' });
     setConfirmPassword('');
     setErrors({});
     setSaveError(null);
@@ -121,7 +119,6 @@ const UsersPage: React.FC = observer(() => {
     setDialogMode('edit');
     setEditingUserId(userId);
     setFormData({
-      username: u.username,
       full_name: u.full_name,
       email: u.email,
       role: u.role,
@@ -137,7 +134,7 @@ const UsersPage: React.FC = observer(() => {
   const handleDelete = (userId: number) => {
     const u = userStore.getUserById(userId);
     if (!u) return;
-    setDeleteTarget({ id: u.id, name: u.full_name || u.username });
+    setDeleteTarget({ id: u.id, name: u.full_name || u.email });
     setDeleteOpen(true);
   };
 
@@ -169,14 +166,6 @@ const UsersPage: React.FC = observer(() => {
     const newErrors: { [key: string]: string } = {};
 
     if (dialogMode === 'create') {
-      if (!formData.username.trim()) {
-        newErrors.username = t('users.validation.username_required') || 'Имя пользователя обязательно';
-      } else if (formData.username.length < 3) {
-        newErrors.username = t('users.validation.username_min_length') || 'Имя пользователя должно быть не менее 3 символов';
-      } else if (!/^[a-zA-Z0-9_]+$/.test(formData.username)) {
-        newErrors.username = t('users.validation.username_invalid') || 'Имя пользователя может содержать только буквы, цифры и подчеркивание';
-      }
-
       if (!formData.password) {
         newErrors.password = t('users.validation.password_required') || 'Пароль обязателен';
       } else if (formData.password.length < 6) {
@@ -208,16 +197,6 @@ const UsersPage: React.FC = observer(() => {
   const validateField = (fieldName: string, value: string) => {
     const newErrors = { ...errors };
     delete newErrors[fieldName];
-
-    if (fieldName === 'username' && dialogMode === 'create') {
-      if (!value.trim()) {
-        newErrors.username = t('users.validation.username_required') || 'Имя пользователя обязательно';
-      } else if (value.length < 3) {
-        newErrors.username = t('users.validation.username_min_length') || 'Имя пользователя должно быть не менее 3 символов';
-      } else if (!/^[a-zA-Z0-9_]+$/.test(value)) {
-        newErrors.username = t('users.validation.username_invalid') || 'Имя пользователя может содержать только буквы, цифры и подчеркивание';
-      }
-    }
 
     if (fieldName === 'full_name') {
       if (!value.trim()) {
@@ -267,7 +246,6 @@ const UsersPage: React.FC = observer(() => {
     try {
       if (dialogMode === 'create') {
         await usersApi.create({
-          username: formData.username,
           email: formData.email,
           full_name: formData.full_name,
           password: formData.password,
@@ -276,7 +254,6 @@ const UsersPage: React.FC = observer(() => {
         });
       } else if (dialogMode === 'edit' && editingUserId != null) {
         await usersApi.update(editingUserId, {
-          username: formData.username,
           email: formData.email,
           full_name: formData.full_name,
           role: formData.role,
@@ -441,14 +418,7 @@ const UsersPage: React.FC = observer(() => {
                       fontWeight: 'bold',
                       fontSize: '0.875rem',
                       whiteSpace: 'nowrap',
-                      width: '15%',
-                      minWidth: '120px'
-                    }}>{t('users.columns.username')}</TableCell>
-                    <TableCell sx={{ 
-                      fontWeight: 'bold',
-                      fontSize: '0.875rem',
-                      whiteSpace: 'nowrap',
-                      width: '20%',
+                      width: '22%',
                       minWidth: '150px'
                     }}>{t('users.columns.full_name')}</TableCell>
                     <TableCell sx={{ 
@@ -502,16 +472,6 @@ const UsersPage: React.FC = observer(() => {
                       <TableCell>
                         <Typography variant="body2" sx={{ 
                           fontWeight: 'bold',
-                          fontSize: '0.875rem',
-                          overflow: 'hidden', 
-                          textOverflow: 'ellipsis', 
-                          whiteSpace: 'nowrap' 
-                        }}>
-                          {user.username}
-                        </Typography>
-                      </TableCell>
-                      <TableCell>
-                        <Typography variant="body2" sx={{ 
                           fontSize: '0.875rem',
                           overflow: 'hidden', 
                           textOverflow: 'ellipsis', 
@@ -629,29 +589,8 @@ const UsersPage: React.FC = observer(() => {
             <Alert severity="error">{saveError}</Alert>
           )}
           <TextField
-            label={t('users.columns.username')}
-            sx={{ mt: 2 }}
-            value={formData.username}
-            onChange={(e) => {
-              setFormData({ ...formData, username: e.target.value });
-              if (dialogMode === 'create') {
-                validateField('username', e.target.value);
-              }
-            }}
-            onBlur={() => {
-              if (dialogMode === 'create') {
-                validateField('username', formData.username);
-              }
-            }}
-            disabled={saving || dialogMode === 'edit'}
-            fullWidth
-            required
-            error={!!errors.username}
-            helperText={errors.username}
-            autoComplete="username"
-          />
-          <TextField
             label={t('users.columns.full_name')}
+            sx={{ mt: 2 }}
             value={formData.full_name}
             onChange={(e) => {
               setFormData({ ...formData, full_name: e.target.value });
@@ -749,9 +688,8 @@ const UsersPage: React.FC = observer(() => {
             onClick={handleSave} 
             variant="contained" 
             disabled={saving || (Object.keys(errors).filter(key => {
-              // В режиме редактирования не учитываем ошибки username и password полей
               if (dialogMode === 'edit') {
-                return key !== 'username' && key !== 'password' && key !== 'confirmPassword';
+                return key !== 'password' && key !== 'confirmPassword';
               }
               return true;
             }).length > 0)} 

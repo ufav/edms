@@ -77,7 +77,6 @@ class ProjectRoleResponse(ProjectRoleBase):
 # Схемы для пользователей с ролями
 class UserWithUserRole(BaseModel):
     id: int
-    username: str
     email: str
     full_name: str
     is_active: bool

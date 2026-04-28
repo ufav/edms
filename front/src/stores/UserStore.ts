@@ -4,7 +4,6 @@ import { useTranslation } from 'react-i18next';
 
 export interface User {
   id: number;
-  username: string;
   email: string;
   full_name: string;
   role: string;
@@ -46,6 +45,22 @@ class UserStore {
     }
   }
 
+  /** Перезагрузить данные текущего пользователя с сервера (после смены профиля и т.п.) */
+  async refreshCurrentUser() {
+    try {
+      const userInfo = await authApi.getCurrentUser();
+      runInAction(() => {
+        this.currentUser = userInfo;
+        this.isCurrentUserLoaded = true;
+      });
+    } catch (error) {
+      runInAction(() => {
+        this.currentUser = null;
+        this.isCurrentUserLoaded = true;
+      });
+    }
+  }
+
   // Загрузка пользователей из API
   async loadUsers() {
     if (this.isUsersLoaded) {
@@ -62,7 +77,6 @@ class UserStore {
       runInAction(() => {
         this.users = apiUsers.map(apiUser => ({
           id: apiUser.id,
-          username: apiUser.username,
           email: apiUser.email,
           full_name: apiUser.full_name,
           role: apiUser.role,

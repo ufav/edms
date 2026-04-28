@@ -52,8 +52,8 @@ from app.models.document import DocumentApproval, File
 class UserAdmin(ModelView, model=User):
     name = "User"
     name_plural = "Users"
-    column_list = ["id", "username", "email", "full_name", "role", "is_active", "created_at"]
-    column_searchable_list = ["username", "email", "full_name"]
+    column_list = ["id", "email", "full_name", "role", "is_active", "created_at"]
+    column_searchable_list = ["email", "full_name"]
 
 
 class ProjectAdmin(ModelView, model=Project):

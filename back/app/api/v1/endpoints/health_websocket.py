@@ -9,7 +9,7 @@ import logging
 
 from app.core.database import get_db
 from app.models.user import User
-from app.services.auth import decode_token
+from app.services.auth import decode_token, user_id_from_token_sub
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -32,11 +32,11 @@ async def health_websocket_endpoint(websocket: WebSocket):
             try:
                 payload = decode_token(token)
                 if payload:
-                    username = payload.get("sub")
-                    if username:
+                    uid = user_id_from_token_sub(payload.get("sub"))
+                    if uid:
                         db = next(get_db())
                         try:
-                            user = db.query(User).filter(User.username == username).first()
+                            user = db.query(User).filter(User.id == uid).first()
                             if user and user.is_active:
                                 user_id = user.id
                         finally:

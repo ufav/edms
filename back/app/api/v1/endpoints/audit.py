@@ -77,12 +77,12 @@ async def get_audit_logs(
             "ip_address": log.ip_address,
             "platform": log.platform,
             "created_at": log.created_at,
-            "user_username": None,
+            "user_email": None,
             "user_full_name": None,
         }
         
         if log.user:
-            log_dict["user_username"] = log.user.username
+            log_dict["user_email"] = log.user.email
             log_dict["user_full_name"] = log.user.full_name
         
         result.append(log_dict)
@@ -124,7 +124,7 @@ async def get_audit_log(
         "ip_address": audit_log.ip_address,
         "platform": audit_log.platform,
         "created_at": audit_log.created_at,
-        "user_username": audit_log.user.username if audit_log.user else None,
+        "user_email": audit_log.user.email if audit_log.user else None,
         "user_full_name": audit_log.user.full_name if audit_log.user else None,
     }
     

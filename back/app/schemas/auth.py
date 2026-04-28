@@ -6,7 +6,6 @@ from pydantic import BaseModel, EmailStr
 from typing import Optional
 
 class UserBase(BaseModel):
-    username: str
     email: EmailStr
     full_name: str
 
@@ -22,8 +21,15 @@ class UserUpdate(BaseModel):
     is_active: Optional[bool] = None
     password: Optional[str] = None
 
+
+class ProfileSelfUpdate(BaseModel):
+    """Обновление своего профиля (текущий пользователь)."""
+    full_name: Optional[str] = None
+    email: Optional[EmailStr] = None
+    current_password: Optional[str] = None
+
 class UserLogin(BaseModel):
-    username: str
+    email: EmailStr
     password: str
 
 class Token(BaseModel):
@@ -32,4 +38,4 @@ class Token(BaseModel):
     expires_in: int
 
 class TokenData(BaseModel):
-    username: Optional[str] = None
+    user_id: Optional[int] = None

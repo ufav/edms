@@ -8,7 +8,7 @@ from typing import List, Optional
 from datetime import datetime
 import random
 import string
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 from app.core.database import get_db
 from app.core.config import settings
@@ -73,31 +73,31 @@ class ProjectMemberData(BaseModel):
 
 class ProjectCreate(BaseModel):
     name: str
-    description: str = None
+    description: Optional[str] = None
     project_code: str | None = None
     spn: str | None = None  # Supplier Package Number
     status: str = "planning"
-    start_date: str = None
-    end_date: str = None
-    budget: float = None
-    selected_disciplines: List[int] = []  # Список ID выбранных дисциплин
-    discipline_document_types: dict = {}  # {discipline_id: [document_type_ids] or [{documentTypeId, drs}]}
-    selected_revision_descriptions: List[int] = []  # Список ID выбранных описаний ревизий
-    selected_revision_steps: List[int] = []  # Список ID выбранных шагов ревизий
-    workflow_preset_id: int = None  # ID выбранного workflow пресета
-    members: List[ProjectMemberData] = []  # Список участников-пользователей
-    participants: List[ProjectParticipantData] = []  # Список участников-компаний
-    area_ids: List[int] = []  # Список ID участков тех. процесса из справочника
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    budget: Optional[float] = None
+    selected_disciplines: List[int] = Field(default_factory=list)  # Список ID выбранных дисциплин
+    discipline_document_types: dict = Field(default_factory=dict)  # {discipline_id: [document_type_ids] or [{documentTypeId, drs}]}
+    selected_revision_descriptions: List[int] = Field(default_factory=list)  # Список ID выбранных описаний ревизий
+    selected_revision_steps: List[int] = Field(default_factory=list)  # Список ID выбранных шагов ревизий
+    workflow_preset_id: Optional[int] = None  # ID выбранного workflow пресета
+    members: List[ProjectMemberData] = Field(default_factory=list)  # Список участников-пользователей
+    participants: List[ProjectParticipantData] = Field(default_factory=list)  # Список участников-компаний
+    area_ids: List[int] = Field(default_factory=list)  # Список ID участков тех. процесса из справочника
 
 class ProjectUpdate(BaseModel):
-    name: str = None
-    description: str = None
-    project_code: str = None
-    spn: str = None  # Supplier Package Number
-    status: str = None
-    start_date: str = None
-    end_date: str = None
-    budget: float = None
+    name: Optional[str] = None
+    description: Optional[str] = None
+    project_code: Optional[str] = None
+    spn: Optional[str] = None  # Supplier Package Number
+    status: Optional[str] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    budget: Optional[float] = None
     members: List[ProjectMemberData] | None = None  # Список участников-пользователей
     participants: List[ProjectParticipantData] | None = None  # Список участников-компаний
     selected_disciplines: List[int] | None = None

@@ -13,12 +13,10 @@ import {
   InputLabel,
   OutlinedInput,
   FormControl,
-  Select,
-  MenuItem
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
 import { 
-  Person as PersonIcon, 
+  Email as EmailIcon,
   Lock as LockIcon,
   Visibility,
   VisibilityOff,
@@ -29,12 +27,12 @@ import {
 } from '@mui/icons-material';
 
 interface LoginProps {
-  onLogin: (username: string, password: string) => void;
+  onLogin: (email: string, password: string) => void;
   loginError?: string | null;
 }
 
 const Login: React.FC<LoginProps> = ({ onLogin, loginError }) => {
-  const [username, setUsername] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
@@ -53,12 +51,12 @@ const Login: React.FC<LoginProps> = ({ onLogin, loginError }) => {
     e.preventDefault();
     setError('');
     
-    if (!username || !password) {
+    if (!email || !password) {
       setError(t('auth.fill_all_fields'));
       return;
     }
     
-    onLogin(username, password);
+    onLogin(email.trim(), password);
   };
 
   const handleClickShowPassword = () => {
@@ -241,20 +239,21 @@ const Login: React.FC<LoginProps> = ({ onLogin, loginError }) => {
             {/* Login Form */}
             <Box component="form" onSubmit={handleSubmit} sx={{ mt: 2 }}>
               <FormControl fullWidth variant="outlined" sx={{ mb: 3 }}>
-                <InputLabel htmlFor="username">{t('auth.username')}</InputLabel>
+                <InputLabel htmlFor="email">{t('auth.email')}</InputLabel>
                 <OutlinedInput
-                  id="username"
-                  name="username"
-                  autoComplete="username"
+                  id="email"
+                  name="email"
+                  type="email"
+                  autoComplete="email"
                   autoFocus
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   startAdornment={
                     <InputAdornment position="start">
-                      <PersonIcon color="action" />
+                      <EmailIcon color="action" />
                     </InputAdornment>
                   }
-                  label={t('auth.username')}
+                  label={t('auth.email')}
                   sx={{
                     '& input:-webkit-autofill': {
                       WebkitBoxShadow: '0 0 0 100px white inset !important',
