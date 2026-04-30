@@ -161,7 +161,7 @@ const WorkflowStatusChart: React.FC = observer(() => {
                   backgroundColor: entry.color,
                 }}
               />
-              <Typography variant="body2">
+              <Typography variant="body2" sx={{ fontSize: '0.75rem' }}>
                 {entry.value} ({percent}%)
               </Typography>
             </Box>
@@ -185,7 +185,23 @@ const WorkflowStatusChart: React.FC = observer(() => {
               cx="50%"
               cy="50%"
               labelLine={false}
-              label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
+              label={({ cx, cy, midAngle, innerRadius, outerRadius, name, percent }) => {
+                const radius = Number(innerRadius || 0) + (Number(outerRadius || 0) - Number(innerRadius || 0)) * 0.5;
+                const x = Number(cx) + radius * Math.cos(-midAngle * (Math.PI / 180));
+                const y = Number(cy) + radius * Math.sin(-midAngle * (Math.PI / 180));
+                return (
+                  <text
+                    x={x}
+                    y={y}
+                    fill={theme.palette.text.primary}
+                    textAnchor={x > Number(cx) ? 'start' : 'end'}
+                    dominantBaseline="central"
+                    style={{ fontSize: '10px' }}
+                  >
+                    {`${name}: ${(percent * 100).toFixed(0)}%`}
+                  </text>
+                );
+              }}
               outerRadius={80}
               fill="#8884d8"
               dataKey="value"
@@ -194,7 +210,7 @@ const WorkflowStatusChart: React.FC = observer(() => {
                 <Cell key={`cell-${index}`} fill={getStatusColor(entry.status)} />
               ))}
             </Pie>
-            <Tooltip content={<CustomTooltip />} />
+            <Tooltip content={<CustomTooltip />} isAnimationActive={false} />
             <Legend content={renderLegend} />
           </PieChart>
         </ResponsiveContainer>

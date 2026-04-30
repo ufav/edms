@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Box, Typography, Paper, CircularProgress, Alert, useTheme } from '@mui/material';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LabelList } from 'recharts';
 import { useTranslation } from 'react-i18next';
 import { dashboardApi } from '../../../api/client';
 import { projectStore } from '../../../stores/ProjectStore';
@@ -109,54 +109,56 @@ const DocumentTypeChart: React.FC = observer(() => {
   };
 
   return (
-    <Paper sx={{ p: 3, boxShadow: 'none', border: '3px solid red', height: '100%' }}>
-      <Typography variant="h6" gutterBottom sx={{ border: '2px dashed blue' }}>
+    <Paper sx={{ p: 3, boxShadow: 'none', border: '1px solid #e0e0e0', height: '100%' }}>
+      <Typography variant="h6" gutterBottom>
         {t('dashboard.charts.document_type.title') || 'Распределение документов по типам'}
       </Typography>
       
       {data.length > 10 && (
-        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1, border: '2px dashed green' }}>
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mb: 1 }}>
           {t('dashboard.charts.document_type.showing_top', { count: 10 }) || `Показаны топ-10 из ${data.length}`}
         </Typography>
       )}
       
-      <Box sx={{ mt: 2, border: '2px dashed orange' }}>
-        <ResponsiveContainer width="100%" height={300} style={{ border: '2px solid purple' }}>
+      <Box sx={{ mt: 2 }}>
+        <ResponsiveContainer width="100%" height={300}>
           <BarChart 
             data={chartData} 
             layout="vertical"
-            margin={{ top: 5, right: 30, left: 160, bottom: 5 }}
-            style={{ border: '2px dashed cyan' }}
+            margin={{ top: 5, right: 20, left: 40, bottom: 5 }}
           >
-            <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} style={{ border: '2px dashed brown' }} />
+            <CartesianGrid strokeDasharray="3 3" stroke={theme.palette.divider} />
             <XAxis 
               type="number"
               stroke={theme.palette.text.secondary}
-              style={{ fontSize: '12px', border: '2px solid pink' }}
+              style={{ fontSize: '12px' }}
             />
             <YAxis 
               type="category" 
               dataKey="name"
-              width={150}
+              width={120}
+              tickFormatter={(value: string) =>
+                value.length > 24 ? `${value.slice(0, 24)}...` : value
+              }
               stroke={theme.palette.text.secondary}
-              style={{ fontSize: '12px', border: '2px solid lime' }}
+              style={{ fontSize: '12px' }}
               tick={{ 
                 style: { 
                   fontSize: '12px',
                   whiteSpace: 'nowrap',
                   textOverflow: 'ellipsis',
-                  border: '1px dashed navy'
                 }
               }}
             />
-            <Tooltip content={<CustomTooltip />} wrapperStyle={{ border: '2px solid teal' }} />
-            <Legend wrapperStyle={{ border: '2px solid maroon' }} />
+            <Tooltip content={<CustomTooltip />} />
+            <Legend />
             <Bar 
               dataKey="count" 
               fill={theme.palette.primary.main}
               name={t('dashboard.charts.document_type.documents') || 'Документы'}
-              style={{ border: '2px dashed gold' }}
-            />
+            >
+              <LabelList dataKey="count" position="right" style={{ fontSize: '11px', fill: theme.palette.text.secondary }} />
+            </Bar>
           </BarChart>
         </ResponsiveContainer>
       </Box>

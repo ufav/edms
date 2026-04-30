@@ -778,22 +778,38 @@ export const projectsApi = {
 export const documentsApi = {
   // Получить все документы (клиентская пагинация)
   getAll: async (projectId?: number, status?: string): Promise<Document[]> => {
-    const params: any = {};
-    if (projectId) params.project_id = projectId;
-    if (status) params.status = status;
-    // Убираем лимит и офсет - загружаем все документы
-    const response = await apiClient.get('/documents/', { params });
-    const data = response.data;
+    const baseParams: any = {};
+    if (projectId) baseParams.project_id = projectId;
+    if (status) baseParams.status = status;
 
-    // Бэкенд возвращает Page-структуру: { items, total, page, size, pages }
-    // Для client-side логики здесь нужны только элементы.
-    if (Array.isArray(data)) {
-      return data as Document[];
+    const pageSize = 100;
+    let page = 1;
+    let totalPages = 1;
+    const allItems: Document[] = [];
+
+    // Загружаем все страницы, чтобы дашборд и статистика считались по полному набору.
+    while (page <= totalPages) {
+      const response = await apiClient.get('/documents/', {
+        params: { ...baseParams, page, size: pageSize },
+      });
+      const data = response.data;
+
+      if (Array.isArray(data)) {
+        allItems.push(...(data as Document[]));
+        break;
+      }
+
+      if (data && Array.isArray(data.items)) {
+        allItems.push(...(data.items as Document[]));
+        totalPages = Number(data.pages || 1);
+        page += 1;
+        continue;
+      }
+
+      break;
     }
-    if (data && Array.isArray(data.items)) {
-      return data.items as Document[];
-    }
-    return [];
+
+    return allItems;
   },
 
   // Получить документы с серверной пагинацией

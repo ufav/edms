@@ -118,12 +118,13 @@ class DashboardStore {
 
     const docs = documentStore.getDocumentsByProject(selectedProjectId);
 
-    // Финальные workflow статусы считаем "закрытыми" документами
-    const finalStatusNames = ["Approved", "Rejected", "Approved with Comments", "Not Reviewed"];
-    const finalStatusIds = referencesStore.workflowStatuses
-      .filter((s) => finalStatusNames.includes(s.name))
+    // Для прогресса учитываем только последнюю редакцию C.
+    // "Закрытыми" считаем только Approved и Approved with Comments.
+    const approvedStatusNames = ["Approved", "Approved with Comments"];
+    const approvedStatusIds = referencesStore.workflowStatuses
+      .filter((s) => approvedStatusNames.includes(s.name))
       .map((s) => s.id);
-    const finalStatusIdSet = new Set<number>(finalStatusIds);
+    const approvedStatusIdSet = new Set<number>(approvedStatusIds);
 
     const statsMap = new Map<number | 'none', DisciplineStat>();
 
@@ -143,10 +144,15 @@ class DashboardStore {
         statsMap.set(key, stat);
       }
 
-      const isClosed =
-        !!doc.workflow_status_id && finalStatusIdSet.has(doc.workflow_status_id);
-
       stat.documentsCount += 1;
+
+      const revisionDescription = referencesStore.getRevisionDescription(doc.revision_description_id);
+      const revisionCode = (revisionDescription?.code || "").toUpperCase();
+      const isClosed =
+        revisionCode === "C" &&
+        !!doc.workflow_status_id &&
+        approvedStatusIdSet.has(doc.workflow_status_id);
+
       if (isClosed) {
         stat.closedDocumentsCount += 1;
       }
@@ -307,6 +313,7 @@ class DashboardStore {
         reviewStore.loadReviews(projectId, true), // Принудительная загрузка
         userStore.loadUsers(),
         referencesStore.loadWorkflowStatuses(),
+        referencesStore.loadRevisionDescriptions(),
       ]);
       
       // Загружаем количество документов и статистику по шагам ревизий
