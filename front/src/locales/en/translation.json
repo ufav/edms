@@ -926,6 +926,8 @@
   "roles.admin": "Administrator",
   "roles.operator": "Operator",
   "roles.viewer": "Viewer",
+  "roles.user": "User",
+  "common.guest": "Guest",
   "errors.load_disciplines_types": "Failed to load disciplines and document types",
   "lang.ru": "Русский",
   "lang.en": "English",

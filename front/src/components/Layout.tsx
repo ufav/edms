@@ -53,6 +53,7 @@ import { transmittalCartStore } from '../stores/TransmittalCartStore';
 import { transmittalStore } from '../stores/TransmittalStore';
 import type { Project } from '../stores/ProjectStore';
 import SitemarkIcon from './marketing/SitemarkIcon';
+import { getRoleLabel } from '../utils/roleLocalization';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -471,12 +472,10 @@ const Layout: React.FC<LayoutProps> = observer(({
               <MenuItem disabled>
                 <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
                   <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
-                    {(userStore.currentUser?.full_name || user?.full_name || userStore.currentUser?.email || user?.email || 'Гость')}
+                    {(userStore.currentUser?.full_name || user?.full_name || userStore.currentUser?.email || user?.email || t('common.guest'))}
                   </Typography>
                   <Typography variant="caption" color="text.secondary">
-                    {userStore.currentUser?.role === 'admin' ? 'Администратор' :
-                      userStore.currentUser?.role === 'operator' ? 'Оператор' :
-                        userStore.currentUser?.role === 'viewer' ? 'Читатель' : 'Пользователь'}
+                    {getRoleLabel(userStore.currentUser?.role || user?.role || '', t)}
                   </Typography>
                 </Box>
               </MenuItem>

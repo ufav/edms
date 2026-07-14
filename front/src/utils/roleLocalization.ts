@@ -12,9 +12,10 @@ export const getRoleLabel = (role: string, t: (key: string) => string): string =
     'admin': t('roles.admin'),
     'operator': t('roles.operator'),
     'viewer': t('roles.viewer'),
-    'superadmin': t('roles.admin')
+    'superadmin': t('roles.admin'),
+    'user': t('roles.user'),
   };
-  return roleMap[role] || role;
+  return roleMap[role] || t('roles.user');
 };
 
 // Маппинг цветов для ролей

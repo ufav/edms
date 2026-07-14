@@ -918,6 +918,8 @@
   "roles.admin": "Администратор",
   "roles.operator": "Оператор",
   "roles.viewer": "Читатель",
+  "roles.user": "Пользователь",
+  "common.guest": "Гость",
   "errors.load_disciplines_types": "Ошибка загрузки дисциплин и типов документов",
   "lang.ru": "Русский",
   "lang.en": "English",
