@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { ThemeProvider, createTheme } from '@mui/material/styles';
 import CssBaseline from '@mui/material/CssBaseline';
 import Login from './components/Login';
+import MarketingPage from './components/marketing/MarketingPage';
 import Layout from './components/Layout';
 import { SupportFab } from './components/support';
 import Dashboard from './components/Dashboard';
@@ -178,6 +179,39 @@ function App() {
     }
   };
 
+  const handleDemoLogin = async () => {
+    try {
+      setLoginError(null);
+      const response = await authApi.demoLogin();
+
+      setAuthToken(response.access_token);
+      setTokenExpiryMs(Date.now() + response.expires_in * 1000);
+      setIsAuthenticated(true);
+      setCurrentPage('dashboard');
+
+      await userStore.loadCurrentUser();
+      setUser({
+        full_name: userStore.currentUser?.full_name || '',
+        email: userStore.currentUser?.email || '',
+        role: userStore.currentUser?.role || '',
+      });
+
+      await projectStore.loadProjects(true);
+      const demoProject = projectStore.getProjectById(response.project_id);
+      if (demoProject) {
+        projectStore.selectProject(demoProject);
+      }
+
+      await referenceDataStore.loadAllReferenceData();
+      await settingsStore.loadSettings('documents');
+    } catch (error: any) {
+      setLoginError(
+        error?.response?.data?.detail || 'Не удалось открыть демо. Попробуйте позже.'
+      );
+      throw error;
+    }
+  };
+
   const handleLogout = () => {
     removeAuthToken();
     setIsAuthenticated(false);
@@ -238,7 +272,7 @@ function App() {
             <Routes>
               {/* Админские роуты */}
               <Route path="/admin/*" element={<AdminRoutes />} />
-              
+
               {/* Основные роуты приложения - используем старую систему */}
               <Route path="/*" element={
                 <Layout
@@ -253,7 +287,22 @@ function App() {
               } />
             </Routes>
           ) : (
-            <Login onLogin={handleLogin} loginError={loginError} />
+            <Routes>
+              {/* Публичный лендинг */}
+              <Route
+                path="/"
+                element={
+                  <MarketingPage
+                    onDemoLogin={handleDemoLogin}
+                    demoError={loginError}
+                  />
+                }
+              />
+              {/* Страница входа */}
+              <Route path="/signin" element={<Login onLogin={handleLogin} loginError={loginError} />} />
+              {/* Остальные пути ведут на лендинг */}
+              <Route path="*" element={<Navigate to="/" replace />} />
+            </Routes>
           )}
         </Router>
       </ConnectionStatusProvider>

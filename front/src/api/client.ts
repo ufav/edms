@@ -1564,6 +1564,18 @@ export const authApi = {
     return response.data;
   },
 
+  // Вход в демо без пароля (только тестовый проект)
+  demoLogin: async (): Promise<{
+    access_token: string;
+    token_type: string;
+    expires_in: number;
+    project_id: number;
+    project_name: string;
+  }> => {
+    const response = await apiClient.post('/auth/demo');
+    return response.data;
+  },
+
   // Регистрация
   register: async (userData: {
     email: string;

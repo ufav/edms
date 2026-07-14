@@ -42,6 +42,7 @@
   "auth.feature_versions_text": "Полная история изменений документов",
   "auth.demo_title": "Демо-доступ:",
   "auth.login_error": "Ошибка входа",
+  "auth.back_to_landing": "На главную",
   "menu.language": "Язык",
   "common.status": "Статус",
   "common.types": "типов",

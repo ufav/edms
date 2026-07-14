@@ -37,5 +37,11 @@ class Token(BaseModel):
     token_type: str
     expires_in: int
 
+
+class DemoToken(Token):
+    """Ответ demo-входа: токен + id тестового проекта для автовыбора."""
+    project_id: int
+    project_name: str
+
 class TokenData(BaseModel):
     user_id: Optional[int] = None

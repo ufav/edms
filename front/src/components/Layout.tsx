@@ -23,6 +23,7 @@ import {
   AccountCircle,
   Folder as ProjectIcon,
   Description as DocumentIcon,
+  DescriptionRounded as DescriptionRoundedIcon,
   Send as TransmittalIcon,
   RateReview as ReviewIcon,
   People as UserIcon,
@@ -51,6 +52,7 @@ import { TransmittalCartModal, useActiveRevisions } from './transmittal';
 import { transmittalCartStore } from '../stores/TransmittalCartStore';
 import { transmittalStore } from '../stores/TransmittalStore';
 import type { Project } from '../stores/ProjectStore';
+import SitemarkIcon from './marketing/SitemarkIcon';
 
 interface LayoutProps {
   children: React.ReactNode;
@@ -294,9 +296,7 @@ const Layout: React.FC<LayoutProps> = observer(({
   const drawer = (
     <Box>
       <Toolbar>
-        <Typography variant="h6" noWrap component="div">
-          Docste
-        </Typography>
+        <SitemarkIcon />
       </Toolbar>
       <Divider />
       <List>
@@ -360,9 +360,17 @@ const Layout: React.FC<LayoutProps> = observer(({
             </IconButton>
           )}
 
-          <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-            {t('app.title')}
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', flexGrow: 1, minWidth: 0 }}>
+            <DescriptionRoundedIcon sx={{ fontSize: 28, mr: 0.75, flexShrink: 0 }} />
+            <Typography
+              variant="h6"
+              component="div"
+              noWrap
+              sx={{ fontWeight: 700, letterSpacing: '-0.02em' }}
+            >
+              {t('app.title')}
+            </Typography>
+          </Box>
 
           {/* Project Selector */}
           <Box sx={{ mr: 2 }}>

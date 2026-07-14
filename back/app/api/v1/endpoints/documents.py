@@ -306,8 +306,28 @@ async def get_documents(
             ProjectDisciplineDocumentType.document_type_id == Document.document_type_id
         )
     ).filter(Document.is_deleted == 0)
-    
-    if project_id:
+
+    # Non-admin: только документы доступных проектов (изоляция демо/операторов)
+    is_admin = bool(
+        current_user.is_admin
+        or (current_user.user_role and current_user.user_role.code == "admin")
+    )
+    if not is_admin:
+        allowed_project_ids = [
+            row[0]
+            for row in db.query(ProjectMember.project_id)
+            .filter(ProjectMember.user_id == current_user.id)
+            .all()
+        ]
+        if project_id is not None:
+            if project_id not in allowed_project_ids:
+                raise HTTPException(status_code=403, detail="Нет доступа к этому проекту")
+            query = query.filter(Document.project_id == project_id)
+        elif allowed_project_ids:
+            query = query.filter(Document.project_id.in_(allowed_project_ids))
+        else:
+            query = query.filter(Document.id == -1)  # пустой результат
+    elif project_id:
         query = query.filter(Document.project_id == project_id)
     
     # Фильтрация по статусу workflow

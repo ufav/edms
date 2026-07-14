@@ -15,6 +15,7 @@ import {
   FormControl,
 } from '@mui/material';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { 
   Email as EmailIcon,
   Lock as LockIcon,
@@ -23,7 +24,8 @@ import {
   Login as LoginIcon,
   Description as DescriptionIcon,
   Security as SecurityIcon,
-  Speed as SpeedIcon
+  Speed as SpeedIcon,
+  ArrowBack as ArrowBackIcon,
 } from '@mui/icons-material';
 
 interface LoginProps {
@@ -38,6 +40,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, loginError }) => {
   const [error, setError] = useState('');
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const navigate = useNavigate();
   const { t, i18n } = useTranslation();
   const [lang, setLang] = useState(i18n.language === 'en' ? 'en' : 'ru');
 
@@ -72,7 +75,7 @@ const Login: React.FC<LoginProps> = ({ onLogin, loginError }) => {
         position: 'relative'
       }}
     >
-      {/* Global Language Switcher - top-right corner */}
+      {/* Переключатель языка */}
       <Box sx={{ position: 'fixed', top: 16, right: 16, zIndex: 10 }}>
         <ButtonGroup size="small" variant="outlined" color="inherit">
           <Button 
@@ -344,6 +347,16 @@ const Login: React.FC<LoginProps> = ({ onLogin, loginError }) => {
                 }}
               >
                 {t('auth.sign_in')}
+              </Button>
+
+              <Button
+                fullWidth
+                variant="text"
+                startIcon={<ArrowBackIcon />}
+                onClick={() => navigate('/')}
+                sx={{ textTransform: 'none', color: 'text.secondary' }}
+              >
+                {t('auth.back_to_landing')}
               </Button>
             </Box>
 

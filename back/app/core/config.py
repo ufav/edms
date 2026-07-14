@@ -68,6 +68,12 @@ class Settings(BaseSettings):
         'BACKEND_CORS_ORIGINS',
         'http://localhost:3000,http://localhost:5173,http://127.0.0.1:3000,http://127.0.0.1:5173,http://194.32.142.92:5173'
     ).split(',') if origin.strip()]
+
+    # Demo login (публичный вход без пароля в тестовый проект)
+    DEMO_LOGIN_ENABLED: bool = os.getenv('DEMO_LOGIN_ENABLED', 'true').lower() == 'true'
+    DEMO_USER_EMAIL: str = os.getenv('DEMO_USER_EMAIL', 'demo@docste.local')
+    DEMO_USER_FULL_NAME: str = os.getenv('DEMO_USER_FULL_NAME', 'Demo User')
+    DEMO_PROJECT_NAME: str = os.getenv('DEMO_PROJECT_NAME', 'Demo Project 1')
     
     class Config:
         env_file = str(ENV_FILE) if ENV_FILE.exists() else ".env"

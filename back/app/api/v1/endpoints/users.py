@@ -26,6 +26,36 @@ def user_to_dict(user: User) -> Dict[str, Any]:
         "is_admin": user.is_admin,
     }
 
+def _is_global_admin(user: User) -> bool:
+    if user.is_admin:
+        return True
+    return bool(user.user_role and user.user_role.code == "admin")
+
+
+def _shared_project_user_ids(db: Session, current_user: User) -> set:
+    """ID пользователей, с которыми есть общие проекты (включая себя)."""
+    from app.models.project import ProjectMember
+
+    my_project_ids = [
+        row[0]
+        for row in db.query(ProjectMember.project_id)
+        .filter(ProjectMember.user_id == current_user.id)
+        .all()
+    ]
+    if not my_project_ids:
+        return {current_user.id}
+
+    co_member_ids = {
+        row[0]
+        for row in db.query(ProjectMember.user_id)
+        .filter(ProjectMember.project_id.in_(my_project_ids))
+        .distinct()
+        .all()
+    }
+    co_member_ids.add(current_user.id)
+    return co_member_ids
+
+
 @router.get("/", response_model=List[dict])
 async def get_users(
     skip: int = 0,
@@ -33,8 +63,15 @@ async def get_users(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    """Получение списка пользователей"""
-    users = db.query(User).offset(skip).limit(limit).all()
+    """Получение списка пользователей.
+    Админ — все; остальные — только участники общих проектов.
+    """
+    query = db.query(User)
+    if not _is_global_admin(current_user):
+        allowed_ids = _shared_project_user_ids(db, current_user)
+        query = query.filter(User.id.in_(allowed_ids))
+
+    users = query.offset(skip).limit(limit).all()
     return [
         {
             "id": user.id,
@@ -57,6 +94,9 @@ async def get_user(
     """Получение пользователя по ID"""
     user = db.query(User).filter(User.id == user_id).first()
     if not user:
+        raise HTTPException(status_code=404, detail="Пользователь не найден")
+
+    if not _is_global_admin(current_user) and user.id not in _shared_project_user_ids(db, current_user):
         raise HTTPException(status_code=404, detail="Пользователь не найден")
     
     return {

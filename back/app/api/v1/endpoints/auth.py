@@ -12,14 +12,112 @@ from typing import Optional
 from app.core.database import get_db
 from app.core.config import settings
 from app.models.user import User
-from app.schemas.auth import Token, UserCreate, UserLogin, ProfileSelfUpdate
+from app.schemas.auth import Token, DemoToken, UserCreate, UserLogin, ProfileSelfUpdate
 from app.services.auth import authenticate_user, create_access_token, get_password_hash, verify_password, get_current_user, get_current_active_user
 from datetime import timedelta
 from app.core.config import settings
+import secrets
 
 router = APIRouter()
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+
+
+def _ensure_demo_user_and_project(db: Session):
+    """
+    Находит/создаёт demo-пользователя с полными правами оператора.
+    Изоляция: только демо-проект + проекты, которые demo сам создал
+    (чужие проекты/данные недоступны).
+    """
+    from app.models.project import Project, ProjectMember
+    from app.models.project_role import ProjectRole
+    from app.models.references import UserRole
+
+    project = (
+        db.query(Project)
+        .filter(Project.name == settings.DEMO_PROJECT_NAME, Project.is_deleted == 0)
+        .order_by(Project.id.desc())
+        .first()
+    )
+    if not project:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Демо-проект «{settings.DEMO_PROJECT_NAME}» не найден. Сначала выполните seed.",
+        )
+
+    operator_role = (
+        db.query(UserRole)
+        .filter(UserRole.code == "operator", UserRole.is_active.is_(True))
+        .first()
+    )
+    project_manager = (
+        db.query(ProjectRole)
+        .filter(ProjectRole.code == "manager", ProjectRole.is_active.is_(True))
+        .first()
+    )
+
+    user = db.query(User).filter(User.email == settings.DEMO_USER_EMAIL).first()
+    if not user:
+        user = User(
+            email=settings.DEMO_USER_EMAIL,
+            full_name=settings.DEMO_USER_FULL_NAME,
+            hashed_password=get_password_hash(secrets.token_urlsafe(32)),
+            role="operator",
+            user_role_id=operator_role.id if operator_role else None,
+            is_active=True,
+            is_admin=False,
+        )
+        db.add(user)
+        db.flush()
+    else:
+        user.is_active = True
+        user.is_admin = False
+        user.role = "operator"
+        if operator_role:
+            user.user_role_id = operator_role.id
+        user.full_name = settings.DEMO_USER_FULL_NAME
+
+    # Убираем членства в чужих проектах; оставляем демо-проект и свои (created_by)
+    other_memberships = (
+        db.query(ProjectMember)
+        .filter(
+            ProjectMember.user_id == user.id,
+            ProjectMember.project_id != project.id,
+        )
+        .all()
+    )
+    for membership in other_memberships:
+        owned = (
+            db.query(Project.id)
+            .filter(
+                Project.id == membership.project_id,
+                Project.created_by == user.id,
+                Project.is_deleted == 0,
+            )
+            .first()
+        )
+        if not owned:
+            db.delete(membership)
+
+    membership = (
+        db.query(ProjectMember)
+        .filter(ProjectMember.project_id == project.id, ProjectMember.user_id == user.id)
+        .first()
+    )
+    if not membership:
+        db.add(
+            ProjectMember(
+                project_id=project.id,
+                user_id=user.id,
+                project_role_id=project_manager.id if project_manager else None,
+            )
+        )
+    elif project_manager and membership.project_role_id != project_manager.id:
+        membership.project_role_id = project_manager.id
+
+    db.commit()
+    db.refresh(user)
+    return user, project
 
 @router.post("/register", response_model=dict)
 async def register(user_data: UserCreate, db: Session = Depends(get_db)):
@@ -84,6 +182,45 @@ async def login(response: Response, form_data: OAuth2PasswordRequestForm = Depen
         "access_token": access_token,
         "token_type": "bearer",
         "expires_in": settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+    }
+
+
+@router.post("/demo", response_model=DemoToken)
+async def demo_login(response: Response, db: Session = Depends(get_db)):
+    """
+    Публичный вход в демо без пароля.
+    Полный функционал оператора в песочнице (демо-проект + свои проекты),
+    без доступа к чужим проектам/документам/глобальному списку пользователей.
+    """
+    if not settings.DEMO_LOGIN_ENABLED:
+        raise HTTPException(status_code=403, detail="Демо-вход отключён")
+
+    user, project = _ensure_demo_user_and_project(db)
+
+    access_token_expires = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    sub = str(user.id)
+    access_token = create_access_token(data={"sub": sub, "demo": True}, expires_delta=access_token_expires)
+
+    refresh_expires = timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+    refresh_token = create_access_token(
+        data={"sub": sub, "type": "refresh", "demo": True},
+        expires_delta=refresh_expires,
+    )
+    response.set_cookie(
+        key="refresh_token",
+        value=refresh_token,
+        httponly=True,
+        secure=False,
+        samesite="lax",
+        max_age=int(refresh_expires.total_seconds()),
+    )
+
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "expires_in": settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        "project_id": project.id,
+        "project_name": project.name,
     }
 
 

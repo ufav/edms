@@ -43,6 +43,7 @@
   "auth.feature_versions_text": "Complete document change history",
   "auth.demo_title": "Demo access:",
   "auth.login_error": "Login Error",
+  "auth.back_to_landing": "Back to home",
   "common.status": "Status",
   "common.types": "types",
   "common.actions": "Actions",
